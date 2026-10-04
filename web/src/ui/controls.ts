@@ -1,11 +1,11 @@
-// Touch, mouse and keyboard: the steering wheel, the hold-to-move pedals, the toolbar, Setup and Info.
+// Touch, mouse and keyboard: the steering wheel, the hold-to-move pedals, the toolbar, Setup, Levels and Info.
 import { clamp, DEG } from '../core/math';
 import type { Sim } from '../core/sim';
 import { initAudio, tone } from './audio';
-import { $ } from './dom';
+import { $, openSheet } from './dom';
 import { lockDeg, saveSettings, settings, type Settings } from './settings';
 
-export interface ControlHooks { reset(): void; settingChanged(key: keyof Settings): void }
+export interface ControlHooks { reset(): void; settingChanged(key: keyof Settings): void; levels(): void }
 
 export function bindControls(sim: Sim, hooks: ControlHooks): void {
   const inp = sim.input;
@@ -55,9 +55,9 @@ export function bindControls(sim: Sim, hooks: ControlHooks): void {
 
   // toolbar and sheets
   $('btnReset').addEventListener('click', () => hooks.reset());
-  const toggleSheet = (id: string) => { const el = $(id), open = el.hidden; document.querySelectorAll<HTMLElement>('.sheet').forEach(s => { s.hidden = true; }); el.hidden = !open; };
-  $('btnSettings').addEventListener('click', () => toggleSheet('sheetSettings'));
-  $('btnInfo').addEventListener('click', () => toggleSheet('sheetInfo'));
+  $('btnSettings').addEventListener('click', () => openSheet('sheetSettings', true));
+  $('btnInfo').addEventListener('click', () => openSheet('sheetInfo', true));
+  $('btnLevels').addEventListener('click', () => { hooks.levels(); openSheet('sheetLevels', true); });
   document.querySelectorAll<HTMLElement>('[data-close]').forEach(b => b.addEventListener('click', () => { $(b.dataset.close!).hidden = true; }));
   document.querySelectorAll<HTMLElement>('.seg[data-opt]').forEach(seg => {
     const key = seg.dataset.opt as keyof Settings;

@@ -32,6 +32,7 @@
         <div class="tile speed"><div class="k">Speed</div><div class="v"><span id="spd">0.0</span><small>km/h</small></div></div>
         <div class="tile gear"><div class="k">Gear</div><div class="v" id="gear">P</div></div>
         <div class="tile"><div class="k">Steer</div><div class="v"><span id="steerV">0°</span></div></div>
+        <div class="tile" id="movesTile"><div class="k">Moves</div><div class="v"><span id="movesV">0</span><small id="parV"></small></div></div>
       </div>
       <div class="tile" style="padding:0">
         <div id="sensors">
@@ -42,6 +43,7 @@
         <button id="btnReset" type="button">Reset</button>
         <button id="btnReplay" type="button">Replay</button>
         <button id="btnShow" type="button">Show me</button>
+        <button id="btnLevels" type="button">Levels</button>
         <button id="btnSettings" type="button">Setup</button>
         <button id="btnInfo" type="button">Info</button>
       </div>
@@ -84,6 +86,26 @@
     <p>Hold <b>Forward</b> or <b>Reverse</b> to move: a short press creeps at about 4 km/h, keep holding and the car accelerates up to 20 km/h (10 km/h in reverse), the button fills up as the speed stage rises; release and the car brakes. Drag the wheel round like a real steering wheel. The screen is a map of the bays, north up: it draws the path the car takes at the current steering, an outline of the car every 0.8 m along it and, in red, where it would touch something first; Whole area zooms out to the bays and the aisle, Follow car keeps the car in the middle. Keyboard: <kbd>←</kbd> <kbd>→</kbd> steer, <kbd>↑</kbd> <kbd>↓</kbd> drive, <kbd>Space</kbd> straighten, <kbd>X</kbd> reset.</p>
   </div>
 
+  <div class="sheet" id="sheetLevels" hidden>
+    <h3>Levels <button type="button" data-close="sheetLevels">Close</button></h3>
+    <div class="lvDaily"><div><span>Today's level</span><b id="lvDailyName"></b></div><button id="lvDailyGo" type="button">Play</button></div>
+    <h4>Your garage</h4>
+    <button id="lvGarage" class="lvGarage" type="button"><span id="lvGarageName">Bay 561</span><small id="lvGarageStars"></small></button>
+    <div id="lvGroups"></div>
+    <p class="lvNote">Each level is built on your phone from its number and a layout seed, and the route planner drives it before you see it: par is its number of moves. Stars: nothing touched; neat (within 3° of straight, and centred within 15 cm in a bay or the tyres within 30 cm of the kerb); efficient (par plus one move at most, inside the time).</p>
+  </div>
+
+  <div class="sheet" id="sheetResult" hidden>
+    <div class="resHead">
+      <div class="resStars" id="resStars" role="img"></div>
+      <div class="resWhat"><h3 id="resTitle">Parked</h3><p id="resSub"></p></div>
+      <button type="button" class="resClose" data-close="sheetResult">Close</button>
+    </div>
+    <ul class="resList" id="resList"></ul>
+    <div class="stats" id="resStats"></div>
+    <div class="resBtns"><button id="resRetry" type="button">Try again</button><button id="resNew" type="button">New layout</button><button id="resNext" class="primary" type="button">Next level</button></div>
+  </div>
+
   <div class="sheet" id="sheetInfo" hidden>
     <h3>Garage layout <button type="button" data-close="sheetInfo">Close</button></h3>
     <p>The bays, pillars and walls come from the photo survey made in your other session, scaled from your Atto 2's rear track and wheelbase, the grey Clio's track and the drain cover in the aisle: about ±20 cm near 561, more further out. Your new photos of the empty bays agree on the bay widths and on where pillar 560 and 562 sit; they could not pin the depth closer than about ±0.4 m, so it keeps the survey's 4.72 m. The car's outline is traced from BYD's three-view drawing.</p>
@@ -122,7 +144,9 @@
     <h4>Parking sensors</h4>
     <p>Twelve ultrasonic sensors as on the car: four in each bumper (two centre, two corner angled 35° out) and two per side. Each sees a 60° cone, 1.2 m ahead, 1.5 m behind, 0.6 m to the side, so a pillar beside a door is only heard once a corner sensor catches it, just like the real system. The beeper starts slow at the edge of range, speeds up through 1.0, 0.7 and 0.45 m, and becomes a continuous tone under 30 cm. Front sensors beep a higher note than the rear. Beeps need one tap on the wheel or a pedal first (phones only play sound after a touch). The sensor graphic at the right of the map works like the car's own screen: the bands around the car light up from the outside in, the end that is listening is brighter, a STOP card appears under 30 cm in the direction of travel, and the edge of the screen glows red on the side of the obstacle.</p>
     <h4>What counts as parked</h4>
-    <p>All four corners inside the target bay lines, car stopped, heading within 6° of straight. Nose-in (as in the photos) or reversed both count; the result card shows your centring, angle and the gap to the bench.</p>
+    <p>All four corners inside the target bay lines, car stopped, heading within 6° of straight. In your garage nose-in (as in the photos) or reversed both count; the result card shows your centring, angle and the gap to the bench. In a level the bay says which way round, and a space along a kerb counts when the car is between the cars with its tyres within 50 cm of the kerb.</p>
+    <h4>Levels</h4>
+    <p>Three kinds so far: a row of bays entered nose first, the same reversing in, and parallel parking between two cars at a kerb on your right. Level 1 is roomy; by level 10 the bays are 2.3 m wide with a 5 m aisle, and the parallel space is the car's length plus 80 cm. Neighbours park off-centre, cars appear opposite, a pillar or a lamp post joins in. Kerbs only stop the tyres: the bumpers hang over them, as on a real street. Show me drives the planner's route; part way in, it plans from where you are.</p>
   </div>
 </div>
 <script type="module" src="/src/main.ts"></script>

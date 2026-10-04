@@ -56,10 +56,21 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
   PV.w = w; PV.h = h; follow(sim, dt);
   const c = ctx, s = PV.s; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.lineJoin = 'round';
   c.fillStyle = '#0d0e12'; c.fillRect(0, 0, w, h);
-  // floors, the lower level over the low wall, the target bay
+  // floors, the lower level over the low wall, pavements with their kerbs, the target bay
   c.fillStyle = '#1c1e24'; for (const f of sc.floors) { path(c, rectPts(f)); c.fill(); }
   if (sc.pit) { c.fillStyle = '#121317'; path(c, rectPts(sc.pit)); c.fill(); }
-  const B = sc.bays[settings.bay] ?? sc.bays[sc.defaultBay]; c.fillStyle = 'rgba(94,208,138,.11)'; path(c, rectPts([B.x0, B.x1, B.z0, B.z1])); c.fill();
+  for (const o of sim.obstacles) if (o.cls === 'kerb' && o.kind === 'poly') {
+    c.fillStyle = '#2a2d34'; path(c, o.pts); c.fill();
+    c.strokeStyle = '#8e939c'; c.lineWidth = Math.max(1.5, 0.15 * s); c.lineCap = 'butt'; path(c, o.pts.slice(0, 2), false); c.stroke();
+  }
+  const B = sc.bays[sim.options.bay] ?? sc.bays[sc.defaultBay]; c.fillStyle = 'rgba(94,208,138,.11)'; path(c, rectPts([B.x0, B.x1, B.z0, B.z1])); c.fill();
+  if (B.kind === 'kerb') { c.strokeStyle = 'rgba(94,208,138,.6)'; c.lineWidth = 1; c.setLineDash([4, 4]); path(c, rectPts([B.x0 + 0.08, B.x1 - 0.08, B.z0 + 0.05, B.z1 - 0.05])); c.stroke(); c.setLineDash([]); }
+  // lane markings: dashed white
+  if (sc.dashes.length) {
+    c.strokeStyle = 'rgba(235,232,223,.55)'; c.lineWidth = Math.max(1, 0.1 * s); c.setLineDash([3 * s, 3 * s]); c.beginPath();
+    for (const [x0, z0, x1, z1] of sc.dashes) { const a = PS(x0, z0), b = PS(x1, z1); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); }
+    c.stroke(); c.setLineDash([]);
+  }
   // painted lines, numbers, the drain cover
   c.strokeStyle = '#d9ab2b'; c.lineWidth = Math.max(1, 0.1 * s); c.lineCap = 'butt'; c.beginPath();
   for (const [x0, z0, x1, z1] of sc.lines) { const a = PS(x0, z0), b = PS(x1, z1); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); }
@@ -71,7 +82,7 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
   const oy = PV.oy, vx0 = PV.cx - w / 2 / s - 1, vx1 = PV.cx + w / 2 / s + 1, vz0 = PV.cz - oy / s - 1, vz1 = PV.cz + (h - oy) / s + 1;
   c.lineWidth = 1;
   for (const o of sim.obstacles) {
-    if (o.bx1 < vx0 || o.bx0 > vx1 || o.bz1 < vz0 || o.bz0 > vz1) continue;
+    if (o.cls === 'kerb' || o.bx1 < vx0 || o.bx0 > vx1 || o.bz1 < vz0 || o.bz0 > vz1) continue;
     if (o.cls === 'car' && o.kind === 'poly') {
       c.fillStyle = '#353a43'; c.strokeStyle = '#5b636e'; path(c, o.pts); c.fill(); c.stroke();
       if (s > 15 && o.label) { const [sx, sy] = PS(o.cx, o.cz); c.fillStyle = '#a7afb9'; c.font = `600 ${clamp(0.3 * s, 9, 13).toFixed(1)}px "Barlow Condensed", sans-serif`; c.fillText(o.label, sx, sy); }

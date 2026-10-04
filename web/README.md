@@ -1,6 +1,6 @@
 # Atto 2 Garage Trainer
 
-Practise parking a BYD Atto 2 nose-first into bay 561. The screen is a plan of the garage: it draws the path the car takes at the current steering, an outline of the car every 0.8 m along it and, in red, where it would touch something first. It also has parking sensors with beeps, touch detection and a result card when you're parked.
+Practise parking a BYD Atto 2 nose-first into bay 561, then in generated levels: a row of bays entered nose first, the same reversing in, and parallel parking at a kerb, each from level 1 (roomy) to level 10 (tight). The screen is a plan: it draws the path the car takes at the current steering, an outline of the car every 0.8 m along it and, in red, where it would touch something first. It also has parking sensors with beeps, touch detection, a move counter against par, and a result card with three stars when you're parked.
 
 It runs in any modern browser on iPhone, Android and PC, and installs to the home screen as an app that works offline.
 
@@ -13,6 +13,7 @@ npm test                 # the core replayed against recorded drives, plus repla
 npm run typecheck
 npm run build            # installable web app in dist/ (manifest, icons, service worker)
 npm run build:artifact   # one self-contained page for the claude.ai artifact: dist-artifact/atto2-garage-trainer.html
+npx vite build --mode harness --outDir dist-harness   # like build, plus window.__game (the Sim, the level, par's route) for browser checks
 ```
 
 To install it on a phone, serve `dist/` over HTTPS (for example GitHub Pages), open it, then:
@@ -28,32 +29,38 @@ content/       data the game loads; JSON, so a Swift port reads the same files (
 src/core/      the game itself, no browser code: easy to test, and the part to port to Swift
   math.ts        DEG, clamp, wrapPi, the Pt type
   vehicle.ts     a car from its file; the steering lock is derived from the turning circle
-  scene.ts       a scene from its file: obstacles, lines, bays, starts
+  scene.ts       a scene from its file: obstacles, kerbs, lines, bays, starts
   content.ts     the cars and scenes that ship (ATTO2, GARAGE_561)
   car.ts         geometry for any car: placing outlines, rectangles, Ackermann angles
   garage.ts      old names kept for code that used them
   geometry.ts    polygon overlap (separating axes), circle vs polygon, segment distances
-  collision.ts   what the car touches in a pose (body, or only a door mirror)
+  collision.ts   what the car touches in a pose (body, a door mirror, or a tyre on a kerb)
   sensors.ts     gaps around the body, and the ultrasonic parking sensors (5 rays per cone)
   predict.ts     the path at the current steering, rolled forward in 6 cm steps until it would touch
   sim.ts         Sim(scene, car): state, input, step(dt) → events (touch, parked)
-  parking.ts     when a car counts as parked in a bay (shared by Sim and the planner)
+  parking.ts     when a car counts as parked in a bay, and how neatly (shared by Sim, the planner and the stars)
+  score.ts       three stars: nothing touched, neat, efficient (par + 1 moves, inside the time)
   replay.ts      fixed 60 Hz steps; recording an attempt and playing it back
   field.ts       a 5 cm raster and distance field of the scene, for fast collision checks while planning
-  planner.ts     route search (hybrid A*) into a bay: Show me now, par and the coach later
+  planner.ts     route search (hybrid A*): into a bay from the car (planToBay), or outward from the
+                 space back to the car (planBack, quicker for parallel parking); Show me, par, levels
+  generator/     levels from (template, level, seed): templates.ts builds the scene, level.ts solves it
+                 outward from the parked poses, checks it with the exact collision test and measures it
 src/ui/        the browser side: drawing, controls, sound, settings
   plan.ts        the map (canvas 2D)
   pdcDisplay.ts  sensor graphic, STOP card, red screen-edge glow
   hud.ts         readouts and the banner
-  controls.ts    steering wheel, hold-to-move pedals, keyboard, Setup and Info
+  controls.ts    steering wheel, hold-to-move pedals, keyboard, Setup, Levels and Info
+  levels.ts      the Levels sheet and the result card with its stars
+  progress.ts    best stars, last layouts and what you were playing (localStorage key `atto2-levels`)
   audio.ts       the beeper
   settings.ts    saved choices (localStorage key `atto2-garage`)
 src/main.ts    wiring and the frame loop: the simulation steps at a fixed 60 Hz, drawing is capped at
                30 fps and skipped while nothing changes; Replay plays the current attempt from its start;
-               Show me plans from where the car is into the chosen bay and lets a ghost drive it
+               Show me lets a ghost drive the route that set par, or plans one from where the car is
 public/        manifest, icons, service worker
-test/          golden test and its recorded fixtures, replay and content tests
-prototype/     the scenario generator prototype (route planner, templates, coach); the start of M2 and M3
+test/          golden test and its recorded fixtures, replay, content, planner and generator tests
+prototype/     the scenario generator prototype (now in src/core/generator; its coach steps come in M4)
 ```
 
 ## The golden test
@@ -72,7 +79,11 @@ The other tests check that:
 - a recorded attempt replays exactly: same pose, touches and parking result, also after a round trip through JSON
 - the data files reproduce the old numbers (steering geometry, the garage's 35 obstacles and its starts)
 - the Atto 2 turns a 10.6 m kerb-to-kerb circle in the simulation, as on BYD's spec sheet
-- the planner finds 561 from all three starts and 560 from the left. Each route is clear under the exact collision check and ends parked nose in; from the left it takes three moves. It also parks in an open bay in one move, reports a blocked bay at once, and finds the same route every time
+- the planner finds 561 from all three starts and 560 from the left. Each route is clear under the exact collision check and ends parked nose in, neatly; from the left it takes three moves. It also parks in an open bay in one move, reports a blocked bay at once, and finds the same route every time
+- every level the generator makes (3 templates × levels 1–10 × 3 seeds; `GEN_SEEDS=10 npm test` for 300) starts clear, its route passes the exact collision check, and the route's end counts as parked, the right way round, with three stars
+- a nose-first bay does not accept a reversed-in car, and the other way round
+- kerbs stop the tyres but not the bumpers, and a drive in a level replays exactly, touches and moves included
+- planBack finds a way in from part way along a level's route
 
 ## Porting to Swift later
 

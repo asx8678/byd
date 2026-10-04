@@ -2,13 +2,12 @@
 // 5 cm with a distance field; the car's outline and mirrors are tested against the raster (grown
 // by one cell, so it never under-reports). Routes are re-checked with the exact `collides`.
 // Kerbs are half-planes the wheels may not cross; the bumpers may hang over them.
-import { collides } from './collision';
+import { collides, wheelsOf } from './collision';
 import type { Pt } from './math';
-import type { Obstacle } from './scene';
+import type { Kerb, Obstacle } from './scene';
 import type { Vehicle } from './vehicle';
 
-/** Wheels must keep nx·x + nz·z ≤ c. */
-export interface Kerb { nx: number; nz: number; c: number; name: string }
+export type { Kerb } from './scene';
 
 export const CELL = 0.05;
 
@@ -31,7 +30,7 @@ function shapeOf(v: Vehicle): CarShape {
   const body = Float64Array.from(outline(v.body, 0.04));
   const mirrors = Float64Array.from(v.mirrors.flatMap(m => outline(m, 0.03)));
   const wheels: number[] = [];
-  for (const ax of [0, v.WB]) for (const sg of [-1, 1]) for (const dx of [-v.WR, v.WR]) for (const dz of [-v.WW / 2, v.WW / 2]) wheels.push(ax + dx, sg * v.TRACK / 2 + dz);
+  for (const w of wheelsOf(v)) for (const [lx, lz] of w.pts) wheels.push(lx, lz);   // the same tyre rectangles collides() uses
   // three circles along the car; their radius covers every outline point (with and without the mirrors)
   const cover = [0, 1, 2].map(i => -v.OVR + v.L * (2 * i + 1) / 6);
   const reach = (pts: Float64Array) => { let r = 0; for (let k = 0; k < pts.length; k += 2) r = Math.max(r, Math.min(...cover.map(c => Math.hypot(pts[k] - c, pts[k + 1])))); return r; };
@@ -63,6 +62,7 @@ export class Field {
     const body = this.body = new Uint8Array(nx * nz), tall = this.tall = new Uint8Array(nx * nz);
     const raw = new Uint8Array(nx * nz), rawT = new Uint8Array(nx * nz);
     for (const o of obstacles) {
+      if (o.cls === 'kerb') continue;   // the wheels meet kerbs through the half-planes
       const i0 = Math.max(0, Math.floor((o.bx0 - x0) / CELL)), i1 = Math.min(nx - 1, Math.ceil((o.bx1 - x0) / CELL));
       const j0 = Math.max(0, Math.floor((o.bz0 - z0) / CELL)), j1 = Math.min(nz - 1, Math.ceil((o.bz1 - z0) / CELL));
       const isTall = o.h > v.mirrorY;

@@ -110,6 +110,40 @@ table.dim{border-collapse:collapse;width:100%;max-width:520px;font-variant-numer
 table.dim td{padding:4px 6px 4px 0;border-bottom:1px solid var(--panel-line);vertical-align:top;color:#d6d3ca}
 table.dim td:first-child{color:var(--fg);font-weight:500;white-space:nowrap}
 table.dim td:nth-child(2){white-space:nowrap}
+/* ---- moves, levels, result card ---- */
+#movesV.over{color:var(--warn)}
+.lvDaily{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;border:1px solid rgba(242,194,48,.35);border-radius:12px;background:rgba(242,194,48,.07)}
+.lvDaily span{display:block;font:600 10.5px/1 var(--font-num);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.lvDaily b{font:600 17px/1.1 var(--font-num)}
+.lvDaily button,.resBtns button{font:600 13px/1 var(--font-num);letter-spacing:.06em;text-transform:uppercase;color:var(--fg);background:rgba(255,255,255,.08);border:1px solid var(--panel-line);border-radius:999px;padding:10px 16px;cursor:pointer;white-space:nowrap}
+.lvDaily button,.resBtns button.primary{background:var(--accent);border-color:var(--accent);color:#1a1300}
+.lvGarage{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;box-sizing:border-box;font:600 15px/1.2 var(--font-num);color:var(--fg);background:rgba(255,255,255,.05);border:1px solid var(--panel-line);border-radius:10px;padding:10px 12px;cursor:pointer;text-align:left}
+.lvGarage small,.lvGrid small{color:var(--accent);letter-spacing:.05em}
+.lvGrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.lvGrid button{display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px 7px;border-radius:10px;background:rgba(255,255,255,.05);border:1px solid var(--panel-line);color:var(--fg);cursor:pointer;min-width:0}
+.lvGrid b{font:700 18px/1 var(--font-num);font-variant-numeric:tabular-nums}
+.lvGrid small{font:600 10px/1 var(--font-ui);min-height:10px;color:var(--accent)}
+.lvGrid button.cur,.lvGarage.cur{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.lvGrid button:focus-visible,.lvGarage:focus-visible,.lvDaily button:focus-visible,.resBtns button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.lvNote{margin-top:12px;font-size:13px!important;color:var(--muted)!important}
+#sheetResult{max-height:70%}
+.resHead{display:flex;align-items:center;gap:12px}
+.resStars{display:flex;gap:2px;font:400 30px/1 var(--font-ui)}
+.resStars i{font-style:normal;color:rgba(255,255,255,.16)}
+.resStars i.on{color:var(--accent);text-shadow:0 0 12px rgba(242,194,48,.45)}
+.resWhat{flex:1;min-width:0}
+.resWhat h3{margin:0;font:700 20px/1.1 var(--font-num);text-wrap:balance}
+.resWhat p{margin:2px 0 0;font-size:12.5px;color:var(--muted)}
+.resClose{align-self:flex-start;font:600 12px/1 var(--font-num);letter-spacing:.06em;text-transform:uppercase;color:var(--fg);background:rgba(255,255,255,.08);border:1px solid var(--panel-line);border-radius:999px;padding:8px 12px;cursor:pointer}
+.resList{list-style:none;margin:10px 0 0;padding:0}
+.resList li{display:flex;gap:8px;align-items:baseline;margin:4px 0;font-size:13.5px;color:#d6d3ca;max-width:none}
+.resList li i{font-style:normal;color:rgba(255,255,255,.25)}
+.resList li.ok i{color:var(--accent)}
+#sheetResult .stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 12px;margin-top:10px;padding-top:10px;border-top:1px solid var(--panel-line);font-variant-numeric:tabular-nums}
+#sheetResult .stats span{display:block;font:600 10px/1 var(--font-num);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+#sheetResult .stats b{font:600 16px/1.2 var(--font-num)}
+.resBtns{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.resBtns button{flex:1}
 kbd{font:500 12px var(--font-ui);background:rgba(255,255,255,.08);border:1px solid var(--panel-line);border-radius:5px;padding:1px 5px}
 @media (max-height:560px){ #viewLabel{display:none} }
 @media (prefers-reduced-motion:reduce){ #wheelSvg{transition:none} #banner{transition:none} #pdcStop.show{animation:none} }

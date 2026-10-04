@@ -1,10 +1,10 @@
 // The simulation: one car in one scene, driven by hold-to-move pedals and a steering wheel.
 // Pure logic with no screen code, so it can be tested and ported as it is. The car and the scene
-// come from data files; with no arguments it is the Atto 2 in the garage around bay 561.
+// come from data files or the level generator; with no arguments it is the Atto 2 in the garage around bay 561.
 import { collides, type CarPart } from './collision';
 import { ATTO2, GARAGE_561 } from './content';
 import { DEG, clamp } from './math';
-import { parkedIn } from './parking';
+import { facesRight, parkedIn, placement } from './parking';
 import { predictPath, type Prediction } from './predict';
 import type { Obstacle, Scene } from './scene';
 import { edgeGaps, scanPdc, type SideValues } from './sensors';
@@ -18,10 +18,14 @@ export interface SimInput {
 
 export interface ParkedResult {
   bay: string; noseIn: boolean;
+  kind: 'bay' | 'kerb';
   offCentre: number;               // m, + to the right as you sit in the car
   angle: number;                   // degrees off straight
   gapWall: number; gapLeft: number; gapRight: number;   // m
+  kerbGap: number;                 // m, the kerb-side tyres to the kerb (Infinity in a bay)
+  gapFront: number; gapRear: number;   // m, body to the nearest thing ahead and behind
   hits: number; elapsed: number;   // touches on the way in, seconds
+  moves: number;                   // runs in one direction, as the planner counts them
 }
 
 export type SimEvent =
@@ -31,7 +35,8 @@ export type SimEvent =
 export interface SimOptions { lockDeg: number; selfCentre: boolean; bay: string }
 
 export class Sim {
-  readonly obstacles: readonly Obstacle[];
+  scene: Scene;
+  obstacles: readonly Obstacle[];
   // rear-axle pose (m, rad), speed (m/s, + forward), steering wheel angle (degrees, clockwise +)
   x = 0; z = 0; th = 0; v = 0;
   wheelAngle = 0;
@@ -40,6 +45,8 @@ export class Sim {
   readonly options: SimOptions;
   hits = 0; elapsed = 0; parked = false; inContact = false; started = false;
   lastMoveDir: 1 | -1 = 1;
+  moves = 0;           // runs driven in one direction
+  moveSign = 0;        // the direction of the current run (0 before the first)
   holdT = 0;
   time = 0;            // simulation clock, s
   lastDriveT = -9;     // when the car last moved or a pedal was held
@@ -48,8 +55,8 @@ export class Sim {
   readonly sensorReadings: number[];
   private poseSig = '';
 
-  constructor(readonly scene: Scene = GARAGE_561, readonly vehicle: Vehicle = ATTO2) {
-    this.obstacles = scene.obstacles;
+  constructor(scene: Scene = GARAGE_561, readonly vehicle: Vehicle = ATTO2) {
+    this.scene = scene; this.obstacles = scene.obstacles;
     this.options = { lockDeg: 2.7 * 180, selfCentre: true, bay: scene.defaultBay };
     this.sensorReadings = vehicle.sensors.map(() => Infinity);
   }
@@ -60,6 +67,11 @@ export class Sim {
   /** The parking sensors are listening while the car moves and for 1.5 s after. */
   get armed(): boolean { return this.time - this.lastDriveT < 1.5; }
 
+  /** Another scene for the same car: its default bay becomes the target. Call reset or resetAt next. */
+  load(scene: Scene): void {
+    this.scene = scene; this.obstacles = scene.obstacles; this.options.bay = scene.defaultBay; this.poseSig = '';
+  }
+
   /** Back to a named start of the scene (its default if the name is unknown). */
   reset(start: string): void {
     const s = this.scene.starts[start] ?? this.scene.starts[this.scene.defaultStart];
@@ -69,7 +81,7 @@ export class Sim {
   resetAt(x: number, z: number, th: number): void {
     this.x = x; this.z = z; this.th = th;
     this.v = 0; this.wheelAngle = 0; this.wheelTarget = null; this.hits = 0; this.elapsed = 0;
-    this.started = false; this.inContact = false; this.parked = false; this.lastMoveDir = 1;
+    this.started = false; this.inContact = false; this.parked = false; this.lastMoveDir = 1; this.moves = 0; this.moveSign = 0;
     this.input.fwd = this.input.rev = false;
   }
 
@@ -112,6 +124,7 @@ export class Sim {
       }
       this.x = nx; this.z = nz; this.th = nth; this.inContact = false;
     }
+    if (Math.abs(this.v) > 0.05 && Math.sign(this.v) !== this.moveSign) { this.moveSign = Math.sign(this.v); this.moves++; }
     // sensors only when the car has moved
     const ps = this.x.toFixed(4) + ',' + this.z.toFixed(4) + ',' + this.th.toFixed(5);
     if (ps !== this.poseSig) { this.poseSig = ps; edgeGaps(this.vehicle, this.obstacles, this.x, this.z, this.th, this.gaps); scanPdc(this.vehicle, this.obstacles, this.x, this.z, this.th, this.sensorReadings, this.pdc); }
@@ -126,22 +139,23 @@ export class Sim {
     return inp.fwd ? Math.min(D.VMAX_F, D.V_CREEP_F + ramp * D.RAMP_F) : inp.rev ? -Math.min(D.VMAX_R, D.V_CREEP_R + ramp * D.RAMP_R) : 0;
   }
 
-  /** All four corners inside the target bay, stopped, within 6° of straight: nose-in or reversed in. */
+  /** All four corners inside the target bay, stopped, within 6° of straight, the way round the bay asks for. */
   private checkParked(): ParkedResult | null {
     if (Math.abs(this.v) > 0.02) return null;
     const v = this.vehicle, b = this.scene.bays[this.options.bay] ?? this.scene.bays[this.scene.defaultBay];
     const at = parkedIn(v, b, this.x, this.z, this.th);
     if (!at) { this.parked = false; return null; }
-    const { errIn, errOut, noseIn, noseOut } = at;
-    if (!(noseIn || noseOut) || this.parked) return null;
+    if (!facesRight(b, at) || this.parked) return null;
     this.parked = true;
+    const { noseIn } = at, p = placement(v, b, this.scene.kerbs, this.x, this.z, this.th, at);
     const cs = Math.cos(this.th), cx = this.x + (v.WB / 2) * cs, gl = cx - v.W / 2 - b.x0, gr = b.x1 - cx - v.W / 2;
     return {
-      bay: this.options.bay, noseIn,
-      offCentre: (noseIn ? 1 : -1) * (cx - (b.x0 + b.x1) / 2), angle: (noseIn ? errIn : errOut) / DEG,
+      bay: this.options.bay, noseIn, kind: b.kind ?? 'bay',
+      offCentre: p.offCentre, angle: p.angle,
       gapWall: noseIn ? this.gaps.front : this.gaps.rear,
       gapLeft: Math.max(0, noseIn ? gl : gr), gapRight: Math.max(0, noseIn ? gr : gl),
-      hits: this.hits, elapsed: this.elapsed,
+      kerbGap: p.kerbGap, gapFront: this.gaps.front, gapRear: this.gaps.rear,
+      hits: this.hits, elapsed: this.elapsed, moves: this.moves,
     };
   }
 }

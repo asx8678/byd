@@ -1,6 +1,6 @@
 # Scenario generator prototype
 
-This is the working prototype from the build plan (`docs/build-plan.html`, "Try the generator"). It is the starting point for M2 (route planner) and M3 (scenario generator). It plans for the Atto 2 only, and is not part of the app build.
+This is the working prototype from the build plan (`docs/build-plan.html`, "Try the generator"). It was the starting point for M2 (route planner) and M3 (scenario generator); both now live in `src/core` (`planner.ts`, `generator/`), and this copy stays for the build plan page and for its coach steps, which move into the game in M4. It plans for the Atto 2 only, and is not part of the app build.
 
 - `field.ts`: a fast stand-in for the game's collision check, used inside the search.
   - Obstacles are rasterised at 5 cm with a distance field.

@@ -15,7 +15,7 @@ export type RecEvent = [number, Key, number | boolean | null];
 /** Everything about the car at the moment a recording starts, so playback begins in exactly the same state. */
 export interface StartState {
   x: number; z: number; th: number; v: number; wheelAngle: number; wheelTarget: number | null; holdT: number; time: number; lastDriveT: number;
-  hits: number; elapsed: number; started: boolean; parked: boolean; inContact: boolean; lastMoveDir: 1 | -1;
+  hits: number; elapsed: number; started: boolean; parked: boolean; inContact: boolean; lastMoveDir: 1 | -1; moves: number; moveSign: number;
   input: { fwd: boolean; rev: boolean; kl: boolean; kr: boolean; wheelHeld: boolean };
 }
 export interface Recording {
@@ -24,7 +24,7 @@ export interface Recording {
 }
 const stateOf = (s: Sim): StartState => ({
   x: s.x, z: s.z, th: s.th, v: s.v, wheelAngle: s.wheelAngle, wheelTarget: s.wheelTarget, holdT: s.holdT, time: s.time, lastDriveT: s.lastDriveT,
-  hits: s.hits, elapsed: s.elapsed, started: s.started, parked: s.parked, inContact: s.inContact, lastMoveDir: s.lastMoveDir, input: { ...s.input },
+  hits: s.hits, elapsed: s.elapsed, started: s.started, parked: s.parked, inContact: s.inContact, lastMoveDir: s.lastMoveDir, moves: s.moves, moveSign: s.moveSign, input: { ...s.input },
 });
 
 type Snap = Record<Key, number | boolean | null>;

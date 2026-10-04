@@ -14,6 +14,9 @@ export function showBanner(cls: '' | 'good' | 'bad', title: string, text: string
 }
 
 const wheelSvg = $('wheelSvg');
+let par = 0;
+/** The planner's moves for this attempt, shown next to yours (0: none). */
+export function setPar(n: number): void { par = n; $('parV').textContent = n ? `/ ${n}` : ''; $('movesTile').title = n ? `Par is ${n}: the planner's route from the start` : ''; }
 const SENSOR_IDS: [string, Side][] = [['sF', 'front'], ['sR', 'rear'], ['sL', 'left'], ['sRt', 'right']];
 const cls = (d: number) => d < 0.35 ? 'bad' : d < 0.7 ? 'warn' : 'ok';
 
@@ -22,6 +25,7 @@ export function updateHud(sim: Sim): void {
   wheelSvg.style.transform = `rotate(${wa}deg)`;
   $('steerTurns').textContent = (Math.abs(wa) / 360).toFixed(1) + (wa > 1 ? ' R' : wa < -1 ? ' L' : '');
   $('spd').textContent = (Math.abs(sim.v) * 3.6).toFixed(1); $('gear').textContent = sim.gear; $('steerV').textContent = steerText(sim.steerDeg);
+  const mv = $('movesV'); mv.textContent = String(sim.moves); mv.className = par && sim.moves > par + 1 ? 'over' : '';
   for (const [id, k] of SENSOR_IDS) { const el = $(id), d = sim.pdc[k], r = rangeOf(sim.vehicle, k); el.textContent = d < r ? d.toFixed(2) + ' m' : '–'; el.className = d < r ? cls(d) : ''; }
   $('lF').classList.toggle('armed', sim.lastMoveDir >= 0); $('lR').classList.toggle('armed', sim.lastMoveDir < 0);
   $('btnFwd').style.setProperty('--lvl', sim.input.fwd ? (Math.abs(tgt) / sim.vehicle.drive.VMAX_F).toFixed(2) : '0');

@@ -1,0 +1,86 @@
+// The Levels sheet (today's level, your garage, ten levels per template with your best stars) and the
+// result card that comes up when you have parked: stars, what earned them, and where to go next.
+import { TEMPLATES, type TemplateId } from '../core/generator/templates';
+import type { Stars } from '../core/score';
+import type { ParkedResult } from '../core/sim';
+import { $, openSheet } from './dom';
+import { fmtD, parkedCard } from './format';
+import { TEMPLATE_NAMES, bestStars, daily, seedFor } from './progress';
+
+export interface LevelHooks {
+  playLevel(t: TemplateId, level: number, seed: number): void;
+  playGarage(): void;
+}
+let hooks: LevelHooks;
+
+const starText = (n: number) => (n < 0 ? '' : '★'.repeat(n) + '☆'.repeat(3 - n));
+const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''): HTMLElementTagNameMap[K] => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
+
+/** Refresh the sheet: best stars, and which one is being played (a level key, or "garage"). */
+export function renderLevels(playing: string, garageName: string, garageSlot: string): void {
+  const d = daily();
+  $('lvDailyName').textContent = `${TEMPLATE_NAMES[d.template].long} · level ${d.level}`;
+  $('lvGarageName').textContent = garageName;
+  $('lvGarageStars').textContent = starText(bestStars(garageSlot));
+  $('lvGarage').classList.toggle('cur', playing === 'garage');
+  const cur = /^([a-z-]+):(\d+):/.exec(playing);
+  $('lvGroups').replaceChildren(...TEMPLATES.map(t => {
+    const g = el('div', 'lvGroup'), grid = el('div', 'lvGrid');
+    g.append(el('h4', '', TEMPLATE_NAMES[t].long), grid);
+    for (let n = 1; n <= 10; n++) {
+      const b = el('button'), best = bestStars(`${t}:${n}`);
+      b.type = 'button'; b.dataset.t = t; b.dataset.l = String(n);
+      b.setAttribute('aria-label', `${TEMPLATE_NAMES[t].long}, level ${n}${best >= 0 ? `, best ${best} of 3 stars` : ''}`);
+      b.append(el('b', '', String(n)), el('small', '', starText(best) || '·'));
+      if (cur && cur[1] === t && +cur[2] === n) b.classList.add('cur');
+      grid.append(b);
+    }
+    return g;
+  }));
+}
+
+export function bindLevels(h: LevelHooks): void {
+  hooks = h;
+  $('lvGroups').addEventListener('click', e => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('button[data-t]'); if (!b) return;
+    const t = b.dataset.t as TemplateId, n = +b.dataset.l!;
+    hooks.playLevel(t, n, seedFor(t, n));
+  });
+  $('lvDailyGo').addEventListener('click', () => { const d = daily(); hooks.playLevel(d.template, d.level, d.seed); });
+  $('lvGarage').addEventListener('click', () => hooks.playGarage());
+}
+
+export interface ResultInfo {
+  title: string; sub: string; par: number; limit: number; better: boolean;
+  retry(): void; newLayout: (() => void) | null; next: (() => void) | null; nextLabel: string;
+}
+const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+/** The result card: the stars, one line per star, the measurements, and Try again / New layout / Next. */
+export function showResult(r: ParkedResult, st: Stars, info: ResultInfo): void {
+  const stars = $('resStars');
+  stars.replaceChildren(...[0, 1, 2].map(i => el('i', i < st.count ? 'on' : '', '★')));
+  stars.setAttribute('aria-label', `${st.count} of 3 stars`);
+  $('resTitle').textContent = info.title + (info.better ? ' · new best' : '');
+  $('resSub').textContent = info.sub;
+  const kerb = r.kind === 'kerb';
+  const neatHow = kerb ? `tyres ${Math.round(r.kerbGap * 100)} cm from the kerb, ${Math.abs(r.angle).toFixed(1)}° off straight (30 cm and 3° or less)`
+    : `${Math.round(Math.abs(r.offCentre) * 100)} cm off centre, ${Math.abs(r.angle).toFixed(1)}° off straight (15 cm and 3° or less)`;
+  const lines: [boolean, string][] = [
+    [st.clean, st.clean ? 'Nothing touched' : `${r.hits} touch${r.hits > 1 ? 'es' : ''} on the way in`],
+    [st.neat, `Neat: ${neatHow}`],
+    [st.efficient, `Efficient: ${r.moves} ${r.moves === 1 ? 'move' : 'moves'} (par ${info.par}, one more allowed), ${mmss(r.elapsed)} of ${mmss(info.limit)}`],
+  ];
+  $('resList').replaceChildren(...lines.map(([ok, t]) => { const li = el('li', ok ? 'ok' : 'no'); li.append(el('i', '', ok ? '★' : '☆'), el('span', '', t)); return li; }));
+  const stats: [string, string][] = kerb
+    ? [['Tyres to kerb', fmtD(r.kerbGap)], ['Angle', `${Math.abs(r.angle).toFixed(1)}°`], ['Moves', String(r.moves)], ['Gap ahead', fmtD(r.gapFront)], ['Gap behind', fmtD(r.gapRear)], ['Time', mmss(r.elapsed)]]
+    : parkedCard(r).stats;
+  $('resStats').replaceChildren(...stats.map(([k, v]) => { const d = el('div'); d.append(el('span', '', k), el('b', '', v)); return d; }));
+  const nb = $('resNew'), nx = $('resNext');
+  nb.hidden = !info.newLayout; nx.textContent = info.nextLabel;
+  $('resRetry').onclick = () => info.retry();
+  nb.onclick = () => info.newLayout?.();
+  nx.onclick = () => (info.next ?? (() => openSheet('sheetLevels')))();
+  openSheet('sheetResult');
+}
+export const hideResult = (): void => { $('sheetResult').hidden = true; };

@@ -1,10 +1,10 @@
 // Route search over position and heading (hybrid A*): finds a way for a car into a bay, for
-// Show me, par and the coach. Rear-axle poses; forward is (cos th, -sin th); steering right is
+// Show me, par, the level generator and the coach. Rear-axle poses; forward is (cos th, -sin th); steering right is
 // positive and curvature k = tan(-steer) / WB, exactly as Sim.step moves the car.
 import { collides } from './collision';
 import { Field } from './field';
 import { DEG, wrapPi } from './math';
-import { parkedIn } from './parking';
+import { facesRight, isNeat, parkedIn, placement } from './parking';
 import type { Bay, Scene } from './scene';
 import type { Vehicle } from './vehicle';
 
@@ -42,6 +42,8 @@ class Heap {
 export interface SearchOpts {
   /** Search outward from the parked pose and return the route reversed (the generator's way). */
   outward?: boolean;
+  /** Outward searches make the first move into the space a forward one, unless this is set. */
+  anyFirstMove?: boolean;
   /** Give up after this many expanded poses. A step limit, never a time limit, so every device finds the same route. */
   maxNodes?: number;
   /** Costs: per metre reversing, per direction change, per step of steering change, for driving close to things. */
@@ -64,15 +66,17 @@ function run(v: Vehicle, field: Field, p: Pose, dir: 1 | -1, lvl: number, maxLen
   }
   return null;
 }
-/** Straight into the region, or an arc until lined up and then straight. Never tighter than where it starts. */
-function finishShot(v: Vehicle, field: Field, p: Pose, done: (p: Pose) => boolean, th: number, lastDirs: (1 | -1)[]): ShotPiece[] | null {
+/** Straight into the region, or an arc until lined up and then straight. Never tighter than where it starts.
+ *  The straight runs no further than the heuristic says the region is (plus a margin): open lanes are long. */
+function finishShot(v: Vehicle, field: Field, p: Pose, done: (p: Pose) => boolean, th: number, lastDirs: (1 | -1)[], heur: (p: Pose) => number): ShotPiece[] | null {
   const minC = Math.min(0.2, clear(field, p) - 0.02);
   const aligned = (q: Pose) => Math.abs(wrapPi(q.th - th)) < 2 * DEG;
-  if (Math.abs(wrapPi(p.th - th)) < 8 * DEG) for (const d of lastDirs) { const st = run(v, field, p, d, 0, 30, minC, done); if (st) return [st]; }
+  const reach = (q: Pose) => Math.min(30, heur(q) + 3);
+  if (Math.abs(wrapPi(p.th - th)) < 8 * DEG) for (const d of lastDirs) { const st = run(v, field, p, d, 0, reach(p), minC, done); if (st) return [st]; }
   for (const dir of [1, -1] as const) for (const lvl of [-1, 1, -0.5, 0.5]) {
     const arc = run(v, field, p, dir, lvl, 9, minC, aligned);
     if (!arc) continue;
-    for (const d of lastDirs) { const st = run(v, field, arc.to, d, 0, 30, minC, done); if (st) return [arc, st]; }
+    for (const d of lastDirs) { const st = run(v, field, arc.to, d, 0, reach(arc.to), minC, done); if (st) return [arc, st]; }
   }
   return null;
 }
@@ -91,15 +95,16 @@ export function search(v: Vehicle, field: Field, starts: Pose | Pose[], done: (p
   if (!S.length) return { status: 'none', pieces: [], nodes: 0, cost: 0 };
   for (const p of S) open.push({ p, g: 0, f: w * heur(p), dir: 0, lvl: 0, len: 0, parent: null });
   let nodes = 0, goal: Node | null = null;
+  const outDir = o.outward && !o.anyFirstMove ? -1 : 0;   // the direction the search must finish in (0: either)
   while (open.size) {
     const n = open.pop();
-    if (done(n.p) && (!o.outward || n.dir === -1)) { goal = n; break; }
+    if (done(n.p) && (!outDir || n.dir === outDir)) { goal = n; break; }
     const seen = best.get(key(n.p, n.dir));
     if (seen !== undefined && seen < n.g - 1e-9) continue;
     if (++nodes > maxNodes) return { status: 'gave-up', pieces: [], nodes, cost: 0 };
     // finishing shots are worth trying near the goal, and only now and then: each one is a long roll-out
     if (o.shotHeading !== undefined && (nodes <= 40 || nodes % 4 === 0) && heur(n.p) < 25) {
-      const shot = finishShot(v, field, n.p, done, o.shotHeading, o.outward ? [-1] : [1, -1]);
+      const shot = finishShot(v, field, n.p, done, o.shotHeading, outDir ? [outDir] : [1, -1], heur);
       if (shot) { let last: Node = n; for (const sp of shot) last = { p: sp.to, g: last.g + sp.len, f: 0, dir: sp.dir, lvl: sp.lvl, len: sp.len, parent: last }; goal = last; break; }
     }
     const lens = field.roughClearance(n.p.x, n.p.z, n.p.th) < 0.35 ? TIGHT : OPEN;
@@ -169,33 +174,58 @@ export function fieldFor(v: Vehicle, scene: Scene): Field {
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
     if (scene.lot) [x0, x1, z0, z1] = scene.lot;
     else for (const o of scene.obstacles) { x0 = Math.min(x0, o.bx0); x1 = Math.max(x1, o.bx1); z0 = Math.min(z0, o.bz0); z1 = Math.max(z1, o.bz1); }
-    f = new Field(v, scene.obstacles, x0 - 1, x1 + 1, z0 - 1, z1 + 1);
+    f = new Field(v, scene.obstacles, x0 - 1, x1 + 1, z0 - 1, z1 + 1, scene.kerbs);
     m.set(v, f);
   }
   return f;
 }
 
-/** Nose-in poses inside a bay (bays open towards +z, head towards -z), from deep to shallow. */
-export function bayPoses(v: Vehicle, b: Bay): Pose[] {
-  const cx = (b.x0 + b.x1) / 2, out: Pose[] = [];
-  for (let front = b.headZ + 0.35; front + v.L <= b.z1 + b.mouthTol - 0.02; front += 0.1) out.push({ x: cx, z: front + (v.L - v.OVR), th: b.inHeading });
+/** Poses parked in a bay: its own list when it has one, else centred in the lines from deep to shallow,
+ *  nose in, or reversed in when the bay asks for that (bays open towards +z, head towards -z). */
+export function bayGoals(v: Vehicle, b: Bay): Pose[] {
+  if (b.goals) return b.goals.map(g => ({ x: g.x, z: g.z, th: g.th }));
+  const cx = (b.x0 + b.x1) / 2, out: Pose[] = [], back = b.face === 'out';
+  for (let end = b.headZ + 0.35; end + v.L <= b.z1 + b.mouthTol - 0.02; end += 0.1) out.push(back ? { x: cx, z: end + v.OVR, th: b.inHeading + Math.PI } : { x: cx, z: end + (v.L - v.OVR), th: b.inHeading });
   return out;
 }
 
+/** Parked the way the bay asks for, and neatly enough for the accuracy star (planned routes should earn it). */
+function parkedWell(v: Vehicle, scene: Scene, b: Bay): (p: Pose) => boolean {
+  const way: Bay = b.face === 'out' ? b : { ...b, face: 'in' };   // either way round: the planner parks nose in
+  return p => {
+    const at = parkedIn(v, b, p.x, p.z, p.th);
+    return !!at && facesRight(way, at) && isNeat(b, placement(v, b, scene.kerbs, p.x, p.z, p.th, at));
+  };
+}
+
 /**
- * A route from a pose into a bay, nose in. Ends with the car settled at least 30 cm short of
- * whatever is ahead in the bay. 'none' straight away when no parked pose in the bay is free.
+ * A route from a pose into a bay. Ends with the car settled at least 30 cm short of whatever is
+ * ahead in the bay. 'none' straight away when no parked pose in the bay is free.
  */
 export function planToBay(v: Vehicle, scene: Scene, from: Pose, bayId: string, o: { maxNodes?: number } = {}): Plan & { field: Field } {
   const field = fieldFor(v, scene), b = scene.bays[bayId];
-  const goals = b ? bayPoses(v, b).filter(p => field.freeExact(p.x, p.z, p.th)) : [];
+  const goals = b ? bayGoals(v, b).filter(p => field.freeExact(p.x, p.z, p.th)) : [];
   if (!goals.length) return { status: 'none', pieces: [], nodes: 0, cost: 0, field };
   const ideal = goals[Math.floor(goals.length / 2)];
-  const done = (p: Pose) => parkedIn(v, b, p.x, p.z, p.th)?.noseIn ?? false;
-  const heur = (p: Pose) => Math.hypot(p.x - ideal.x, p.z - ideal.z) + 0.5 * v.R_REAR * Math.abs(wrapPi(p.th - b.inHeading));
-  const plan = search(v, field, from, done, heur, { maxNodes: o.maxNodes ?? 20000, shotHeading: b.inHeading });
-  if (plan.status === 'found') settle(v, field, plan.pieces, done);
+  const done = parkedWell(v, scene, b);
+  const heur = (p: Pose) => Math.hypot(p.x - ideal.x, p.z - ideal.z) + 0.5 * v.R_REAR * Math.abs(wrapPi(p.th - ideal.th));
+  const plan = search(v, field, from, done, heur, { maxNodes: o.maxNodes ?? 20000, shotHeading: ideal.th });
+  if (plan.status === 'found' && (b.kind ?? 'bay') === 'bay') settle(v, field, plan.pieces, done);
   return { ...plan, field };
+}
+
+/**
+ * The same, searched the generator's way: outward from the parked poses until the car is within 20 cm and
+ * 5° of `from`, then turned round. Much quicker than planToBay where the space is the hard part (parallel
+ * parking); the route starts that close to `from`, not exactly at it. Empty when the car is already parked.
+ */
+export function planBack(v: Vehicle, scene: Scene, from: Pose, bayId: string, o: { maxNodes?: number } = {}): Plan & { field: Field } {
+  const field = fieldFor(v, scene), b = scene.bays[bayId];
+  const goals = b ? bayGoals(v, b).filter(p => field.freeExact(p.x, p.z, p.th)) : [];
+  if (!goals.length) return { status: 'none', pieces: [], nodes: 0, cost: 0, field };
+  const near = (p: Pose) => Math.hypot(p.x - from.x, p.z - from.z) < 0.2 && Math.abs(wrapPi(p.th - from.th)) < 5 * DEG;
+  const heur = (p: Pose) => Math.hypot(p.x - from.x, p.z - from.z) + 0.5 * v.R_REAR * Math.abs(wrapPi(p.th - from.th));
+  return { ...search(v, field, goals, near, heur, { outward: true, anyFirstMove: true, shotHeading: from.th, maxNodes: o.maxNodes ?? 20000 }), field };
 }
 
 /** Roll straight on in the last direction while it stays parked and keeps 30 cm clear ahead (at most 3 m). */

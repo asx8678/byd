@@ -15,6 +15,7 @@ export function edgeGaps(v: Vehicle, obstacles: readonly Obstacle[], x: number, 
   const edges: Record<Side, [Pt, Pt]> = { rear: [C[0], C[3]], front: [C[1], C[2]], left: [C[0], C[1]], right: [C[3], C[2]] };
   for (const k of SIDES) out[k] = 9;
   for (const o of obstacles) {
+    if (o.cls === 'kerb') continue;   // the bumpers hang over kerbs
     if (o.kind === 'poly') {
       let near = false; for (const p of o.pts) if (Math.abs(p[0] - x) < 14 && Math.abs(p[1] - z) < 14) { near = true; break; }
       if (!near && Math.hypot(o.pts[0][0] - o.pts[2][0], o.pts[0][1] - o.pts[2][1]) < 12) continue;
@@ -37,6 +38,7 @@ export const rangeOf = (v: Vehicle, g: Side): number => (g === 'left' || g === '
 export function rayDist(obstacles: readonly Obstacle[], ox: number, oz: number, dx: number, dz: number, maxR: number): number {
   let best = maxR;
   for (const o of obstacles) {
+    if (o.cls === 'kerb') continue;   // too low for the sensors
     if (o.kind === 'poly') {
       let near = false; for (const p of o.pts) if (Math.abs(p[0] - ox) < maxR + 8 && Math.abs(p[1] - oz) < maxR + 8) { near = true; break; }
       if (!near && Math.hypot(o.pts[0][0] - o.pts[2][0], o.pts[0][1] - o.pts[2][1]) < 12) continue;

@@ -25,13 +25,18 @@ One place per file. The world frame has x to the right and z down the plan. A he
   - `h`: height in metres.
   - `cls`: `wall`, `low`, `lowwall` or `car`.
   - `label` (optional): drawn on parked cars.
+- `kerbs` (optional): `a` to `b` with the pavement on the right of that line, `depth` metres deep. Only the tyres meet a kerb; the bumpers hang over it. The route planner sees each kerb as a half-plane.
 - `bays`: the painted rectangle, plus how "parked" is judged:
   - `headZ`: how far in the car may reach.
   - `sideTol` and `mouthTol`: tolerances over the side lines and out of the mouth.
   - `inHeading`: the nose-in heading. Reversed-in parking is the opposite heading.
+  - `face` (optional): `in`, `out` (reversed in) or `either`, the default.
+  - `kind` (optional): `kerb` for a space along a kerb; the result then gives the tyres' gap to the kerb.
+  - `box` (optional): `[x0, x1, z0, z1]`, where all four corners must be. By default the lines widened by the tolerances, back to `headZ`.
+  - `goals` (optional): rear-axle poses that count as well parked, for the route planner.
 - `starts`: rear-axle poses with a label. `defaultStart` and `defaultBay` pick the defaults.
-- `lines`, `marks`, `floors`, `pit`, `door`: what is drawn.
+- `lines`, `dashes`, `marks`, `floors`, `pit`, `door`: what is drawn (`dashes` are white lane markings).
 - `areaView`: the bounds of the "Whole area" view.
 - `layoutVersion`: bump it when the layout changes. Saved settings and positions from an older layout are then reset.
 
-`garage-561.json` is the photo-surveyed garage around bay 561. Its `notes` give the survey frame used to check the numbers.
+`garage-561.json` is the photo-surveyed garage around bay 561. Its `notes` give the survey frame used to check the numbers. Generated levels (`src/core/generator`) are built in this same format, so a level can be saved as a file.
