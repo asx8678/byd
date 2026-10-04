@@ -1,10 +1,10 @@
 // The simulation: one car in one scene, driven by hold-to-move pedals and a steering wheel.
 // Pure logic with no screen code, so it can be tested and ported as it is. The car and the scene
 // come from data files; with no arguments it is the Atto 2 in the garage around bay 561.
-import { heroCorners } from './car';
 import { collides, type CarPart } from './collision';
 import { ATTO2, GARAGE_561 } from './content';
-import { DEG, clamp, wrapPi } from './math';
+import { DEG, clamp } from './math';
+import { parkedIn } from './parking';
 import { predictPath, type Prediction } from './predict';
 import type { Obstacle, Scene } from './scene';
 import { edgeGaps, scanPdc, type SideValues } from './sensors';
@@ -129,11 +129,10 @@ export class Sim {
   /** All four corners inside the target bay, stopped, within 6° of straight: nose-in or reversed in. */
   private checkParked(): ParkedResult | null {
     if (Math.abs(this.v) > 0.02) return null;
-    const v = this.vehicle, b = this.scene.bays[this.options.bay] ?? this.scene.bays[this.scene.defaultBay], C = heroCorners(v, this.x, this.z, this.th);
-    const inside = C.every(p => p[0] >= b.x0 - b.sideTol && p[0] <= b.x1 + b.sideTol && p[1] >= b.headZ && p[1] <= b.z1 + b.mouthTol);
-    if (!inside) { this.parked = false; return null; }
-    const errIn = wrapPi(this.th - b.inHeading), errOut = wrapPi(this.th - b.inHeading - Math.PI);
-    const noseIn = Math.abs(errIn) < 6 * DEG, noseOut = Math.abs(errOut) < 6 * DEG;
+    const v = this.vehicle, b = this.scene.bays[this.options.bay] ?? this.scene.bays[this.scene.defaultBay];
+    const at = parkedIn(v, b, this.x, this.z, this.th);
+    if (!at) { this.parked = false; return null; }
+    const { errIn, errOut, noseIn, noseOut } = at;
     if (!(noseIn || noseOut) || this.parked) return null;
     this.parked = true;
     const cs = Math.cos(this.th), cx = this.x + (v.WB / 2) * cs, gl = cx - v.W / 2 - b.x0, gr = b.x1 - cx - v.W / 2;

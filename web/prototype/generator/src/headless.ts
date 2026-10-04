@@ -15,7 +15,7 @@ const out: string[] = [];
   const { x: sx, z: sz, th: sth } = GARAGE_561.starts.left;
   const inBay = (p: { x: number; z: number; th: number }) => Math.abs(p.th - Math.PI / 2) < 6 * DEG && heroCorners(ATTO2, p.x, p.z, p.th).every(q => q[0] >= b.x0 - 0.03 && q[0] <= b.x1 + 0.03 && q[1] >= -0.05 && q[1] <= b.z1 + 0.15);
   const h = (p: { x: number; z: number; th: number }) => Math.hypot(p.x - 0, p.z - 3.6) + 1.2 * Math.abs(Math.atan2(Math.sin(p.th - Math.PI / 2), Math.cos(p.th - Math.PI / 2)));
-  const plan = search(field, { x: sx, z: sz, th: sth }, inBay, h, { outward: false, maxNodes: 200000, maxMs: 20000 });
+  const plan = search(field, { x: sx, z: sz, th: sth }, inBay, h, { outward: false, maxNodes: 200000, maxMs: 20000, shotHeading: Math.PI / 2 });
   let bad = '';
   if (plan.status === 'found') for (const q of sample(plan.pieces, 0.05)) { const hit = collides(ATTO2, obs, q.x, q.z, q.th); if (hit) { bad = hit.obstacle.name + ' ' + hit.part; break; } }
   out.push(`561 from the left: ${plan.status}, moves ${plan.status === 'found' ? moves(plan.pieces) : '-'}, ${plan.nodes} nodes, ${Math.round(plan.ms)} ms, exact check: ${bad || 'clear'}`);
