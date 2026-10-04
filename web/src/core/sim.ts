@@ -1,11 +1,14 @@
-// The simulation: one car in the garage, driven by hold-to-move pedals and a steering wheel.
-// Pure logic with no screen code, so it can be tested and ported as it is.
-import { CAR, DRIVE, heroCorners } from './car';
+// The simulation: one car in one scene, driven by hold-to-move pedals and a steering wheel.
+// Pure logic with no screen code, so it can be tested and ported as it is. The car and the scene
+// come from data files; with no arguments it is the Atto 2 in the garage around bay 561.
+import { heroCorners } from './car';
 import { collides, type CarPart } from './collision';
-import { BAYS, STARTS, buildObstacles, type Obstacle, type StartName } from './garage';
+import { ATTO2, GARAGE_561 } from './content';
 import { DEG, clamp, wrapPi } from './math';
 import { predictPath, type Prediction } from './predict';
-import { SENSORS, edgeGaps, scanPdc, type SideValues } from './sensors';
+import type { Obstacle, Scene } from './scene';
+import { edgeGaps, scanPdc, type SideValues } from './sensors';
+import type { Vehicle } from './vehicle';
 
 export interface SimInput {
   fwd: boolean; rev: boolean;      // pedals held
@@ -28,13 +31,13 @@ export type SimEvent =
 export interface SimOptions { lockDeg: number; selfCentre: boolean; bay: string }
 
 export class Sim {
-  readonly obstacles: readonly Obstacle[] = buildObstacles();
+  readonly obstacles: readonly Obstacle[];
   // rear-axle pose (m, rad), speed (m/s, + forward), steering wheel angle (degrees, clockwise +)
   x = 0; z = 0; th = 0; v = 0;
   wheelAngle = 0;
   wheelTarget: number | null = null;   // animate the wheel towards this (Straighten)
   readonly input: SimInput = { fwd: false, rev: false, kl: false, kr: false, wheelHeld: false };
-  readonly options: SimOptions = { lockDeg: 2.7 * 180, selfCentre: true, bay: '561' };
+  readonly options: SimOptions;
   hits = 0; elapsed = 0; parked = false; inContact = false; started = false;
   lastMoveDir: 1 | -1 = 1;
   holdT = 0;
@@ -42,17 +45,29 @@ export class Sim {
   lastDriveT = -9;     // when the car last moved or a pedal was held
   readonly gaps: SideValues = { front: 9, rear: 9, left: 9, right: 9 };                          // body outline to the nearest obstacle
   readonly pdc: SideValues = { front: Infinity, rear: Infinity, left: Infinity, right: Infinity };   // closest parking-sensor reading per group
-  readonly sensorReadings: number[] = SENSORS.map(() => Infinity);
+  readonly sensorReadings: number[];
   private poseSig = '';
 
+  constructor(readonly scene: Scene = GARAGE_561, readonly vehicle: Vehicle = ATTO2) {
+    this.obstacles = scene.obstacles;
+    this.options = { lockDeg: 2.7 * 180, selfCentre: true, bay: scene.defaultBay };
+    this.sensorReadings = vehicle.sensors.map(() => Infinity);
+  }
+
   /** Single-track angle in degrees, right positive. */
-  get steerDeg(): number { return this.wheelAngle / this.options.lockDeg * CAR.MAXSTEER; }
+  get steerDeg(): number { return this.wheelAngle / this.options.lockDeg * this.vehicle.MAXSTEER; }
   get gear(): 'D' | 'R' | 'P' { return this.input.fwd || this.v > 0.05 ? 'D' : this.input.rev || this.v < -0.05 ? 'R' : 'P'; }
   /** The parking sensors are listening while the car moves and for 1.5 s after. */
   get armed(): boolean { return this.time - this.lastDriveT < 1.5; }
 
-  reset(start: StartName): void {
-    [this.x, this.z, this.th] = STARTS[start] ?? STARTS.left;
+  /** Back to a named start of the scene (its default if the name is unknown). */
+  reset(start: string): void {
+    const s = this.scene.starts[start] ?? this.scene.starts[this.scene.defaultStart];
+    this.resetAt(s.x, s.z, s.th);
+  }
+  /** Back to the start of an attempt at a given pose. */
+  resetAt(x: number, z: number, th: number): void {
+    this.x = x; this.z = z; this.th = th;
     this.v = 0; this.wheelAngle = 0; this.wheelTarget = null; this.hits = 0; this.elapsed = 0;
     this.started = false; this.inContact = false; this.parked = false; this.lastMoveDir = 1;
     this.input.fwd = this.input.rev = false;
@@ -61,8 +76,8 @@ export class Sim {
   /** Put the car somewhere directly (tests, restoring a saved session). */
   place(x: number, z: number, th: number): void { this.x = x; this.z = z; this.th = th; }
 
-  touching(x = this.x, z = this.z, th = this.th) { return collides(this.obstacles, x, z, th); }
-  predict(dir: 1 | -1): Prediction { return predictPath(this.obstacles, this.x, this.z, this.th, this.steerDeg, dir); }
+  touching(x = this.x, z = this.z, th = this.th) { return collides(this.vehicle, this.obstacles, x, z, th); }
+  predict(dir: 1 | -1): Prediction { return predictPath(this.vehicle, this.obstacles, this.x, this.z, this.th, this.steerDeg, dir); }
 
   /** Advance by dt seconds. Returns what happened (touches, parking) for the UI to show. */
   step(dt: number): SimEvent[] {
@@ -76,7 +91,7 @@ export class Sim {
       const rate = Math.min(180, 55 * Math.abs(this.v)); this.wheelAngle = Math.abs(this.wheelAngle) <= rate * dt ? 0 : this.wheelAngle - Math.sign(this.wheelAngle) * rate * dt;
     }
     // longitudinal: hold to move, release to brake; the longer the hold, the higher the target speed
-    const D = DRIVE;
+    const D = this.vehicle.drive;
     this.holdT = (inp.fwd || inp.rev) ? this.holdT + dt : 0;
     const ramp = Math.max(0, this.holdT - D.HOLD_T);
     const tgt = this.targetSpeed(ramp);
@@ -89,7 +104,7 @@ export class Sim {
     // kinematics with a collision check per substep
     const sub = 4, h = dt / sub, delta = -this.steerDeg * DEG;
     for (let i = 0; i < sub && this.v !== 0; i++) {
-      const nth = this.th + this.v / CAR.WB * Math.tan(delta) * h, nx = this.x + this.v * Math.cos(this.th) * h, nz = this.z - this.v * Math.sin(this.th) * h;
+      const nth = this.th + this.v / this.vehicle.WB * Math.tan(delta) * h, nx = this.x + this.v * Math.cos(this.th) * h, nz = this.z - this.v * Math.sin(this.th) * h;
       const hit = this.touching(nx, nz, nth);
       if (hit) {
         if (!this.inContact) { this.inContact = true; this.hits++; events.push({ type: 'touch', name: hit.obstacle.name, part: hit.part, hits: this.hits }); }
@@ -99,29 +114,29 @@ export class Sim {
     }
     // sensors only when the car has moved
     const ps = this.x.toFixed(4) + ',' + this.z.toFixed(4) + ',' + this.th.toFixed(5);
-    if (ps !== this.poseSig) { this.poseSig = ps; edgeGaps(this.obstacles, this.x, this.z, this.th, this.gaps); scanPdc(this.obstacles, this.x, this.z, this.th, this.sensorReadings, this.pdc); }
+    if (ps !== this.poseSig) { this.poseSig = ps; edgeGaps(this.vehicle, this.obstacles, this.x, this.z, this.th, this.gaps); scanPdc(this.vehicle, this.obstacles, this.x, this.z, this.th, this.sensorReadings, this.pdc); }
     const parked = this.checkParked(); if (parked) events.push({ type: 'parked', result: parked });
     if (inp.fwd || inp.rev || Math.abs(this.v) > 0.05) this.lastDriveT = this.time;
     return events;
   }
 
   /** Speed the pedals ask for, m/s (0 when none is held). */
-  targetSpeed(ramp = Math.max(0, this.holdT - DRIVE.HOLD_T)): number {
-    const D = DRIVE, inp = this.input;
+  targetSpeed(ramp = Math.max(0, this.holdT - this.vehicle.drive.HOLD_T)): number {
+    const D = this.vehicle.drive, inp = this.input;
     return inp.fwd ? Math.min(D.VMAX_F, D.V_CREEP_F + ramp * D.RAMP_F) : inp.rev ? -Math.min(D.VMAX_R, D.V_CREEP_R + ramp * D.RAMP_R) : 0;
   }
 
   /** All four corners inside the target bay, stopped, within 6° of straight: nose-in or reversed in. */
   private checkParked(): ParkedResult | null {
     if (Math.abs(this.v) > 0.02) return null;
-    const b = BAYS[this.options.bay] ?? BAYS['561'], C = heroCorners(this.x, this.z, this.th);
-    const inside = C.every(p => p[0] >= b.x0 - 0.03 && p[0] <= b.x1 + 0.03 && p[1] >= -0.05 && p[1] <= b.z1 + 0.15);
+    const v = this.vehicle, b = this.scene.bays[this.options.bay] ?? this.scene.bays[this.scene.defaultBay], C = heroCorners(v, this.x, this.z, this.th);
+    const inside = C.every(p => p[0] >= b.x0 - b.sideTol && p[0] <= b.x1 + b.sideTol && p[1] >= b.headZ && p[1] <= b.z1 + b.mouthTol);
     if (!inside) { this.parked = false; return null; }
-    const errIn = wrapPi(this.th - Math.PI / 2), errOut = wrapPi(this.th + Math.PI / 2);
+    const errIn = wrapPi(this.th - b.inHeading), errOut = wrapPi(this.th - b.inHeading - Math.PI);
     const noseIn = Math.abs(errIn) < 6 * DEG, noseOut = Math.abs(errOut) < 6 * DEG;
     if (!(noseIn || noseOut) || this.parked) return null;
     this.parked = true;
-    const cs = Math.cos(this.th), cx = this.x + (CAR.WB / 2) * cs, gl = cx - CAR.W / 2 - b.x0, gr = b.x1 - cx - CAR.W / 2;
+    const cs = Math.cos(this.th), cx = this.x + (v.WB / 2) * cs, gl = cx - v.W / 2 - b.x0, gr = b.x1 - cx - v.W / 2;
     return {
       bay: this.options.bay, noseIn,
       offCentre: (noseIn ? 1 : -1) * (cx - (b.x0 + b.x1) / 2), angle: (noseIn ? errIn : errOut) / DEG,

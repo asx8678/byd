@@ -1,16 +1,17 @@
-// Distances around the car: the gap from each side of the body outline, and the 12 ultrasonic parking sensors.
-import { CAR, heroCorners } from './car';
+// Distances around the car: the gap from each side of the body outline, and the ultrasonic parking sensors.
+import { heroCorners } from './car';
 import { ptSeg, segSeg } from './geometry';
-import type { Obstacle } from './garage';
-import { DEG, type Pt } from './math';
+import type { Pt } from './math';
+import type { Obstacle } from './scene';
+import type { Side, Vehicle } from './vehicle';
 
-export type Side = 'front' | 'rear' | 'left' | 'right';
+export type { Side, SensorMount } from './vehicle';
 export type SideValues = Record<Side, number>;
 export const SIDES: readonly Side[] = ['front', 'rear', 'left', 'right'];
 
 /** Gap from each side of the car's rectangle to the nearest obstacle (9 = nothing near). */
-export function edgeGaps(obstacles: readonly Obstacle[], x: number, z: number, th: number, out: SideValues): void {
-  const C = heroCorners(x, z, th);
+export function edgeGaps(v: Vehicle, obstacles: readonly Obstacle[], x: number, z: number, th: number, out: SideValues): void {
+  const C = heroCorners(v, x, z, th);
   const edges: Record<Side, [Pt, Pt]> = { rear: [C[0], C[3]], front: [C[1], C[2]], left: [C[0], C[1]], right: [C[3], C[2]] };
   for (const k of SIDES) out[k] = 9;
   for (const o of obstacles) {
@@ -28,22 +29,9 @@ export function edgeGaps(obstacles: readonly Obstacle[], x: number, z: number, t
 }
 const EDGE_ORDER: readonly Side[] = ['rear', 'front', 'left', 'right'];
 
-// Parking sensors: four in each bumper (two centre, two corner angled 35° out) and two per side, each a 60° cone.
-export const PDC = { front: 1.2, rear: 1.5, side: 0.6, half: 30 * DEG } as const;
-export const PDC_BANDS: Record<Side, readonly number[]> = { front: [0.3, 0.6, 0.9, 1.2], rear: [0.3, 0.7, 1.1, 1.5], left: [0.3, 0.45, 0.6], right: [0.3, 0.45, 0.6] };   // zone edges per group, red / amber / green outwards
-export const rangeOf = (g: Side): number => (g === 'left' || g === 'right' ? PDC.side : PDC[g]);
-export interface SensorMount { g: Side; lx: number; lz: number; a: number }
-export const SENSORS: readonly SensorMount[] = (() => {
-  const fx = CAR.WB + CAR.OVF - 0.03, rx = -CAR.OVR + 0.02;
-  return [
-    { g: 'front', lx: fx, lz: -0.26, a: 0 }, { g: 'front', lx: fx, lz: 0.26, a: 0 },
-    { g: 'front', lx: fx - 0.08, lz: -0.68, a: -35 * DEG }, { g: 'front', lx: fx - 0.08, lz: 0.68, a: 35 * DEG },
-    { g: 'rear', lx: rx, lz: -0.26, a: Math.PI }, { g: 'rear', lx: rx, lz: 0.26, a: Math.PI },
-    { g: 'rear', lx: rx + 0.06, lz: -0.68, a: Math.PI + 35 * DEG }, { g: 'rear', lx: rx + 0.06, lz: 0.68, a: Math.PI - 35 * DEG },
-    { g: 'left', lx: CAR.WB + 0.3, lz: -0.9, a: -Math.PI / 2 }, { g: 'left', lx: -0.3, lz: -0.9, a: -Math.PI / 2 },
-    { g: 'right', lx: CAR.WB + 0.3, lz: 0.9, a: Math.PI / 2 }, { g: 'right', lx: -0.3, lz: 0.9, a: Math.PI / 2 },
-  ] as SensorMount[];
-})();
+// Parking sensors: the car's mounts (vehicle.sensors), each sweeping a cone; ranges and the zone edges come with the car.
+/** How far a sensor group hears. */
+export const rangeOf = (v: Vehicle, g: Side): number => (g === 'left' || g === 'right' ? v.pdc.side : v.pdc[g]);
 
 /** Nearest obstacle along a ray, capped at maxR. */
 export function rayDist(obstacles: readonly Obstacle[], ox: number, oz: number, dx: number, dz: number, maxR: number): number {
@@ -67,14 +55,14 @@ export function rayDist(obstacles: readonly Obstacle[], ox: number, oz: number, 
 }
 
 /** Each sensor sweeps five rays across its cone; readings[i] is sensor i's distance, out is the closest per group. */
-export function scanPdc(obstacles: readonly Obstacle[], x: number, z: number, th: number, readings: number[], out: SideValues): void {
+export function scanPdc(v: Vehicle, obstacles: readonly Obstacle[], x: number, z: number, th: number, readings: number[], out: SideValues): void {
   const cs = Math.cos(th), sn = Math.sin(th);
   for (const k of SIDES) out[k] = Infinity;
-  SENSORS.forEach((sd, i) => {
-    const range = rangeOf(sd.g);
+  v.sensors.forEach((sd, i) => {
+    const range = rangeOf(v, sd.g);
     const ox = x + sd.lx * cs + sd.lz * sn, oz = z - sd.lx * sn + sd.lz * cs; let best = range;
     for (let k = -2; k <= 2; k++) {
-      const a = sd.a + k * PDC.half / 2, lxd = Math.cos(a), lzd = Math.sin(a);
+      const a = sd.a + k * v.pdc.half / 2, lxd = Math.cos(a), lzd = Math.sin(a);
       const d = rayDist(obstacles, ox, oz, lxd * cs + lzd * sn, -lxd * sn + lzd * cs, range); if (d < best) best = d;
     }
     readings[i] = best; if (best < out[sd.g]) out[sd.g] = best;

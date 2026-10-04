@@ -1,0 +1,81 @@
+{
+  "format": 1,
+  "id": "garage-561",
+  "name": "Underground garage, bay 561",
+  "notes": ["World frame in metres: x to the right along the bays as you face the 561 wall, z towards the aisle and on across it. Bay 561 is centred on x = 0; the wall of the 561/562 technical room is z = 0 and the aisle line of the bays is z = 5.15.", "The layout is a photo survey (scaled from the Atto 2's rear track and wheelbase, the Clio's track and the drain cover). Survey frame: u = x + 1.205 (to the right from the 560|561 line), v = 5.15 - z (from the aisle line towards the 561 wall).", "Obstacles: h is the height in metres; door mirrors only meet things taller than the car's mirror height. cls: wall, low, lowwall, car."],
+  "layoutVersion": 2,
+  "lot": [-11.9, 17.1, -5.1, 14.4],
+  "areaView": [-10.8, 7.6, -1, 10.9],
+  "defaultBay": "561",
+  "bays": {
+    "560": {"x0": -3.555, "x1": -1.205, "z0": 0.65, "z1": 5.15, "headZ": -0.05, "sideTol": 0.03, "mouthTol": 0.15, "inHeading": 1.5707963267948966},
+    "561": {"x0": -1.205, "x1": 1.205, "z0": 0.43, "z1": 5.15, "headZ": -0.05, "sideTol": 0.03, "mouthTol": 0.15, "inHeading": 1.5707963267948966}
+  },
+  "defaultStart": "left",
+  "starts": {
+    "left": {"x": -8.6, "z": 6.45, "th": 0, "label": "Coming from the left, as you usually do."},
+    "right": {"x": 5.795, "z": 5.57, "th": 3.141592653589793, "label": "Coming from the right, between the pillars."},
+    "across": {"x": 2.0949999999999998, "z": 8.5, "thDeg": 125, "label": "Starting across the aisle, angled at the bays."}
+  },
+  "lines": [
+    [-6.255, 5.15, 1.205, 5.15],
+    [-1.205, 5.15, -1.205, 0.43],
+    [1.205, 5.15, 1.205, 0.43],
+    [-1.205, 0.43, 6.695, 0.43],
+    [1.205, 2.71, 6.695, 2.71],
+    [6.695, 2.71, 6.695, 0.43],
+    [-3.555, 0.65, -1.205, 0.65],
+    [-3.555, 2.95, -3.555, 0.65],
+    [-3.835, 2.95, -3.835, 0.65],
+    [-6.255, 0.65, -3.835, 0.65],
+    [-6.255, 5.15, -6.255, 0.65],
+    [-4.955, 7.75, -9.805, 7.75]
+  ],
+  "marks": {
+    "text": [["559", -5.055, 4.6], ["560", -2.375, 4.6], ["561", 0, 4.6]],
+    "manhole": [-0.165, 0.385, 6.62, 7.12]
+  },
+  "floors": [
+    [-11.9, 17.1, -5.1, 10.4],
+    [4.395, 17.1, 10.4, 14.4]
+  ],
+  "pit": [-3.465, 4.395, 10.4, 16.65],
+  "door": [2.325, 3.385],
+  "obstacles": [
+    {"kind": "poly", "pts": [[-1.995, -3], [4.285, -3], [4.285, 0], [-1.995, 0]], "name": "wall of the 561/562 room", "h": 2.25, "cls": "wall"},
+    {"kind": "poly", "pts": [[0.175, 0], [2.005, 0], [2.005, 0.33], [0.175, 0.33]], "name": "concrete bench", "h": 0.5, "cls": "low"},
+    {"kind": "poly", "pts": [[-6.255, -0.47], [-1.995, -0.47], [-1.995, -0.25], [-6.255, -0.25]], "name": "back wall", "h": 2.6, "cls": "wall"},
+    {"kind": "poly", "pts": [[-6.475, -2.62], [-6.255, -2.62], [-6.255, -0.25], [-6.475, -0.25]], "name": "back wall", "h": 2.6, "cls": "wall"},
+    {"kind": "poly", "pts": [[-11.605, -2.62], [-6.255, -2.62], [-6.255, -2.4], [-11.605, -2.4]], "name": "back wall", "h": 2.6, "cls": "wall"},
+    {"kind": "poly", "pts": [[-11.825, -2.62], [-11.605, -2.62], [-11.605, 10.4], [-11.825, 10.4]], "name": "end wall", "h": 2.6, "cls": "wall"},
+    {"kind": "poly", "pts": [[-3.835, 2.95], [-3.555, 2.95], [-3.555, 5.1], [-3.835, 5.1]], "name": "pillar 560", "h": 2.6, "cls": "wall"},
+    {"kind": "poly", "pts": [[-11.605, 10], [-4.065, 10], [-4.065, 10.4], [-11.605, 10.4]], "name": "wall", "h": 2.6, "cls": "wall"},
+    {"kind": "poly", "pts": [[-4.065, 9.94], [-3.465, 9.94], [-3.465, 10.75], [-4.065, 10.75]], "name": "pillar", "h": 2.6, "cls": "wall"},
+    {"kind": "poly", "pts": [[-3.465, 10.2], [4.395, 10.2], [4.395, 10.4], [-3.465, 10.4]], "name": "low wall", "h": 1.6, "cls": "lowwall"},
+    {"kind": "poly", "pts": [[4.395, 10.2], [4.895, 10.2], [4.895, 10.8], [4.395, 10.8]], "name": "pillar", "h": 2.6, "cls": "wall"},
+    {"kind": "poly", "pts": [[3.995, 6.75], [4.495, 6.75], [4.495, 7.25], [3.995, 7.25]], "name": "pillar", "h": 2.6, "cls": "wall"},
+    {"kind": "poly", "pts": [[3.395, 3.62], [4.145, 3.62], [4.145, 4.37], [3.395, 4.37]], "name": "pillar by 562", "h": 2.6, "cls": "wall"},
+    {"kind": "poly", "pts": [[4.175, 3.67], [4.655, 3.67], [4.655, 3.77], [4.175, 3.77]], "name": "bike hoop", "fill": "#9aa0a6", "h": 0.65, "cls": "low"},
+    {"kind": "poly", "pts": [[8.845, 10.55], [9.345, 10.55], [9.345, 11.15], [8.845, 11.15]], "name": "pillar", "h": 2.6, "cls": "wall"},
+    {"kind": "poly", "pts": [[8.845, 3.85], [9.345, 3.85], [9.345, 4.45], [8.845, 4.45]], "name": "pillar", "h": 2.6, "cls": "wall"},
+    {"kind": "poly", "pts": [[8.845, -2.05], [9.345, -2.05], [9.345, -1.45], [8.845, -1.45]], "name": "pillar", "h": 2.6, "cls": "wall"},
+    {"kind": "poly", "pts": [[13.845, 10.55], [14.345, 10.55], [14.345, 11.15], [13.845, 11.15]], "name": "pillar", "h": 2.6, "cls": "wall"},
+    {"kind": "poly", "pts": [[13.845, 3.85], [14.345, 3.85], [14.345, 4.45], [13.845, 4.45]], "name": "pillar", "h": 2.6, "cls": "wall"},
+    {"kind": "poly", "pts": [[13.845, -2.05], [14.345, -2.05], [14.345, -1.45], [13.845, -1.45]], "name": "pillar", "h": 2.6, "cls": "wall"},
+    {"kind": "poly", "pts": [[4.895, 14.15], [16.995, 14.15], [16.995, 14.35], [4.895, 14.35]], "name": "wall", "h": 2.6, "cls": "wall"},
+    {"kind": "poly", "pts": [[16.795, -5.05], [16.995, -5.05], [16.995, 14.35], [16.795, 14.35]], "name": "wall", "h": 2.6, "cls": "wall"},
+    {"kind": "poly", "pts": [[4.285, -5.05], [16.995, -5.05], [16.995, -4.85], [4.285, -4.85]], "name": "wall", "h": 2.6, "cls": "wall"},
+    {"kind": "poly", "pts": [[4.285, -4.85], [4.485, -4.85], [4.485, -3], [4.285, -3]], "name": "wall", "h": 2.6, "cls": "wall"},
+    {"kind": "circle", "x": 7.495, "z": -2.25, "r": 0.3, "name": "blue tank", "fill": "#2b7bd6", "h": 1.05, "cls": "low"},
+    {"kind": "circle", "x": 8.245, "z": -2.7, "r": 0.3, "name": "blue tank", "fill": "#2b7bd6", "h": 1.05, "cls": "low"},
+    {"kind": "poly", "pts": [[-8.405, -1.5], [-7.205, -1.5], [-7.205, -0.75], [-8.405, -0.75]], "name": "green bins", "h": 1.1, "cls": "low"},
+    {"kind": "poly", "pts": [[-3.455, -0.23], [-3.005, -0.23], [-3.005, 0.15], [-3.455, 0.15]], "name": "grey bin", "h": 0.5, "cls": "low"},
+    {"kind": "poly", "pts": [[-9.11, 7.8775], [-5.055, 7.8775], [-5.055, 9.6225], [-9.11, 9.6225]], "name": "black Peugeot 208", "h": 1.43, "cls": "car", "label": "Peugeot 208"},
+    {"kind": "poly", "pts": [[3.845, 7.79], [7.875, 7.79], [7.875, 9.51], [3.845, 9.51]], "name": "grey Clio", "h": 1.49, "cls": "car", "label": "Clio"},
+    {"kind": "poly", "pts": [[10.45, 3.765], [10.45, -0.865], [12.34, -0.865], [12.34, 3.765]], "name": "parked SUV", "h": 1.71, "cls": "car"},
+    {"kind": "poly", "pts": [[12.22, 5.79], [12.22, 9.71], [10.57, 9.71], [10.57, 5.79]], "name": "white car", "h": 1.47, "cls": "car"},
+    {"kind": "poly", "pts": [[13.485, 3.83], [13.485, -0.93], [15.305, -0.93], [15.305, 3.83]], "name": "black saloon", "h": 1.43, "cls": "car"},
+    {"kind": "poly", "pts": [[15.345, 5.565], [15.345, 9.935], [13.445, 9.935], [13.445, 5.565]], "name": "white SUV", "h": 1.63, "cls": "car"},
+    {"kind": "poly", "pts": [[10.585, 14.43], [10.585, 9.67], [12.405, 9.67], [12.405, 14.43]], "name": "black saloon", "h": 1.43, "cls": "car"}
+  ]
+}

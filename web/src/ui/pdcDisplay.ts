@@ -1,8 +1,7 @@
 // Parking-sensor display over the map, like the car's own screen: a car graphic with zone bands,
 // a STOP card under 30 cm in the direction of travel, and a red glow on the screen edge facing the obstacle.
-import { CAR } from '../core/car';
 import { DEG, clamp } from '../core/math';
-import { PDC_BANDS, SENSORS, SIDES, rangeOf, type Side } from '../core/sensors';
+import { SIDES, rangeOf, type Side } from '../core/sensors';
 import type { Sim } from '../core/sim';
 import { $, fitCanvas } from './dom';
 import { settings } from './settings';
@@ -19,20 +18,20 @@ export function layoutPdc(band: { top: number; carY: number } | null): void {
   $('pdcStop').style.top = Math.round(band.carY) + 'px';
 }
 
-const zoneOf = (g: Side, d: number): number => d < 0.3 ? 9 : PDC_BANDS[g].reduce((n, b, i) => i && d < b ? n + 1 : n, 0);   // bands lit for one sensor, 9 = under 30 cm
+const zoneOf = (sim: Sim, g: Side, d: number): number => d < 0.3 ? 9 : sim.vehicle.pdc.bands[g].reduce((n, b, i) => i && d < b ? n + 1 : n, 0);   // bands lit for one sensor, 9 = under 30 cm
 
 function drawPdcIcon(sim: Sim, g: 'front' | 'rear', armed: boolean, blinkOn: boolean, dpr: number): void {   // top-view car with the zone bands around it
   const size = fitCanvas(pdcCv); if (!size) return;
   const { w, h } = size, c = pdcCtx; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, w, h);
-  const cx = w / 2, cw = w * 0.30, cl = cw * CAR.L / CAR.W, band = w * 0.065, gap = w * 0.03, top = h / 2 - cl / 2, bot = h / 2 + cl / 2;
+  const cx = w / 2, cw = w * 0.30, cl = cw * sim.vehicle.L / sim.vehicle.W, band = w * 0.065, gap = w * 0.03, top = h / 2 - cl / 2, bot = h / 2 + cl / 2;
   const col = ['236,91,79', '240,165,58', '94,208,138'];
   const paint = (i: number, lit: boolean, listening: boolean) => `rgba(${col[Math.min(i, 2)]},${lit ? .95 : listening ? .3 : .14})`;
   const hot = `rgba(236,91,79,${blinkOn ? .95 : .3})`;
-  const reading = SENSORS.map((sd, i) => ({ ...sd, d: sim.sensorReadings[i] }));
+  const reading = sim.vehicle.sensors.map((sd, i) => ({ ...sd, d: sim.sensorReadings[i] })), BANDS = sim.vehicle.pdc.bands;
   c.lineCap = 'butt';
   // bumpers: four sectors around a centre inside the nose / tail, three bands each, lit from the outside in
   for (const [grp, sign, ccy] of [['front', -1, top + cl * 0.42], ['rear', 1, bot - cl * 0.42]] as ['front' | 'rear', number, number][]) {
-    const list = reading.filter(s => s.g === grp).sort((a, b) => a.lz - b.lz), bands = PDC_BANDS[grp], r0 = cl * 0.42 + gap, listening = armed && grp === g;
+    const list = reading.filter(s => s.g === grp).sort((a, b) => a.lz - b.lz), bands = BANDS[grp], r0 = cl * 0.42 + gap, listening = armed && grp === g;
     list.forEach((sd, k) => {
       const ca = [-42, -14, 14, 42][k], hw = 12.5, base = sign < 0 ? -90 + ca : 90 - ca, aA = (base - hw) * DEG, aB = (base + hw) * DEG;
       for (let i = 0; i < bands.length - 1; i++) { c.beginPath(); c.arc(cx, ccy, r0 + i * band + band / 2, aA, aB); c.lineWidth = band - 1.5; c.strokeStyle = paint(i, sd.d < bands[i + 1], listening); c.stroke(); }
@@ -41,7 +40,7 @@ function drawPdcIcon(sim: Sim, g: 'front' | 'rear', armed: boolean, blinkOn: boo
   }
   // flanks: two bars per side (front and rear sensor), two bands each
   for (const [grp, sx] of [['left', -1], ['right', 1]] as ['left' | 'right', number][]) {
-    const list = reading.filter(s => s.g === grp).sort((a, b) => b.lx - a.lx), bands = PDC_BANDS[grp];
+    const list = reading.filter(s => s.g === grp).sort((a, b) => b.lx - a.lx), bands = BANDS[grp];
     list.forEach((sd, k) => {
       const y0 = top + cl * (k ? 0.54 : 0.22), y1 = top + cl * (k ? 0.78 : 0.46);
       for (let i = 0; i < bands.length - 1; i++) { const xx = cx + sx * (cw / 2 + gap + i * band + band / 2); c.beginPath(); c.moveTo(xx, y0); c.lineTo(xx, y1); c.lineWidth = band - 1.5; c.strokeStyle = paint(i, sd.d < bands[i + 1], false); c.stroke(); }
@@ -65,7 +64,7 @@ function drawPdcIcon(sim: Sim, g: 'front' | 'rear', armed: boolean, blinkOn: boo
 
 export function updatePdcDisplay(sim: Sim, now: number, dpr: number): void {
   const on = settings.pdc === 'on', armed = on && sim.armed, g = sim.lastMoveDir >= 0 ? 'front' : 'rear', pdc = sim.pdc;
-  const inRange = (k: Side) => pdc[k] < rangeOf(k) - 1e-6;   // a reading at the range cap means nothing seen
+  const inRange = (k: Side) => pdc[k] < rangeOf(sim.vehicle, k) - 1e-6;   // a reading at the range cap means nothing seen
   const dmin = Math.min(pdc.front, pdc.rear, pdc.left, pdc.right), show = on && (armed || SIDES.some(inRange));
   $('pdcWrap').classList.toggle('show', show);
   // STOP card for the end that is moving
@@ -90,6 +89,6 @@ export function updatePdcDisplay(sim: Sim, now: number, dpr: number): void {
   }
   // redraw the graphic only when a zone changes (or while the 30 cm band blinks)
   const blinkOn = Math.floor(now * 3) % 2 === 0; let key = g + (armed ? 'A' : 'a') + (dmin < 0.3 ? (blinkOn ? 'B' : 'b') : '-');
-  SENSORS.forEach((sd, i) => { key += zoneOf(sd.g, sim.sensorReadings[i]); });
+  sim.vehicle.sensors.forEach((sd, i) => { key += zoneOf(sim, sd.g, sim.sensorReadings[i]); });
   if (key !== pdcKey) { pdcKey = key; drawPdcIcon(sim, g, armed, blinkOn, dpr); }
 }

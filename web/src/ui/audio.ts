@@ -36,7 +36,7 @@ export function tone(on: boolean, freq = 0): void {   // continuous tone under 3
 export function updateBeeper(sim: Sim, now: number): void {
   const armed = settings.pdc === 'on' && sim.armed;
   const g = sim.lastMoveDir >= 0 ? 'front' : 'rear', d = sim.pdc[g], freq = g === 'front' ? 1750 : 1250;
-  if (!armed || d >= rangeOf(g)) { tone(false); return; }
+  if (!armed || d >= rangeOf(sim.vehicle, g)) { tone(false); return; }
   if (d < 0.3) { tone(true, freq); return; }
   tone(false);
   const period = d < 0.45 ? 0.16 : d < 0.7 ? 0.33 : d < 1.0 ? 0.6 : 0.9;

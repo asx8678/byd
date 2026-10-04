@@ -1,0 +1,23 @@
+{
+  "format": 1,
+  "id": "byd-atto2",
+  "name": "BYD Atto 2",
+  "basedOn": "BYD Atto 2 DM-i (2025-)",
+  "sources": [
+    "BYD spec sheet: length, width, height, wheelbase, overhangs, 5.3 m kerb-to-kerb turning radius",
+    "Outline traced from the body's widest sections so the corners are rounded like the bumpers"
+  ],
+  "notes": "Rear-axle frame: x forward from the rear axle, z to the right, metres. The steering lock is derived from the turning radius: rear-axle radius = sqrt(R^2 - WB^2) - track/2.",
+  "dims": { "length": 4.33, "width": 1.83, "height": 1.675, "wheelbase": 2.62, "track": 1.57, "overhangFront": 0.883, "overhangRear": 0.827, "wheelRadius": 0.334, "wheelWidth": 0.215, "mass": 1580 },
+  "turning": { "kerbRadius": 5.3 },
+  "outline": { "half": [[3.503, 0.52], [3.40, 0.76], [3.123, 0.878], [2.80, 0.912], [0, 0.915], [-0.58, 0.858], [-0.76, 0.76], [-0.827, 0.62]] },
+  "mirrors": { "height": 1.12, "box": [1.77, 0.90, 1.98, 1.04] },
+  "planCorners": [[3.40, -0.76], [3.40, 0.76], [-0.76, -0.76], [-0.76, 0.76]],
+  "drive": { "creepForward": 1.2, "maxForward": 5.5, "rampForward": 1.1, "creepReverse": 0.9, "maxReverse": 2.8, "rampReverse": 0.6, "holdTime": 1.0, "accel": 2.0, "brake": 3.5 },
+  "parkingSensors": {
+    "layout": "4-front-4-rear-2-each-side",
+    "ranges": { "front": 1.2, "rear": 1.5, "side": 0.6 },
+    "coneDeg": 60,
+    "bands": { "front": [0.3, 0.6, 0.9, 1.2], "rear": [0.3, 0.7, 1.1, 1.5], "left": [0.3, 0.45, 0.6], "right": [0.3, 0.45, 0.6] }
+  }
+}

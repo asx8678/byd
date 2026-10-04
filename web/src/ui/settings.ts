@@ -1,5 +1,6 @@
 // Setup choices, kept in this browser between visits.
-import { BAYS, LAYOUT_V, type StartName } from '../core/garage';
+import { GARAGE_561 } from '../core/content';
+import type { StartName } from '../core/garage';
 
 export interface Settings {
   start: StartName;
@@ -19,8 +20,8 @@ if ((settings.steer as string) === 'quick') settings.steer = '1';
 
 export function saveSettings(): void { try { localStorage.setItem(KEY, JSON.stringify(settings)); } catch { /* not saved */ } }
 
-if (settings.layout !== LAYOUT_V) {   // new garage layout: start from the left, as you usually arrive
-  settings.layout = LAYOUT_V; settings.start = 'left'; if (!BAYS[settings.bay]) settings.bay = '561'; saveSettings();
+if (settings.layout !== GARAGE_561.layoutVersion) {   // new garage layout: start from the left, as you usually arrive
+  settings.layout = GARAGE_561.layoutVersion; settings.start = GARAGE_561.defaultStart; if (!GARAGE_561.bays[settings.bay]) settings.bay = GARAGE_561.defaultBay; saveSettings();
 }
 
 /** Steering-wheel degrees at full lock (turns lock to lock × 180). */
