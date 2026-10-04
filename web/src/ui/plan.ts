@@ -3,6 +3,7 @@
 import { ackermann, footprint } from '../core/car';
 import type { Rect } from '../core/scene';
 import { DEG, clamp, type Pt } from '../core/math';
+import type { RoutePoint } from '../core/planner';
 import type { Prediction } from '../core/predict';
 import { SIDES, rangeOf } from '../core/sensors';
 import type { Sim } from '../core/sim';
@@ -25,6 +26,11 @@ export function layoutPlan(stage: HTMLElement): { top: number; bottom: number; c
 }
 
 export function forgetPrediction(): void { pred = null; }
+
+/** Show me: a planned route drawn on the floor, and a ghost car at point `at` along it. */
+export interface Guide { pts: RoutePoint[]; at: number }
+let guide: Guide | null = null;
+export function setGuide(g: Guide | null): void { guide = g; }
 /** Jump straight to the target view on the next frame instead of easing there. */
 export function snapView(): void { PV.init = false; }
 
@@ -77,6 +83,22 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
     else { path(c, o.pts); c.fill(); c.stroke(); }
   }
   if (sc.door) { c.strokeStyle = '#59636b'; c.lineWidth = Math.max(1.5, 0.07 * s); const a = PS(sc.door[0], 0.03), b = PS(sc.door[1], 0.03); c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke(); }
+  // Show me: the planned route (forward yellow, reverse dashed cyan), where each move ends, and the ghost car
+  if (guide) {
+    const G = guide.pts;
+    c.lineCap = 'round'; c.lineWidth = Math.max(2, 0.07 * s);
+    for (let i = 1; i < G.length; i++) {
+      const a = PS(G[i - 1].x, G[i - 1].z), b = PS(G[i].x, G[i].z);
+      c.strokeStyle = G[i].dir > 0 ? 'rgba(242,194,48,.9)' : 'rgba(94,208,216,.95)'; c.setLineDash(G[i].dir > 0 ? [] : [6, 5]);
+      c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke();
+    }
+    c.setLineDash([]);
+    for (let i = 1; i < G.length - 1; i++) if (G[i + 1].dir !== G[i].dir) { c.strokeStyle = 'rgba(235,232,223,.35)'; c.lineWidth = 1; c.setLineDash([4, 4]); path(c, footprint(G[i].x, G[i].z, G[i].th, v.body)); c.stroke(); c.setLineDash([]); }
+    const g = G[Math.min(guide.at, G.length - 1)];
+    c.fillStyle = 'rgba(242,194,48,.10)'; c.strokeStyle = 'rgba(242,194,48,.95)'; c.lineWidth = 1.5; c.setLineDash([5, 4]);
+    path(c, footprint(g.x, g.z, g.th, v.body)); c.fill(); c.stroke(); c.setLineDash([]);
+    c.fillStyle = 'rgba(242,194,48,.85)'; path(c, footprint(g.x, g.z, g.th, [[v.WB + v.OVF - 0.143, 0], [v.WB + v.OVF - 0.543, -0.27], [v.WB + v.OVF - 0.543, 0.27]])); c.fill();
+  }
   // the path at the current steering: an outline every 0.8 m, the leading corners, the end that swings, and in red where it would touch first
   const dir: 1 | -1 = sim.input.rev ? -1 : sim.input.fwd ? 1 : sim.lastMoveDir;
   const key = `${x.toFixed(3)},${z.toFixed(3)},${th.toFixed(4)},${sim.wheelAngle.toFixed(1)},${dir}`;

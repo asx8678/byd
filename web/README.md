@@ -37,7 +37,10 @@ src/core/      the game itself, no browser code: easy to test, and the part to p
   sensors.ts     gaps around the body, and the ultrasonic parking sensors (5 rays per cone)
   predict.ts     the path at the current steering, rolled forward in 6 cm steps until it would touch
   sim.ts         Sim(scene, car): state, input, step(dt) → events (touch, parked)
+  parking.ts     when a car counts as parked in a bay (shared by Sim and the planner)
   replay.ts      fixed 60 Hz steps; recording an attempt and playing it back
+  field.ts       a 5 cm raster and distance field of the scene, for fast collision checks while planning
+  planner.ts     route search (hybrid A*) into a bay: Show me now, par and the coach later
 src/ui/        the browser side: drawing, controls, sound, settings
   plan.ts        the map (canvas 2D)
   pdcDisplay.ts  sensor graphic, STOP card, red screen-edge glow
@@ -46,7 +49,8 @@ src/ui/        the browser side: drawing, controls, sound, settings
   audio.ts       the beeper
   settings.ts    saved choices (localStorage key `atto2-garage`)
 src/main.ts    wiring and the frame loop: the simulation steps at a fixed 60 Hz, drawing is capped at
-               30 fps and skipped while nothing changes; Replay plays the current attempt from its start
+               30 fps and skipped while nothing changes; Replay plays the current attempt from its start;
+               Show me plans from where the car is into the chosen bay and lets a ghost drive it
 public/        manifest, icons, service worker
 test/          golden test and its recorded fixtures, replay and content tests
 prototype/     the scenario generator prototype (route planner, templates, coach); the start of M2 and M3
@@ -68,6 +72,7 @@ The other tests check that:
 - a recorded attempt replays exactly: same pose, touches and parking result, also after a round trip through JSON
 - the data files reproduce the old numbers (steering geometry, the garage's 35 obstacles and its starts)
 - the Atto 2 turns a 10.6 m kerb-to-kerb circle in the simulation, as on BYD's spec sheet
+- the planner finds 561 from all three starts and 560 from the left. Each route is clear under the exact collision check and ends parked nose in; from the left it takes three moves. It also parks in an open bay in one move, reports a blocked bay at once, and finds the same route every time
 
 ## Porting to Swift later
 

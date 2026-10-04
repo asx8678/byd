@@ -84,7 +84,7 @@ function finishShot(v: Vehicle, field: Field, p: Pose, done: (p: Pose) => boolea
  */
 export function search(v: Vehicle, field: Field, starts: Pose | Pose[], done: (p: Pose) => boolean, heur: (p: Pose) => number, o: SearchOpts = {}): Plan {
   const maxNodes = o.maxNodes ?? 60000;
-  const rev = o.reverseCost ?? 1.0, shunt = o.shuntCost ?? 3.0, steerC = o.steerCost ?? 0.2, clearC = o.clearCost ?? 6.0, w = o.weight ?? 1.8;
+  const rev = o.reverseCost ?? 1.0, shunt = o.shuntCost ?? 3.0, steerC = o.steerCost ?? 0.6, clearC = o.clearCost ?? 6.0, w = o.weight ?? 1.8;
   const open = new Heap(), best = new Map<number, number>();
   const key = (p: Pose, dir: number) => ((Math.round(p.x / XY) + 4000) * 8000 + (Math.round(p.z / XY) + 4000)) * 160 + (((Math.round(wrapPi(p.th) / TH) % 72) + 72) % 72) * 2 + (dir > 0 ? 1 : 0);
   const S = (Array.isArray(starts) ? starts : [starts]).filter(p => field.freeExact(p.x, p.z, p.th));

@@ -1,6 +1,7 @@
 // Atto 2 Garage Trainer: wires the simulation (core/) to the screen (ui/) and runs the frame loop.
 import './style.css';
 import { clamp } from './core/math';
+import { moves, planToBay, sample } from './core/planner';
 import { Recorder, STEP, playback } from './core/replay';
 import { Sim, type SimEvent } from './core/sim';
 import { beep, updateBeeper } from './ui/audio';
@@ -9,7 +10,7 @@ import { $, MAX_DPR, screen } from './ui/dom';
 import { parkedCard, touchTitle } from './ui/format';
 import { showBanner, updateHud } from './ui/hud';
 import { updatePdcDisplay, layoutPdc } from './ui/pdcDisplay';
-import { drawPlan, forgetPrediction, layoutPlan, snapView } from './ui/plan';
+import { drawPlan, forgetPrediction, layoutPlan, setGuide, snapView, type Guide } from './ui/plan';
 import { lockDeg, settings } from './ui/settings';
 
 if (!CanvasRenderingContext2D.prototype.roundRect) CanvasRenderingContext2D.prototype.roundRect = function (this: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) { this.rect(x, y, w, h); };
@@ -18,11 +19,13 @@ const sim = new Sim(), stage = $('app');
 // every attempt is recorded from its start, so it can be replayed; the replay runs on a second simulation
 const recorder = new Recorder();
 let replay: ReturnType<typeof playback> | null = null;
-const btnReplay = $('btnReplay');
+const btnReplay = $('btnReplay'), btnShow = $('btnShow');
+// Show me: the planner's route from where the car is into the bay, driven by a ghost
+let guide: (Guide & { times: number[]; t0: number }) | null = null;
 const applySettings = () => { sim.options.lockDeg = lockDeg(); sim.options.selfCentre = settings.center === 'on'; sim.options.bay = settings.bay; sim.wheelAngle = clamp(sim.wheelAngle, -sim.options.lockDeg, sim.options.lockDeg); };
 
 function resetCar(): void {
-  stopReplay(); applySettings(); sim.reset(settings.start); forgetPrediction(); recorder.begin(sim);
+  stopReplay(); hideGuide(); applySettings(); sim.reset(settings.start); forgetPrediction(); recorder.begin(sim);
   $('btnFwd').classList.remove('on'); $('btnRev').classList.remove('on');
   const from = (sim.scene.starts[settings.start] ?? sim.scene.starts[sim.scene.defaultStart]).label;
   showBanner('', `Park in bay ${settings.bay}`, from + (settings.bay === '561' ? ' Mind pillar 560 and the bench; the plan shows where each move ends.' : ' Pillar 560 runs along its left side.'), null, 8000);
@@ -33,10 +36,29 @@ bindControls(sim, {
   settingChanged: key => { if (key === 'start' || key === 'bay') resetCar(); else { applySettings(); if (!replay) recorder.begin(sim); } },
 });
 
+function hideGuide(): void { guide = null; setGuide(null); btnShow.textContent = 'Show me'; btnShow.classList.remove('on'); }
+function showMe(now: number): void {
+  if (replay) return;
+  const from = { x: sim.x, z: sim.z, th: sim.th }, plan = planToBay(sim.vehicle, sim.scene, from, settings.bay);
+  if (plan.status !== 'found') {
+    showBanner('bad', 'No route from here', plan.status === 'none' ? `Bay ${settings.bay} has no free space for the car.` : 'Back out into the aisle a little and try again.', null, 3500);
+    return;
+  }
+  const pts = sample(sim.vehicle, plan.pieces, 0.05), times: number[] = [];
+  let t = 0; pts.forEach((p, i) => { if (i) { t += Math.hypot(p.x - pts[i - 1].x, p.z - pts[i - 1].z) / 1.4; if (p.dir !== pts[i - 1].dir) t += 0.6; } times.push(t); });
+  guide = { pts, at: 0, times, t0: now }; setGuide(guide);
+  btnShow.textContent = 'Hide'; btnShow.classList.add('on');
+  const n = moves(plan.pieces), runs: string[] = [];
+  plan.pieces.forEach((p, i) => { if (i === 0 || p.dir !== plan.pieces[i - 1].dir) runs.push(p.dir > 0 ? 'forward' : 'reverse'); });
+  const said = runs.map((r, i) => (i ? r : r[0].toUpperCase() + r.slice(1))).join(', then ');
+  showBanner('', `Show me: ${n} ${n === 1 ? 'move' : 'moves'}`, `${said}. Watch the ghost, then follow the line yourself. Yellow is forward, dashed blue is reverse.`, null, 6000);
+}
+btnShow.addEventListener('click', () => { if (guide) hideGuide(); else showMe(performance.now()); });
+
 function startReplay(): void {
   const rec = recorder.rec;
   if (!rec || rec.steps < 30) { showBanner('', 'Nothing to replay yet', 'Drive a little first. Replay shows this attempt from its start, exactly as you drove it.', null, 3500); return; }
-  replay = playback({ ...rec, events: rec.events.slice() }, sim.scene, sim.vehicle);
+  hideGuide(); replay = playback({ ...rec, events: rec.events.slice() }, sim.scene, sim.vehicle);
   forgetPrediction(); snapView(); btnReplay.textContent = 'Stop'; btnReplay.classList.add('on');
   showBanner('', 'Replay', 'Your attempt from its start. Tap Stop to go back to your car.', null, 4000);
 }
@@ -79,8 +101,9 @@ function frame(now: number): void {
     else { recorder.before(sim); const evs = sim.step(STEP); recorder.after(sim); handle(evs); }
   }
   const S = replay ? replay.sim : sim;
+  if (guide) { const el = (now - guide.t0) / 1000; let i = guide.times.findIndex(x => x >= el); if (i < 0) i = guide.pts.length - 1; guide.at = i; }
   updateBeeper(S, now / 1000); updatePdcDisplay(S, now / 1000, screen.dpr);
-  const sig = [S.x.toFixed(4), S.z.toFixed(4), S.th.toFixed(5), S.wheelAngle.toFixed(1), S.v.toFixed(3), S.input.fwd, S.input.rev, settings.planView, !!replay].join('|');
+  const sig = [S.x.toFixed(4), S.z.toFixed(4), S.th.toFixed(5), S.wheelAngle.toFixed(1), S.v.toFixed(3), S.input.fwd, S.input.rev, settings.planView, !!replay, guide ? guide.at : -1].join('|');
   if (sig === lastSig && now > wakeUntil && now - lastDrawT < 1000) return;
   lastSig = sig; lastDrawT = now;
   updateHud(S); drawPlan(S, now / 1000, dt, screen.dpr);
