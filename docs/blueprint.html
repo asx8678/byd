@@ -803,17 +803,18 @@ pre .k{color:var(--yellow)} pre .c{color:var(--faint)}
 <section id="order">
   <header class="col">
     <p class="eyebrow">Build order</p>
-    <h2>Each step ships something playable</h2>
+    <h2>Parking first, then the city</h2>
   </header>
+  <p class="col">The detailed order, with what you can try and how each step is proven, is in the <a href="https://claude.ai/artifact/NQiSPBu4gYhpivTLLJsWRd">Build Plan</a>.</p>
   <ol class="steps col">
-    <li><b>Cars and maps as data</b><span>Car files and map specs; your garage becomes map 1. The 128 replay checks must still pass unchanged, which proves the garage drives exactly the same.</span></li>
-    <li><b>Map kit and drawing</b><span>Roads, car parks, markings, detail levels and the zoom rule. Free driving in a district full of parked cars, a parallel-parking objective, and the Smart and the Ram as the first new cars.</span></li>
-    <li><b>Drive mode and Park mode</b><span>Street physics with tyre slip, blended into today's parking model below about 18 km/h. Both control sets, the automatic switch, and the detailed parking view.</span></li>
-    <li><b>Coach</b><span>Reference points computed for each car, the first ten lessons, stars.</span></li>
-    <li><b>Traffic</b><span>Lanes, signals, driver models, indicators and hazards, rule scoring, leavers and spot thieves.</span></li>
-    <li><b>Trailer</b><span>Trailer physics, jackknife, trailer lessons.</span></li>
-    <li><b>Truck and distribution centre</b><span>Tractor and semi-trailer, docks, yard maps.</span></li>
-    <li><b>Store</b><span>The free and Pro split, purchases, and renamed cars if needed.</span></li>
+    <li><b>Data foundation</b><span>Car and scene files, garage 561 as scene 1, fixed time steps and replays. The 128 replay checks must still pass unchanged.</span></li>
+    <li><b>Route planner</b><span>Finds a way into any space for any car, and powers Show me.</span></li>
+    <li><b>Scenario generator</b><span>Endless levels by template, difficulty and seed, each solved before you see it.</span></li>
+    <li><b>Tutorial and coach</b><span>Lessons with cues computed for your car, from the first metres to tight parallel parking.</span></li>
+    <li><b>More cars</b><span>Smart, Ram 1500, S-Class, then the W124 once measured.</span></li>
+    <li><b>City and Drive mode</b><span>The map kit, street physics and the zoom rule.</span></li>
+    <li><b>Traffic and rules</b><span>Lights, drivers, leavers, spot thieves and country rule sets.</span></li>
+    <li><b>Trailer, truck, store</b><span>The hard levels and the paid build.</span></li>
   </ol>
 </section>
 

@@ -1,0 +1,2085 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Parking Trainer Build Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: one left-aligned reading column (720px) inside a 1080px sheet; the map sketch, roster and tables use the full sheet. */
+:root{
+  --bg:#121317; --sheet:#16181d; --raise:#1c1e24; --rule:#2c2f35; --rule-2:#3a3f48;
+  --ink:#ebe8df; --mute:#a7afb9; --faint:#7c838c;
+  --yellow:#f2c230; --ochre:#d9ab2b; --cyan:#5ed0d8; --green:#5ed08a; --red:#ec5b4f; --amber:#ff8a3d; --steel:#8fb8ff;
+  --display:"Barlow Condensed","Arial Narrow",sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{background:var(--bg);color:var(--ink);font:400 16.5px/1.6 var(--body);padding-inline:clamp(16px,4vw,44px);-webkit-text-size-adjust:100%}
+.page{max-width:1080px;margin:0 auto;padding-block:30px 72px;display:flex;flex-direction:column;gap:56px}
+.col{max-width:720px}
+a{color:var(--yellow);text-underline-offset:2px}
+a:focus-visible,button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--yellow);outline-offset:2px}
+h1,h2,h3{font-family:var(--display);font-weight:600;letter-spacing:.01em;text-wrap:balance;margin:0;line-height:1.08}
+h1{font-size:clamp(40px,7vw,64px);font-weight:700;text-transform:uppercase;letter-spacing:.02em}
+h2{font-size:clamp(26px,4vw,34px);text-transform:uppercase;letter-spacing:.03em}
+h3{font-size:21px;letter-spacing:.02em}
+p{margin:0}
+.stack{display:flex;flex-direction:column;gap:14px}
+.stack-l{display:flex;flex-direction:column;gap:22px}
+.eyebrow{font:500 12px/1.3 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--yellow)}
+.meta{font:400 13px/1.5 var(--mono);color:var(--faint)}
+.lede{font-size:19px;line-height:1.55;color:var(--ink);max-width:640px}
+.note{color:var(--mute);font-size:15px}
+.mono{font-family:var(--mono);font-size:.88em}
+b,strong{font-weight:600}
+section{display:flex;flex-direction:column;gap:22px;border-top:1px solid var(--rule);padding-top:26px;scroll-margin-top:16px}
+section>header{display:flex;flex-direction:column;gap:8px}
+
+/* title block, like the corner of a drawing sheet */
+.titleblock{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--rule-2);font:400 12px/1.4 var(--mono);color:var(--mute);max-width:720px}
+.titleblock div{padding:8px 10px;border-right:1px solid var(--rule-2);min-width:0}
+.titleblock div:last-child{border-right:0}
+.titleblock span{display:block;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+.titleblock b{color:var(--ink);font-weight:500}
+@media (max-width:560px){.titleblock{grid-template-columns:repeat(2,minmax(0,1fr))}.titleblock div:nth-child(2){border-right:0}.titleblock div:nth-child(-n+2){border-bottom:1px solid var(--rule-2)}}
+nav.toc{display:flex;flex-wrap:wrap;gap:8px}
+nav.toc a{font:500 13px/1 var(--mono);letter-spacing:.04em;color:var(--ink);text-decoration:none;border:1px solid var(--rule-2);padding:8px 10px;border-radius:3px}
+nav.toc a:hover{border-color:var(--yellow);color:var(--yellow)}
+
+/* the map sketch */
+.sketch{display:flex;flex-direction:column;gap:12px}
+.canvasbox{border:1px solid var(--rule-2);background:#0d0e12;min-width:0}
+#sketch{display:block;width:100%;touch-action:pan-y}
+.ctl{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--rule-2);border-radius:4px;overflow:hidden}
+.seg button,.btn{font:600 15px/1 var(--display);letter-spacing:.06em;text-transform:uppercase;color:var(--ink);background:var(--raise);border:0;padding:11px 14px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--rule-2)}
+.seg button[aria-pressed="true"]{background:var(--yellow);color:#121317}
+.btn{border:1px solid var(--rule-2);border-radius:4px}
+.spd{display:flex;align-items:center;gap:10px;font:500 13px var(--mono);color:var(--mute);flex:1 1 220px;min-width:0}
+.spd input{flex:1;min-width:0;accent-color:var(--yellow)}
+.spd output{color:var(--ink);min-width:62px;text-align:right;font-variant-numeric:tabular-nums}
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;font:400 12.5px/1.4 var(--mono);color:var(--mute)}
+.legend i{display:inline-block;width:22px;height:0;vertical-align:middle;margin-right:7px;border-top:2px solid}
+.legend i.dash{border-top-style:dashed}
+.legend i.box{height:10px;border:1px solid;border-radius:2px}
+
+/* tables */
+.tablewrap{overflow-x:auto;border:1px solid var(--rule);min-width:0}
+table{border-collapse:collapse;width:100%;font-size:14.5px;line-height:1.45}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font:500 11px/1.3 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint);background:var(--sheet);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td.num{font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap}
+td b{font-weight:600}
+
+/* car roster */
+.roster{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.car{border:1px solid var(--rule);background:var(--sheet);padding:14px 14px 12px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.car header{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.car h3{font-size:22px}
+.car .gen{font:400 12px var(--mono);color:var(--faint)}
+.car canvas{display:block;width:100%;height:58px}
+.car dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 10px;margin:0;font-variant-numeric:tabular-nums}
+.car dt{font:500 10px/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+.car dd{margin:2px 0 0;font:500 14px/1.2 var(--mono);color:var(--ink)}
+.car p{font-size:14.5px;line-height:1.5;color:var(--mute)}
+.car p b{color:var(--ink)}
+.tier{font:600 11px/1 var(--mono);letter-spacing:.12em;padding:5px 7px;border:1px solid;border-radius:3px;white-space:nowrap}
+.tier.free{color:var(--green);border-color:rgba(94,208,138,.5)}
+.tier.pro{color:var(--yellow);border-color:rgba(242,194,48,.5)}
+.tier.ai{color:var(--steel);border-color:rgba(143,184,255,.5)}
+.src{font:400 12px/1.5 var(--mono);color:var(--faint);overflow-wrap:anywhere}
+.src a{color:var(--faint)}
+
+/* turning-circle chart */
+.grp{font:600 13px/1.2 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--mute);margin-top:4px}
+.tc{margin:0;display:flex;flex-direction:column;gap:5px;min-width:0}
+.tc-rows{display:flex;flex-direction:column;gap:3px}
+.tc .row{display:grid;grid-template-columns:minmax(0,190px) minmax(0,1fr);gap:10px;align-items:center}
+.tc .name{font:500 12.5px/1.25 var(--mono);color:var(--ink)}
+.tc .bar{position:relative;height:20px;background-image:linear-gradient(to right,var(--rule) 1px,transparent 1px);background-size:calc(100% * 5 / 26) 100%}
+.tc .b{position:absolute;left:0;top:4px;height:12px;background:var(--ochre)}
+.tc .b.wall{background:transparent;border:1.5px solid var(--ochre)}
+.tc .b.est{background:repeating-linear-gradient(135deg,var(--ochre) 0 2px,transparent 2px 6px);border:1px solid var(--ochre)}
+.tc .b.der{background:transparent;border:1.5px dashed var(--mute)}
+.tc em{position:absolute;top:2px;font:500 12px/16px var(--mono);font-style:normal;color:var(--ink);white-space:nowrap;padding-left:6px}
+.tc em.in{transform:translateX(-100%);padding:0 6px;background:var(--bg)}
+.tc .axis{position:relative;height:16px}
+.tc .axis b{position:absolute;top:0;font:400 11px var(--mono);color:var(--faint);transform:translateX(-50%)}
+.tc .axis b:first-child{transform:none}
+.tc .axis b:last-child{transform:translateX(-100%)}
+.legend i.box.est{background:repeating-linear-gradient(135deg,var(--ochre) 0 2px,transparent 2px 6px);border-color:var(--ochre)}
+.legend i.box.der{border:1.5px dashed var(--mute)}
+@media (max-width:560px){.tc .row{grid-template-columns:minmax(0,112px) minmax(0,1fr)}.tc .name{font-size:11.5px}}
+.car header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.car .gen{margin-top:3px}
+
+/* small helpers */
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:18px}
+.panel{border:1px solid var(--rule);background:var(--sheet);padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.panel h3{font-size:19px}
+.panel p,.panel li{font-size:15px;color:var(--mute)}
+.panel p b,.panel li b{color:var(--ink)}
+ul,ol{margin:0;padding-left:1.25em;display:flex;flex-direction:column;gap:6px}
+li::marker{color:var(--faint)}
+pre{margin:0;font:400 12.5px/1.55 var(--mono);color:var(--ink);background:#0d0e12;border:1px solid var(--rule);padding:14px;overflow-x:auto;min-width:0}
+pre .k{color:var(--yellow)} pre .c{color:var(--faint)}
+.steps{counter-reset:s;list-style:none;padding:0;display:flex;flex-direction:column;gap:0;border:1px solid var(--rule)}
+.steps>li{counter-increment:s;display:grid;grid-template-columns:44px minmax(0,1fr);gap:4px 12px;padding:12px 14px;border-bottom:1px solid var(--rule)}
+.steps>li:last-child{border-bottom:0}
+.steps>li::before{content:counter(s,decimal-leading-zero);font:600 15px/1.5 var(--mono);color:var(--yellow);grid-row:span 2}
+.steps>li b{font-family:var(--display);font-size:19px;letter-spacing:.02em;font-weight:600}
+.steps>li span{color:var(--mute);font-size:15px}
+.cue{display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;align-items:start}
+.cue>i{font:600 13px/26px var(--mono);font-style:normal;color:var(--yellow);border:1px solid var(--yellow);border-radius:50%;width:26px;height:26px;text-align:center}
+.decide{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:12px}
+.decide .panel{gap:6px}
+.decide .panel .eyebrow{color:var(--faint)}
+/* phone wireframes for the two modes */
+.phones{display:flex;gap:clamp(14px,4vw,28px)}
+.phone{margin:0;display:flex;flex-direction:column;gap:8px;align-items:center;flex:0 1 206px;min-width:0}
+.phone figcaption{font:500 12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}
+.screen{width:100%;aspect-ratio:9/19.5;border:1.5px solid var(--rule-2);border-radius:24px;padding:12px 10px;display:grid;gap:6px;background:#0d0e12}
+.screen.drive{grid-template-areas:"bar bar" "map map" "btns btns" "wheel pedals";grid-template-rows:auto minmax(0,1fr) auto auto;grid-template-columns:1fr 1fr}
+.screen.park{grid-template-areas:"coach coach" "map map" "kerb pdc" "tools tools" "wheel pedals";grid-template-rows:auto minmax(0,1fr) 46px auto auto;grid-template-columns:1fr 1fr}
+.z{border:1px dashed var(--rule-2);border-radius:6px;font:500 10.5px/1.3 var(--mono);color:var(--mute);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:4px;min-width:0}
+.z small{font-size:9px;color:var(--faint)}
+.z.bar{grid-area:bar;flex-direction:row;justify-content:space-between;padding:4px 8px;color:var(--ink);border-style:solid;border-color:var(--rule)}
+.z.bar .lim{border:1.5px solid var(--red);border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:9.5px}
+.z.map{grid-area:map;border-style:solid;border-color:var(--rule);background:var(--raise)}
+.z.btns,.z.tools{flex-direction:row;gap:4px;border:0;padding:0}
+.z.btns{grid-area:btns}.z.tools{grid-area:tools}
+.z.btns span,.z.tools span{border:1px solid var(--rule-2);border-radius:4px;padding:5px 2px;font-size:9.5px;flex:1;text-align:center;min-width:0}
+.z.wheel{grid-area:wheel;border-radius:50%;width:100%;max-width:86px;aspect-ratio:1;justify-self:center;border:2px solid var(--ink);color:var(--ink)}
+.z.pedals{grid-area:pedals;flex-direction:row;gap:5px;border:0;padding:0}
+.z.pedals span{flex:1;align-self:stretch;border:1px solid var(--rule-2);border-radius:6px;display:flex;align-items:center;justify-content:center;min-width:0}
+.drive .z.pedals span:first-child{border-color:var(--red);color:var(--red)}
+.drive .z.pedals span:last-child{border-color:var(--green);color:var(--green)}
+.park .z.pedals span{border-color:var(--yellow);color:var(--yellow)}
+.z.coach{grid-area:coach;align-items:flex-start;text-align:left;border-style:solid;border-color:var(--yellow);color:var(--ink);gap:2px}
+.z.coach b{font-weight:600;color:var(--yellow)}
+.z.pdc{grid-area:pdc}.z.kerb{grid-area:kerb}
+/* live generator */
+.h3big{font-size:26px;text-transform:uppercase;letter-spacing:.03em}
+.seedlab{display:flex;align-items:center;gap:8px;font:500 13px var(--mono);color:var(--mute)}
+.seedlab input{width:92px;font:500 15px var(--mono);color:var(--ink);background:var(--raise);border:1px solid var(--rule-2);border-radius:4px;padding:9px 8px;font-variant-numeric:tabular-nums}
+.btn.primary{background:var(--yellow);color:#121317;border-color:var(--yellow)}
+#genCanvas{display:block;width:100%}
+.genout{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:22px}
+@media (max-width:720px){.genout{grid-template-columns:minmax(0,1fr)}}
+.coachlist{list-style:none;padding:0;margin:0;counter-reset:c;display:flex;flex-direction:column;gap:0;border:1px solid var(--rule)}
+.coachlist li{counter-increment:c;display:grid;grid-template-columns:30px minmax(0,1fr);gap:2px 10px;padding:10px 12px;border-bottom:1px solid var(--rule);font-size:15px;line-height:1.45}
+.coachlist li:last-child{border-bottom:0}
+.coachlist li::before{content:counter(c);grid-row:span 2;font:600 12px/24px var(--mono);color:var(--yellow);border:1px solid var(--yellow);border-radius:50%;width:24px;height:24px;text-align:center}
+.coachlist li small{grid-column:2;font:400 12px var(--mono);color:var(--faint)}
+.coachlist li.now{background:var(--raise)}
+.coachlist li.now::before{background:var(--yellow);color:#121317}
+.genstats{display:grid;grid-template-columns:minmax(0,1fr);gap:0;margin:0;border:1px solid var(--rule)}
+.genstats div{display:grid;grid-template-columns:minmax(0,11em) minmax(0,1fr);gap:10px;padding:7px 12px;border-bottom:1px solid var(--rule)}
+.genstats div:last-child{border-bottom:0}
+.genstats dt{font:500 11px/1.5 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+.genstats dd{margin:0;font:500 13px/1.5 var(--mono);color:var(--ink);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
+<div class="page">
+
+<header class="stack-l">
+  <div class="stack">
+    <p class="eyebrow">Atto 2 Garage Trainer · how we build it</p>
+    <h1>Parking Trainer Build Plan</h1>
+    <p class="lede">The <a href="https://claude.ai/artifact/9WeHZae65kgyShzVPefLuA">blueprint</a> says what the game should become. This page covers how to get there: what I'd change in that plan, the order to build it in, how the code is organised, and how the scenario generator and the tutorial work.</p>
+  </div>
+  <div class="titleblock" aria-label="Document details">
+    <div><span>Drawn</span><b>4 Oct 2026</b></div>
+    <div><span>Status</span><b>Plan · prototype inside</b></div>
+    <div><span>Follows</span><b>Blueprint v3</b></div>
+    <div><span>Code base</span><b>web/ · 30a9dbd</b></div>
+  </div>
+  <nav class="toc" aria-label="Sections">
+    <a href="#improve">Improvements</a><a href="#order">Build order</a><a href="#code">Code layout</a><a href="#generator">Scenario generator</a><a href="#tutorial">Tutorial</a><a href="#decide">Decide</a>
+  </nav>
+</header>
+
+<section id="improve">
+  <header class="col">
+    <p class="eyebrow">Review</p>
+    <h2>What I'd change in the plan</h2>
+  </header>
+  <p class="col">The blueprint holds up. These changes make it easier to build and better to learn from.</p>
+  <div class="two">
+    <div class="panel"><h3>Parking first, city later</h3><p>Build the scenario generator and the tutorial before Drive mode and traffic. They teach what people come for, they are most of the free game, and they need none of the street physics. The city comes once parking is solid.</p></div>
+    <div class="panel"><h3>A route planner in the core</h3><p>Par, "no impossible levels", Show me and the coach's cues all need one thing the blueprint assumed but didn't plan: a search that finds a way into the space for a given car. It is now its own milestone.</p></div>
+    <div class="panel"><h3>Fixed time steps, recorded inputs</h3><p>The simulation steps 60 times a second whatever the screen does, and records your inputs. That gives exact replays, a ghost of your best attempt, fair scores, and tests that drive a whole lesson.</p></div>
+    <div class="panel"><h3>Every level re-checked on every build</h3><p>The test suite solves every built-in level again, and generates and solves a few hundred seeds per template. If a change to a car or the physics breaks a level, the build fails.</p></div>
+    <div class="panel"><h3>Measured difficulty</h3><p>After solving a level, the generator measures it: moves, the tightest gap along the route, spare room. The label comes from what it measured, not from the slider.</p></div>
+    <div class="panel"><h3>Coach text in data files</h3><p>Lesson steps, tips and their sources live in files, not code. Wording can change without a release, and translations are a file each.</p></div>
+    <div class="panel"><h3>Accessible from day one</h3><p>Sensor zones show shapes as well as colours. The controls can swap sides for left-handers, and lessons can run in slow motion.</p></div>
+    <div class="panel"><h3>Cars ship with a checklist</h3><p>A car goes in only when its outline, wheelbase, overhangs and turning circle are verified. The W124's steering lock and the truck tractor block those two until measured. The name players see stays separate from the real model.</p></div>
+  </div>
+  <p class="note col">Your garage stays the anchor: bay 561 and its 128 replay checks remain the test every core change must pass.</p>
+</section>
+
+<section id="order">
+  <header class="col">
+    <p class="eyebrow">Build order</p>
+    <h2>Parking first, then the city</h2>
+  </header>
+  <p class="col">Each milestone ends with something you can try on your phone, tests that prove it works, and a commit when you say so. M1 to M4 make a complete parking trainer; M5 onwards grows it into the city game.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>#</th><th>Milestone</th><th>What gets built</th><th>What you can try</th><th>Proof</th></tr></thead>
+      <tbody>
+        <tr><td class="num">M1</td><td><b>Data foundation</b></td><td>Car files and scene files. The simulation takes any car and any scene. Garage 561 becomes scene 1. Fixed 60 Hz steps, input recording.</td><td>The same game, now loaded from files. Replay your last attempt.</td><td>The 128 replay checks pass unchanged; a recorded run replays exactly on the same device. Ghosts shared between phones also store the car's positions.</td></tr>
+        <tr><td class="num">M2</td><td><b>Route planner</b></td><td>A search over position and heading that uses the game's own collision check, mirrors included. Show me.</td><td>Tap Show me in the garage and watch a route into 561.</td><td>Known cases: 561 from the left, an open bay, a blocked bay that has no route.</td></tr>
+        <tr><td class="num">M3</td><td><b>Scenario generator</b></td><td>Templates, difficulty, seeds, measured difficulty, a level picker, stars.</td><td>Endless levels from easy to hard, and a daily level.</td><td>Hundreds of seeds per template generated and solved in the tests.</td></tr>
+        <tr><td class="num">M4</td><td><b>Tutorial and coach</b></td><td>Lesson engine, coach card, cues computed from the route, learning layers, rewind, progress, the first ten lessons.</td><td>A course from the first metres to tight parallel parking.</td><td>Every lesson passes with recorded inputs, and its cues match its route.</td></tr>
+        <tr><td class="num">M5</td><td><b>More cars</b></td><td>Smart, Ram 1500, S-Class with rear-axle steering, then the W124 once measured.</td><td>The same levels in very different cars.</td><td>Each car's turning circle in the sim matches its spec sheet.</td></tr>
+        <tr><td class="num">M6</td><td><b>City and Drive mode</b></td><td>The map kit, street physics blended into the parking model, Drive controls, the zoom rule.</td><td>Drive around a district and park on the street.</td><td>Physics checks: turning circle, braking distance, steady cornering, a smooth handover.</td></tr>
+        <tr><td class="num">M7</td><td><b>Traffic and rules</b></td><td>Lanes, lights, driver models, indicators, hazards, leavers, spot thieves, country rule sets.</td><td>Find a space in traffic without upsetting anyone.</td><td>Traffic replays exactly from its seed; every rule has a test.</td></tr>
+        <tr><td class="num">M8</td><td><b>Trailer, truck, store</b></td><td>Trailer physics, the distribution centre, the free and Pro split.</td><td>The hard levels, and a build you could sell.</td><td>Jackknife and dock tests; purchases on test accounts.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="code">
+  <header class="col">
+    <p class="eyebrow">Code layout</p>
+    <h2>Where everything lives</h2>
+  </header>
+  <p class="col">The core stays pure TypeScript with no screen code, so it can still be ported to Swift. The content is JSON that both versions can read.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>File</th><th>Job</th></tr></thead>
+      <tbody>
+        <tr><td class="num">core/vehicle.ts</td><td>A car from its file: outline, mirrors, wheelbase, track, overhangs, steering lock from the turning circle, sensors, rear-axle steering.</td></tr>
+        <tr><td class="num">core/world.ts</td><td>Obstacles, kerbs and lines, plus a spatial grid so collisions and sensor rays only look nearby.</td></tr>
+        <tr><td class="num">core/scenario.ts</td><td>The scene format: loading, version number, validation.</td></tr>
+        <tr><td class="num">core/sim.ts</td><td>Today's simulation, made general: any car, any scene, fixed steps.</td></tr>
+        <tr><td class="num">core/planner.ts</td><td>The route search, turning a route into moves, par.</td></tr>
+        <tr><td class="num">core/generator/</td><td>One file per template, plus difficulty and measuring.</td></tr>
+        <tr><td class="num">core/coach.ts</td><td>The lesson engine: steps, conditions, computed cues.</td></tr>
+        <tr><td class="num">core/score.ts · replay.ts</td><td>Stars, faults and par; recording and replaying inputs.</td></tr>
+        <tr><td class="num">ui/</td><td>Plan view, controls, coach card, level picker, learning layers.</td></tr>
+        <tr><td class="num">content/</td><td>vehicles, scenarios, lessons, tips (each with its source), strings per language.</td></tr>
+        <tr><td class="num">test/</td><td>Today's replay checks, planner cases, generator seeds, lesson replays, turning circles per car.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="panel col">
+    <h3>One collision rule for everything</h3>
+    <p>The planner, the generator and the game use the same check: the body against everything, the mirrors only against things taller than 1.12 m, as today. Kerbs are new and low: the wheels may not climb them, but the bumpers may hang over them.</p>
+  </div>
+</section>
+
+<section id="generator">
+  <header class="col">
+    <p class="eyebrow">Scenario generator</p>
+    <h2>Endless levels, none of them impossible</h2>
+  </header>
+  <p class="col">A level is a template, a difficulty and a seed. The same three always give the same level, so "Bays · level 6 · seed 4821" is the same space on every phone, and the daily level is just the date's seed. The search stops after a fixed number of steps, never after a number of seconds, so a slow phone and a fast laptop make the same level. Shipped and daily levels also carry their solved route and par, because tiny differences in maths between phone browsers could otherwise change a route.</p>
+  <div class="two">
+    <div class="panel">
+      <h3>How a level is made</h3>
+      <ol>
+        <li><b>Pick</b> a template and a seed.</li>
+        <li><b>Turn the difficulty into settings:</b> spare room, aisle or lane width, how neatly the neighbours parked, what is opposite, pillars.</li>
+        <li><b>Build the scene:</b> lines, kerbs, walls, parked cars and the target space.</li>
+        <li><b>Solve it.</b> The planner searches outward from the finished parking position until it reaches the entrance, then reverses that route. A car can drive any route backwards, so this finds the way in, a natural start and the number of moves in one search.</li>
+        <li><b>Measure</b> the moves, the tightest gap along the route, the spare room and the route length.</li>
+        <li><b>Accept or skip.</b> A seed with no route, or with a measured difficulty far from the one asked for, is skipped. "No route" and "the search gave up" are counted separately.</li>
+        <li><b>Save</b> the scene file with its par and the route, for Show me and the coach.</li>
+      </ol>
+    </div>
+    <div class="panel">
+      <h3>Rules that keep it fair</h3>
+      <ul>
+        <li>Every level has been solved before you see it.</li>
+        <li>You never start touching anything, and nothing that matters is hidden.</li>
+        <li>The time limit comes from the planner's route, with room to spare.</li>
+        <li><b>Par</b> is the planner's best number of moves. That is not a proven minimum, so beating it is possible, and the game celebrates it.</li>
+        <li><b>Three stars, one per skill:</b> no touching; accurate (centred within 15 cm in a bay, within 30 cm of the kerb, straight within 3°); efficient (par + 1 moves or fewer, inside the time).</li>
+      </ul>
+    </div>
+  </div>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Template</th><th>Used by</th><th>What difficulty changes</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td><b>Bays</b> (90°, forward or reverse)</td><td>Lessons 3–5, car parks</td><td>Bay width 2.7 → 2.3 m, aisle 7.0 → 5.0 m, neighbours parked off-centre or at an angle, cars opposite</td><td>Prototype below</td></tr>
+        <tr><td><b>Kerb</b> (parallel)</td><td>Lessons 6–8, streets</td><td>Spare length from about 1.5 car lengths down to car length + 0.8 m, lane width, the car behind parked out from the kerb, a post on the pavement</td><td>Prototype below</td></tr>
+        <tr><td><b>Angled bays</b> (60° or 45°)</td><td>Lesson 9</td><td>Angle, one-way aisle width, neighbours</td><td>Next</td></tr>
+        <tr><td><b>Garage</b></td><td>Underground car parks</td><td>Pillars at the bay mouths, walls, a narrow aisle. Your 561 stays hand-surveyed.</td><td>Next</td></tr>
+        <tr><td><b>Smart nose-to-kerb</b></td><td>A special level</td><td>Gap 2.9–3.5 m, kerb height</td><td>Later</td></tr>
+        <tr><td><b>Driveway and gate</b></td><td>Home parking</td><td>Gate width, the angle from the road</td><td>Later</td></tr>
+        <tr><td><b>Loading dock</b></td><td>Trucks</td><td>Door spacing, apron depth</td><td>With trucks</td></tr>
+      </tbody>
+    </table>
+  </div>
+    <div class="stack-l" id="genLive">
+    <div class="stack col">
+      <p class="eyebrow">Working prototype</p>
+      <h3 class="h3big">Try the generator</h3>
+      <p class="note">This runs the real planner in your browser, using the game's own Atto 2 outline and mirrors. Every route is checked again with the game's exact collision test. Pick a template, a level and a seed. The numbered circles are the coach's steps; forward moves are yellow and reverse moves dashed cyan.</p>
+    </div>
+    <div class="ctl">
+      <div class="seg" role="group" aria-label="Template" id="genTpl"><button type="button" data-tpl="bays" aria-pressed="true">Bays</button><button type="button" data-tpl="kerb" aria-pressed="false">Kerb</button></div>
+      <div class="seg" role="group" aria-label="Way in" id="genWay"><button type="button" data-way="reverse" aria-pressed="true">Reverse in</button><button type="button" data-way="forward" aria-pressed="false">Forward in</button></div>
+    </div>
+    <div class="ctl">
+      <label class="spd" for="genLevel">Level <input id="genLevel" type="range" min="1" max="10" step="1" value="4"><output id="genLevelOut" for="genLevel">4</output></label>
+      <label class="seedlab" for="genSeed">Seed <input id="genSeed" type="number" inputmode="numeric" min="1" max="99999" value="4821"></label>
+      <button type="button" class="btn" id="genNew">New seed</button>
+      <button type="button" class="btn primary" id="genShow">Show me</button>
+    </div>
+    <p class="meta" id="genStatus" aria-live="polite">Solving…</p>
+    <div class="canvasbox"><canvas id="genCanvas" aria-label="Generated parking level"></canvas></div>
+    <div class="genout">
+      <div class="stack"><h3>The coach's steps</h3><ol class="coachlist" id="genSteps"></ol></div>
+      <div class="stack"><h3>This level</h3><dl class="genstats" id="genStats"></dl></div>
+    </div>
+    <p class="note col">What the prototype showed: at the tight levels a forward entry needs about three moves where reversing in needs two, which is the handbooks' reason to reverse in, measured. The hardest kerb level (your car length + 0.8 m) solves in five or six moves. Bay 561 from the left comes out at three moves, the same as the earlier search.</p>
+  </div>
+
+</section>
+
+
+<section id="tutorial">
+  <header class="col">
+    <p class="eyebrow">Tutorial</p>
+    <h2>A tutorial that teaches, then steps back</h2>
+  </header>
+  <p class="col">The course is split into chapters, lessons and steps. A lesson is a scene (hand-made or generated), a car, a short script and the rules for its stars. The coach knows the route for the exact car you drive, so it can point at real moments instead of rules of thumb.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Step</th><th>What happens</th><th>When</th></tr></thead>
+      <tbody>
+        <tr><td><b>Explain</b></td><td>A short card with a drawing: what you'll learn and why, with its source.</td><td>Start of a lesson</td></tr>
+        <tr><td><b>Watch</b></td><td>Show me: a ghost car drives the route and pauses at every cue.</td><td>First time in a lesson, or on request</td></tr>
+        <tr><td><b>Guided</b></td><td>You drive. The coach shows the next step and the distance to it, and stops the car if you miss a cue.</td><td>Until you pass twice</td></tr>
+        <tr><td><b>Practice</b></td><td>The same space, with the coach only on request.</td><td>After guided passes</td></tr>
+        <tr><td><b>Test</b></td><td>No help; the stars count.</td><td>To finish the lesson</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="two">
+    <div class="panel">
+      <h3>The coach engine</h3>
+      <p>Each step is data: what the coach says, a condition that finishes the step, and checks that fail it.</p>
+      <ul>
+        <li><b>Finish when:</b> you reach a cue point (within 15 cm), the wheel is at a lock, the car has turned a set angle, you are stopped, a part of the car is level with a landmark, or you are parked in the target.</li>
+        <li><b>Fail when:</b> you touch something, go faster than walking pace in a guided step, or drive the wrong way.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>Cues from the route</h3>
+      <p>The route for your car is cut into moves, and every change of steering or direction becomes a cue. The coach describes it with things you can see: your mirror against the other car's bumper, your rear wheel against a bay line, the car's angle. It shows the handbook's rule of thumb next to the exact moment, as the blueprint describes.</p>
+    </div>
+    <div class="panel">
+      <h3>Feedback that points at one thing</h3>
+      <p>After each try, your path is drawn over the planned one. The coach names the first place you drifted more than 30 cm from it, for example "you turned 0.6 m too early". The next try focuses on that step.</p>
+    </div>
+    <div class="panel">
+      <h3>Help that steps back</h3>
+      <p>There are four levels of help: the full coach, cue marks only, Show me on request, and none. Two clean passes lower the help, and two failures raise it again and turn on slow motion.</p>
+    </div>
+  </div>
+  <div class="stack">
+    <h3>The first ten lessons</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>#</th><th>Lesson</th><th>Scene</th><th>You learn</th><th>Pass</th></tr></thead>
+        <tbody>
+          <tr><td class="num">1</td><td><b>First metres</b></td><td>Empty car park</td><td>Forward, reverse, stopping, steering</td><td>Cone course, no touch</td></tr>
+          <tr><td class="num">2</td><td><b>How a car turns</b></td><td>Empty car park</td><td>The rear wheels cut inside and the front swings out; your turning circle</td><td>Follow the swept-path lines</td></tr>
+          <tr><td class="num">3</td><td><b>Into a bay, forwards</b></td><td>Bays, level 1</td><td>Turn when your mirror reaches the bay's near line (Georgia, Montana handbooks)</td><td>In the bay, straight</td></tr>
+          <tr><td class="num">4</td><td><b>Between two cars</b></td><td>Bays, level 3</td><td>The same with less room</td><td>No touch, centred within 15 cm</td></tr>
+          <tr><td class="num">5</td><td><b>Reverse into a bay</b></td><td>Bays, level 2, reverse</td><td>Full lock when the bay's first line is level with the back seat; straighten when the lines look parallel in both mirrors (UK schools)</td><td>In the bay, within 3°</td></tr>
+          <tr><td class="num">6</td><td><b>Parallel, big space</b></td><td>Kerb, level 1 (about 1.5 car lengths)</td><td>Line up 0.6–1 m out, full lock in, steer back at the mirror cue</td><td>Within 30 cm of the kerb</td></tr>
+          <tr><td class="num">7</td><td><b>Parallel, tighter</b></td><td>Kerb, level 4</td><td>The same with a correction move</td><td>Within 30 cm, par + 1 moves</td></tr>
+          <tr><td class="num">8</td><td><b>Leaving a tight space</b></td><td>Kerb, level 5, start parked</td><td>Back up to the car behind, wheels away from the kerb, signal, check over both shoulders (New York, Georgia)</td><td>Out without touching</td></tr>
+          <tr><td class="num">9</td><td><b>Angled bays</b></td><td>60° bays</td><td>Turn sharply as your steering wheel passes the first line (Georgia)</td><td>In the bay, straight</td></tr>
+          <tr><td class="num">10</td><td><b>Your garage</b></td><td>Bay 561 from the left</td><td>Everything at once</td><td>Nose in, no touch</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="stack">
+    <h3>A lesson file</h3>
+    <p class="col note">Lesson 6 as data. The words live in a strings file per language, and each tip points at its source in the research notes.</p>
+<pre aria-label="Example lesson file">{
+  <span class="k">id</span>: 'parallel-1', <span class="k">title</span>: 'lesson.parallel1.title',
+  <span class="k">scene</span>: { <span class="k">template</span>: 'parallel', <span class="k">level</span>: 1, <span class="k">seed</span>: 101 },
+  <span class="k">car</span>: 'byd-atto2',
+  <span class="k">steps</span>: [
+    { <span class="k">type</span>: 'explain', <span class="k">text</span>: 'tip.parallel.gap', <span class="k">sources</span>: ['dvsa-parallel', 'oregon-playbook'] },
+    { <span class="k">type</span>: 'watch' },
+    { <span class="k">type</span>: 'guided', <span class="k">say</span>: 'coach.lineUp',       <span class="k">until</span>: { <span class="k">reach</span>: 'cue1', <span class="k">within</span>: 0.15 }, <span class="k">fail</span>: { <span class="k">overKmh</span>: 7 } },
+    { <span class="k">type</span>: 'guided', <span class="k">say</span>: 'coach.lockTowardsKerb', <span class="k">until</span>: { <span class="k">wheel</span>: 'fullLock', <span class="k">side</span>: 'kerb' } },
+    { <span class="k">type</span>: 'guided', <span class="k">say</span>: 'coach.mirrorCue',     <span class="k">until</span>: { <span class="k">reach</span>: 'cue2', <span class="k">within</span>: 0.15 } },
+    { <span class="k">type</span>: 'guided', <span class="k">say</span>: 'coach.lockAway',      <span class="k">until</span>: { <span class="k">wheel</span>: 'fullLock', <span class="k">side</span>: 'away' } },
+    { <span class="k">type</span>: 'guided', <span class="k">say</span>: 'coach.straighten',   <span class="k">until</span>: { <span class="k">parked</span>: true } },
+    { <span class="k">type</span>: 'practice', <span class="k">times</span>: 2 },
+    { <span class="k">type</span>: 'test', <span class="k">stars</span>: { <span class="k">kerbWithinM</span>: 0.30, <span class="k">angleWithinDeg</span>: 3, <span class="k">moves</span>: 'par+1' } }
+  ]
+}</pre>
+  </div>
+</section>
+
+<section id="decide">
+  <header class="col">
+    <p class="eyebrow">Your call</p>
+    <h2>Two things to decide</h2>
+  </header>
+  <div class="decide">
+    <div class="panel"><p class="eyebrow">Order</p><p>Parking first: M1 to M4 make a complete parking trainer before any street physics or traffic. Is that the order you want?</p></div>
+    <div class="panel"><p class="eyebrow">Start</p><p>Shall I start M1, the data foundation? Your garage keeps driving exactly as it does now, and its 128 replay checks prove it.</p></div>
+  </div>
+</section>
+
+</div>
+
+<script>
+(function() {
+	//#region src/core/math.ts
+	var DEG = Math.PI / 180;
+	var clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+	//#endregion
+	//#region src/core/car.ts
+	var L = 4.33;
+	var W$1 = 1.83;
+	var WB = 2.62;
+	var TRACK = 1.57;
+	var R_CC = 5.3;
+	var R_REAR$1 = Math.sqrt(R_CC * R_CC - WB * WB) - TRACK / 2;
+	var CAR = {
+		L,
+		W: W$1,
+		H: 1.675,
+		WB,
+		TRACK,
+		OVF: .883,
+		OVR: .827,
+		WR: .334,
+		WW: .215,
+		R_CC,
+		MASS: 1580,
+		R_REAR: R_REAR$1,
+		MAXSTEER: Math.atan(WB / R_REAR$1) / DEG,
+		R_WALL: Math.hypot(R_REAR$1 + W$1 / 2, 3.503)
+	};
+	var BODY_FP = (() => {
+		const R = [
+			[3.503, .52],
+			[3.4, .76],
+			[3.123, .878],
+			[2.8, .912],
+			[0, .915],
+			[-.58, .858],
+			[-.76, .76],
+			[-.827, .62]
+		];
+		return [...R, ...R.slice().reverse().map(([a, b]) => [a, -b])];
+	})();
+	var MIRROR_FP = [-1, 1].map((sg) => [
+		[1.77, sg * .9],
+		[1.98, sg * .9],
+		[1.98, sg * 1.04],
+		[1.77, sg * 1.04]
+	]);
+	var MIRROR_Y = 1.12;
+	/** Local points of a car at rear-axle pose (px, pz, heading h) in world coordinates. */
+	function footprint(px, pz, h, pts) {
+		const cs = Math.cos(h), sn = Math.sin(h);
+		return pts.map(([lx, lz]) => [px + lx * cs + lz * sn, pz - lx * sn + lz * cs]);
+	}
+	//#endregion
+	//#region ../../../../../private/tmp/claude-502/-Users-adam2-projects-byd/a2601623-9589-4a1a-bbcd-cf4b270896b7/scratchpad/gen/src/field.ts
+	var CELL = .05;
+	function outline(poly, step) {
+		const out = [];
+		for (let i = 0; i < poly.length; i++) {
+			const [ax, az] = poly[i], [bx, bz] = poly[(i + 1) % poly.length];
+			const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / step));
+			for (let k = 0; k < n; k++) out.push(ax + (bx - ax) * k / n, az + (bz - az) * k / n);
+		}
+		return out;
+	}
+	var BODY_PTS = Float64Array.from(outline(BODY_FP, .04));
+	var MIRROR_PTS = Float64Array.from([...outline(MIRROR_FP[0], .03), ...outline(MIRROR_FP[1], .03)]);
+	var WHEEL_PTS = (() => {
+		const a = [];
+		for (const ax of [0, CAR.WB]) for (const s of [-1, 1]) for (const dx of [-CAR.WR, CAR.WR]) for (const dz of [-CAR.WW / 2, CAR.WW / 2]) a.push(ax + dx, s * CAR.TRACK / 2 + dz);
+		return Float64Array.from(a);
+	})();
+	var COVER = [
+		-.105,
+		1.338,
+		2.782
+	];
+	var COVER_R = 1.25;
+	/** Exact squared Euclidean distance transform in 1D (Felzenszwalb & Huttenlocher). */
+	function edt1(f, n, d, v, zz) {
+		let k = 0;
+		v[0] = 0;
+		zz[0] = -Infinity;
+		zz[1] = Infinity;
+		for (let q = 1; q < n; q++) {
+			let s = (f[q] + q * q - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+			while (s <= zz[k]) {
+				k--;
+				s = (f[q] + q * q - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+			}
+			k++;
+			v[k] = q;
+			zz[k] = s;
+			zz[k + 1] = Infinity;
+		}
+		k = 0;
+		for (let q = 0; q < n; q++) {
+			while (zz[k + 1] < q) k++;
+			d[q] = (q - v[k]) * (q - v[k]) + f[v[k]];
+		}
+	}
+	var Field = class {
+		obstacles;
+		x0;
+		z0;
+		kerbs;
+		nx;
+		nz;
+		body;
+		tall;
+		dist;
+		constructor(obstacles, x0, x1, z0, z1, kerbs = []) {
+			this.obstacles = obstacles;
+			this.x0 = x0;
+			this.z0 = z0;
+			this.kerbs = kerbs;
+			const nx = this.nx = Math.ceil((x1 - x0) / CELL), nz = this.nz = Math.ceil((z1 - z0) / CELL);
+			const body = this.body = new Uint8Array(nx * nz), tall = this.tall = new Uint8Array(nx * nz);
+			const raw = new Uint8Array(nx * nz), rawT = new Uint8Array(nx * nz);
+			for (const o of obstacles) {
+				const i0 = Math.max(0, Math.floor((o.bx0 - x0) / CELL)), i1 = Math.min(nx - 1, Math.ceil((o.bx1 - x0) / CELL));
+				const j0 = Math.max(0, Math.floor((o.bz0 - z0) / CELL)), j1 = Math.min(nz - 1, Math.ceil((o.bz1 - z0) / CELL));
+				const isTall = o.h > MIRROR_Y;
+				for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+					const px = x0 + (i + .5) * CELL, pz = z0 + (j + .5) * CELL;
+					let inside;
+					if (o.kind === "circle") inside = (px - o.x) ** 2 + (pz - o.z) ** 2 <= o.r * o.r;
+					else {
+						let pos = 0, neg = 0;
+						const P = o.pts;
+						for (let k = 0; k < P.length; k++) {
+							const a = P[k], b = P[(k + 1) % P.length];
+							const c = (b[0] - a[0]) * (pz - a[1]) - (b[1] - a[1]) * (px - a[0]);
+							if (c > 0) pos++;
+							else if (c < 0) neg++;
+						}
+						inside = !(pos && neg);
+					}
+					if (inside) {
+						raw[j * nx + i] = 1;
+						if (isTall) rawT[j * nx + i] = 1;
+					}
+				}
+			}
+			for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+				let b = 0, t = 0;
+				for (let dj = -1; dj <= 1 && !(b && t); dj++) for (let di = -1; di <= 1; di++) {
+					const jj = j + dj, ii = i + di;
+					if (jj < 0 || jj >= nz || ii < 0 || ii >= nx) continue;
+					const k = jj * nx + ii;
+					if (raw[k]) b = 1;
+					if (rawT[k]) t = 1;
+				}
+				body[j * nx + i] = b;
+				tall[j * nx + i] = t;
+			}
+			const INF = 0xe8d4a51000, n = Math.max(nx, nz), f = new Float64Array(n), d = new Float64Array(n), v = new Int32Array(n), zz = new Float64Array(n + 1);
+			const tmp = new Float64Array(nx * nz);
+			for (let i = 0; i < nx; i++) {
+				for (let j = 0; j < nz; j++) f[j] = body[j * nx + i] ? 0 : INF;
+				edt1(f, nz, d, v, zz);
+				for (let j = 0; j < nz; j++) tmp[j * nx + i] = d[j];
+			}
+			const dist = this.dist = new Float32Array(nx * nz);
+			for (let j = 0; j < nz; j++) {
+				for (let i = 0; i < nx; i++) f[i] = tmp[j * nx + i];
+				edt1(f, nx, d, v, zz);
+				for (let i = 0; i < nx; i++) dist[j * nx + i] = Math.sqrt(d[i]) * CELL;
+			}
+		}
+		/** Distance in metres from (x, z) to the nearest obstacle; 0 outside the field. */
+		distAt(x, z) {
+			const i = Math.floor((x - this.x0) / CELL), j = Math.floor((z - this.z0) / CELL);
+			if (i < 0 || j < 0 || i >= this.nx || j >= this.nz) return 0;
+			return this.dist[j * this.nx + i];
+		}
+		hit(layer, x, z) {
+			const i = Math.floor((x - this.x0) / CELL), j = Math.floor((z - this.z0) / CELL);
+			if (i < 0 || j < 0 || i >= this.nx || j >= this.nz) return true;
+			return layer[j * this.nx + i] === 1;
+		}
+		/** Wheels on the road side of every kerb. */
+		wheelsOk(px, pz, th) {
+			if (!this.kerbs.length) return true;
+			const cs = Math.cos(th), sn = Math.sin(th);
+			for (let k = 0; k < WHEEL_PTS.length; k += 2) {
+				const lx = WHEEL_PTS[k], lz = WHEEL_PTS[k + 1], wx = px + lx * cs + lz * sn, wz = pz - lx * sn + lz * cs;
+				for (const kb of this.kerbs) if (kb.nx * wx + kb.nz * wz > kb.c) return false;
+			}
+			return true;
+		}
+		/** Free of obstacles (raster) and kerbs at rear-axle pose (px, pz, th)? */
+		free(px, pz, th) {
+			if (!this.wheelsOk(px, pz, th)) return false;
+			const cs = Math.cos(th), sn = Math.sin(th);
+			let near = false;
+			for (const c of COVER) if (this.distAt(px + c * cs, pz - c * sn) < COVER_R) {
+				near = true;
+				break;
+			}
+			if (!near) return true;
+			for (let k = 0; k < BODY_PTS.length; k += 2) {
+				const lx = BODY_PTS[k], lz = BODY_PTS[k + 1];
+				if (this.hit(this.body, px + lx * cs + lz * sn, pz - lx * sn + lz * cs)) return false;
+			}
+			for (let k = 0; k < MIRROR_PTS.length; k += 2) {
+				const lx = MIRROR_PTS[k], lz = MIRROR_PTS[k + 1];
+				if (this.hit(this.tall, px + lx * cs + lz * sn, pz - lx * sn + lz * cs)) return false;
+			}
+			return true;
+		}
+		/** A quick lower bound on the clearance, from the three covering circles (body only). */
+		roughClearance(px, pz, th) {
+			const cs = Math.cos(th), sn = Math.sin(th);
+			let m = Infinity;
+			for (const c of COVER) m = Math.min(m, this.distAt(px + c * cs, pz - c * sn) - 1.165);
+			return Math.max(0, m);
+		}
+		/** Smallest gap (m) between the car's outline and any obstacle, from the distance field. */
+		clearance(px, pz, th) {
+			const cs = Math.cos(th), sn = Math.sin(th);
+			let m = Infinity;
+			for (let k = 0; k < BODY_PTS.length; k += 2) {
+				const lx = BODY_PTS[k], lz = BODY_PTS[k + 1];
+				m = Math.min(m, this.distAt(px + lx * cs + lz * sn, pz - lx * sn + lz * cs));
+			}
+			return Math.max(0, m - CELL);
+		}
+	};
+	//#endregion
+	//#region ../../../../../private/tmp/claude-502/-Users-adam2-projects-byd/a2601623-9589-4a1a-bbcd-cf4b270896b7/scratchpad/gen/src/planner.ts
+	var LVLS = [
+		-1,
+		-.5,
+		0,
+		.5,
+		1
+	];
+	var SUB = .1;
+	var XY = .1;
+	var TH = 5 * DEG;
+	var TIGHT = [.2, .5];
+	var OPEN = [.6, 1.2];
+	/** Pose after driving a signed distance s with steering lvl. */
+	function drive(p, lvl, s) {
+		const k = Math.tan(-lvl * CAR.MAXSTEER * DEG) / CAR.WB;
+		if (Math.abs(k) < 1e-9) return {
+			x: p.x + s * Math.cos(p.th),
+			z: p.z - s * Math.sin(p.th),
+			th: p.th
+		};
+		const th = p.th + s * k;
+		return {
+			x: p.x + (Math.sin(th) - Math.sin(p.th)) / k,
+			z: p.z + (Math.cos(th) - Math.cos(p.th)) / k,
+			th
+		};
+	}
+	var wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+	var Heap = class {
+		a = [];
+		get size() {
+			return this.a.length;
+		}
+		push(n) {
+			const a = this.a;
+			a.push(n);
+			let i = a.length - 1;
+			while (i > 0) {
+				const p = i - 1 >> 1;
+				if (a[p].f <= n.f) break;
+				a[i] = a[p];
+				i = p;
+			}
+			a[i] = n;
+		}
+		pop() {
+			const a = this.a, top = a[0], last = a.pop();
+			if (a.length) {
+				let i = 0;
+				for (;;) {
+					const l = 2 * i + 1, r = l + 1;
+					let m = i;
+					if (l < a.length && a[l].f < (m === i ? last.f : a[m].f)) m = l;
+					if (r < a.length && a[r].f < (m === i ? last.f : a[m].f)) m = r;
+					if (m === i) break;
+					a[i] = a[m];
+					i = m;
+				}
+				a[i] = last;
+			}
+			return top;
+		}
+	};
+	/**
+	* Search from `start` until `done(pose)`. With outward=true, start is the parked pose and the
+	* route returned runs the other way: from where the search ended back into the space.
+	* Every move a car makes can be driven backwards, so the reversed route is valid and keeps
+	* its number of direction changes; the cost of reversing is applied in the parking direction.
+	*/
+	function search(field, starts, done, heur, o) {
+		const t0 = performance.now(), maxNodes = o.maxNodes ?? 12e4, maxMs = o.maxMs ?? 4e3;
+		const rev = o.reverseCost ?? 1, shunt = o.shuntCost ?? 3, steerC = o.steerCost ?? .2, clearC = o.clearCost ?? 6, w = o.weight ?? 1.8;
+		const open = new Heap(), best = /* @__PURE__ */ new Map();
+		const key = (p, dir) => ((Math.round(p.x / XY) + 4e3) * 8e3 + (Math.round(p.z / XY) + 4e3)) * 160 + (Math.round(wrap(p.th) / TH) % 72 + 72) % 72 * 2 + (dir > 0 ? 1 : 0);
+		const S = (Array.isArray(starts) ? starts : [starts]).filter((p) => field.free(p.x, p.z, p.th));
+		if (!S.length) return {
+			status: "none",
+			pieces: [],
+			nodes: 0,
+			ms: 0,
+			cost: 0
+		};
+		for (const p of S) open.push({
+			p,
+			g: 0,
+			f: w * heur(p),
+			dir: 0,
+			lvl: 0,
+			len: 0,
+			parent: null
+		});
+		let nodes = 0, goal = null;
+		while (open.size) {
+			const n = open.pop();
+			if (done(n.p) && (!o.outward || n.dir === -1)) {
+				goal = n;
+				break;
+			}
+			const kn = key(n.p, n.dir);
+			const seen = best.get(kn);
+			if (seen !== void 0 && seen < n.g - 1e-9) continue;
+			if (++nodes > maxNodes || nodes % 512 === 0 && performance.now() - t0 > maxMs) return {
+				status: "gave-up",
+				pieces: [],
+				nodes,
+				ms: performance.now() - t0,
+				cost: 0
+			};
+			if (o.shotHeading !== void 0) {
+				const shot = finishShot(field, n.p, done, o.shotHeading, o.outward ? [-1] : [1, -1]);
+				if (shot) {
+					let last = n;
+					for (const sp of shot) last = {
+						p: sp.to,
+						g: last.g + sp.len,
+						f: 0,
+						dir: sp.dir,
+						lvl: sp.lvl,
+						len: sp.len,
+						parent: last
+					};
+					goal = last;
+					break;
+				}
+			}
+			const lens = field.roughClearance(n.p.x, n.p.z, n.p.th) < .35 ? TIGHT : OPEN;
+			for (const dir of [1, -1]) for (const lvl of LVLS) for (const len of lens) {
+				let q = n.p, ok = true, c = Infinity;
+				const steps = Math.max(1, Math.round(len / SUB));
+				for (let k = 1; k <= steps; k++) {
+					q = drive(n.p, lvl, dir * len * k / steps);
+					if (!field.free(q.x, q.z, q.th)) {
+						ok = false;
+						break;
+					}
+					c = Math.min(c, clear(field, q));
+				}
+				if (!ok) continue;
+				const parkDir = o.outward ? -dir : dir;
+				const near = Math.max(0, .3 - c) + (c < .08 ? .5 * (.08 - c) / .08 : 0);
+				const g = n.g + len * (parkDir < 0 ? rev : 1) + (n.dir !== 0 && n.dir !== dir ? shunt : 0) + steerC * Math.abs(lvl - n.lvl) / .5 + clearC * near * len;
+				const kq = key(q, dir), old = best.get(kq);
+				if (old !== void 0 && old <= g) continue;
+				best.set(kq, g);
+				open.push({
+					p: q,
+					g,
+					f: g + w * heur(q),
+					dir,
+					lvl,
+					len,
+					parent: n
+				});
+			}
+		}
+		const ms = performance.now() - t0;
+		if (!goal) return {
+			status: "none",
+			pieces: [],
+			nodes,
+			ms,
+			cost: 0
+		};
+		const chain = [];
+		for (let n = goal; n; n = n.parent) chain.push(n);
+		chain.reverse();
+		let pieces = [];
+		for (let i = 1; i < chain.length; i++) pieces.push({
+			dir: chain[i].dir,
+			lvl: chain[i].lvl,
+			len: chain[i].len,
+			from: chain[i - 1].p,
+			to: chain[i].p
+		});
+		if (o.outward) pieces = pieces.reverse().map((pc) => ({
+			dir: -pc.dir,
+			lvl: pc.lvl,
+			len: pc.len,
+			from: pc.to,
+			to: pc.from
+		}));
+		return {
+			status: "found",
+			pieces: merge(pieces),
+			nodes,
+			ms,
+			cost: goal.g
+		};
+	}
+	/** Clearance at a pose: the quick bound first, the exact outline only when something is close. */
+	function clear(field, q) {
+		const rough = field.roughClearance(q.x, q.z, q.th);
+		return rough < .45 ? field.clearance(q.x, q.z, q.th) : rough;
+	}
+	/** Drive one way with fixed steering until `stop`, never closer to things than `minC`. */
+	function run(field, p, dir, lvl, maxLen, minC, stop) {
+		for (let s = .1; s <= maxLen + 1e-9; s += .1) {
+			const q = drive(p, lvl, dir * s);
+			if (!field.free(q.x, q.z, q.th) || clear(field, q) < minC) return null;
+			if (stop(q)) return {
+				dir,
+				lvl,
+				len: s,
+				to: q
+			};
+		}
+		return null;
+	}
+	/** Straight into the region, or a full-lock arc until lined up and then straight. Must not get tighter than where it starts. */
+	function finishShot(field, p, done, th, lastDirs) {
+		const minC = Math.min(.2, clear(field, p) - .02);
+		const aligned = (q) => Math.abs(wrap(q.th - th)) < 2 * DEG;
+		for (const d of lastDirs) if (Math.abs(wrap(p.th - th)) < 8 * DEG) {
+			const st = run(field, p, d, 0, 30, minC, done);
+			if (st) return [st];
+		}
+		for (const dir of [1, -1]) for (const lvl of [
+			-1,
+			1,
+			-.5,
+			.5
+		]) {
+			const arc = run(field, p, dir, lvl, 9, minC, aligned);
+			if (!arc) continue;
+			for (const d of lastDirs) {
+				const st = run(field, arc.to, d, 0, 30, minC, done);
+				if (st) return [arc, st];
+			}
+		}
+		return null;
+	}
+	/** Join consecutive pieces that drive the same way with the same steering. */
+	function merge(pieces) {
+		const out = [];
+		for (const p of pieces) {
+			const l = out[out.length - 1];
+			if (l && l.dir === p.dir && l.lvl === p.lvl) out[out.length - 1] = {
+				...l,
+				len: l.len + p.len,
+				to: p.to
+			};
+			else out.push({ ...p });
+		}
+		return out;
+	}
+	/** Sample a route every `step` metres: poses with the direction they are driven in. */
+	function sample(pieces, step = .05) {
+		const out = [];
+		pieces.forEach((pc, i) => {
+			const n = Math.max(1, Math.round(pc.len / step));
+			for (let k = 0; k <= n; k++) {
+				if (k === 0 && i > 0) continue;
+				const q = drive(pc.from, pc.lvl, pc.dir * pc.len * k / n);
+				out.push({
+					...q,
+					dir: pc.dir,
+					i
+				});
+			}
+		});
+		return out;
+	}
+	/** Number of moves: runs driven in one direction. */
+	var moves = (pieces) => pieces.reduce((m, p, i) => m + (i === 0 || p.dir !== pieces[i - 1].dir ? 1 : 0), 0);
+	//#endregion
+	//#region src/core/geometry.ts
+	function polysOverlap(A, B) {
+		for (const P of [A, B]) for (let i = 0; i < P.length; i++) {
+			const p = P[i], q = P[(i + 1) % P.length], nx = -(q[1] - p[1]), nz = q[0] - p[0];
+			let a0 = Infinity, a1 = -Infinity, b0 = Infinity, b1 = -Infinity;
+			for (const w of A) {
+				const d = w[0] * nx + w[1] * nz;
+				if (d < a0) a0 = d;
+				if (d > a1) a1 = d;
+			}
+			for (const w of B) {
+				const d = w[0] * nx + w[1] * nz;
+				if (d < b0) b0 = d;
+				if (d > b1) b1 = d;
+			}
+			if (a1 < b0 || b1 < a0) return false;
+		}
+		return true;
+	}
+	function circleHitsPoly(cx, cz, r, P) {
+		let inside = false;
+		for (let i = 0, j = P.length - 1; i < P.length; j = i++) {
+			const a = P[i], b = P[j];
+			if (a[1] > cz !== b[1] > cz && cx < (b[0] - a[0]) * (cz - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside;
+			if (ptSeg(cx, cz, a[0], a[1], b[0], b[1]) < r) return true;
+		}
+		return inside;
+	}
+	/** Distance from a point to a segment. */
+	function ptSeg(px, pz, ax, az, bx, bz) {
+		const vx = bx - ax, vz = bz - az, l2 = vx * vx + vz * vz;
+		const t = l2 ? clamp(((px - ax) * vx + (pz - az) * vz) / l2, 0, 1) : 0;
+		return Math.hypot(px - (ax + vx * t), pz - (az + vz * t));
+	}
+	//#endregion
+	//#region src/core/collision.ts
+	/** The first obstacle the car touches at rear-axle pose (px, pz, h), or null. part says whether only a door mirror did it. */
+	function collides(obstacles, px, pz, h) {
+		let B = null, ML = [], MR = [];
+		for (const o of obstacles) {
+			if (o.bx1 < px - 4.5 || o.bx0 > px + 4.5 || o.bz1 < pz - 4.5 || o.bz0 > pz + 4.5) continue;
+			if (!B) {
+				B = footprint(px, pz, h, BODY_FP);
+				ML = footprint(px, pz, h, MIRROR_FP[0]);
+				MR = footprint(px, pz, h, MIRROR_FP[1]);
+			}
+			const tall = o.h > MIRROR_Y, hit = o.kind === "poly" ? (P) => polysOverlap(P, o.pts) : (P) => circleHitsPoly(o.x, o.z, o.r, P);
+			if (hit(B)) return {
+				obstacle: o,
+				part: ""
+			};
+			if (tall && hit(ML)) return {
+				obstacle: o,
+				part: "left mirror"
+			};
+			if (tall && hit(MR)) return {
+				obstacle: o,
+				part: "right mirror"
+			};
+		}
+		return null;
+	}
+	//#endregion
+	//#region ../../../../../private/tmp/claude-502/-Users-adam2-projects-byd/a2601623-9589-4a1a-bbcd-cf4b270896b7/scratchpad/gen/src/route.ts
+	/** Re-check a route with the game's exact collision test (and the kerbs). */
+	function exactCheck(scene, field, pieces) {
+		for (const q of sample(pieces, .05)) {
+			const hit = collides(scene.obstacles, q.x, q.z, q.th);
+			if (hit) return hit.obstacle.name + (hit.part ? ` (${hit.part})` : "");
+			if (!field.wheelsOk(q.x, q.z, q.th)) return "the kerb";
+		}
+		return null;
+	}
+	function measure(scene, field, pieces) {
+		const pts = sample(pieces, .1), end = pts[pts.length - 1];
+		const T = scene.areas.find((a) => a.kind === "target").pts, tx0 = Math.min(...T.map((p) => p[0])), tx1 = Math.max(...T.map((p) => p[0])), tz0 = Math.min(...T.map((p) => p[1])), tz1 = Math.max(...T.map((p) => p[1]));
+		let minClear = Infinity;
+		for (const q of pts) {
+			const cx = q.x + 1.34 * Math.cos(q.th), cz = q.z - 1.34 * Math.sin(q.th);
+			if (cx > tx0 && cx < tx1 && cz > tz0 && cz < tz1) continue;
+			minClear = Math.min(minClear, field.clearance(q.x, q.z, q.th));
+		}
+		if (!isFinite(minClear)) minClear = field.clearance(end.x, end.z, end.th);
+		const length = pieces.reduce((s, p) => s + p.len, 0), m = moves(pieces);
+		const k = scene.knobs;
+		let spare, tpl, base;
+		if (scene.template === "kerb") {
+			spare = parseFloat(String(k.space).split("+ ")[1]);
+			tpl = 5 * clamp((2.4 - spare) / 1.6, 0, 1);
+			base = 2;
+		} else {
+			const Wb = parseFloat(String(k.bay)), A = parseFloat(String(k.aisle));
+			spare = Wb - CAR.W;
+			tpl = 2.6 * clamp((7 - A) / 2, 0, 1) + 2.6 * clamp((2.7 - Wb) / .4, 0, 1);
+			base = scene.way === "forward" ? 1 : 2;
+		}
+		const score = clamp(1 + 1.7 * Math.max(0, m - base) + 2 * clamp((.6 - minClear) / .5, 0, 1) + tpl, 1, 10);
+		return {
+			moves: m,
+			length,
+			minClear,
+			spare,
+			score
+		};
+	}
+	var parts = (s) => [
+		{
+			name: "your mirror",
+			x: 1.875,
+			z: s * .97
+		},
+		{
+			name: "your rear wheel",
+			x: 0,
+			z: s * .785
+		},
+		{
+			name: "your rear bumper",
+			x: -.8,
+			z: 0
+		},
+		{
+			name: "your front bumper",
+			x: 3.45,
+			z: 0
+		}
+	];
+	var fmt = (m) => m < .95 ? `${Math.round(m * 100 / 5) * 5} cm` : `${m.toFixed(1)} m`;
+	var steerWords = (lvl, scene) => {
+		if (lvl === 0) return "wheels straight";
+		return `${Math.abs(lvl) === 1 ? "full lock" : "half lock"} ${Math.sign(lvl) === scene.side ? "towards" : "away from"} the ${scene.sideWord}`;
+	};
+	/** The obstacle nearest the car's outline at a pose, and how far it is. */
+	function nearest(scene, p, dir) {
+		const c0 = Math.cos(p.th), s0 = Math.sin(p.th);
+		for (let g = .05; g <= 2; g += .05) {
+			const hit = collides(scene.obstacles, p.x + dir * g * c0, p.z - dir * g * s0, p.th);
+			if (hit) return {
+				name: hit.obstacle.name,
+				d: g
+			};
+		}
+		for (let g = .05; g <= 1.5; g += .05) for (const [dx, dz] of [
+			[1, 0],
+			[-1, 0],
+			[0, 1],
+			[0, -1],
+			[.7, .7],
+			[.7, -.7],
+			[-.7, .7],
+			[-.7, -.7]
+		]) {
+			const c = Math.cos(p.th), s = Math.sin(p.th), wx = p.x + (dx * c + dz * s) * g, wz = p.z + (-dx * s + dz * c) * g;
+			const hit = collides(scene.obstacles, wx, wz, p.th);
+			if (hit) return {
+				name: hit.obstacle.name,
+				d: g
+			};
+		}
+		return {
+			name: "",
+			d: Infinity
+		};
+	}
+	function landmarkCue(scene, p) {
+		const c = Math.cos(p.th), s = Math.sin(p.th);
+		let best = null;
+		for (const P of parts(scene.side)) {
+			const px = p.x + P.x * c + P.z * s, pz = p.z - P.x * s + P.z * c;
+			for (const L of scene.landmarks) {
+				const ahead = (L.x - px) * c - (L.z - pz) * s;
+				if (Math.abs((L.x - px) * s + (L.z - pz) * c) > 4.5) continue;
+				if (!best || Math.abs(ahead) < best.a) best = {
+					t: Math.abs(ahead) < .1 ? `until ${P.name} is level with ${L.name}` : ahead < 0 ? `until ${P.name} is ${fmt(-ahead)} past ${L.name}` : `until ${P.name} is ${fmt(ahead)} short of ${L.name}`,
+					a: Math.abs(ahead)
+				};
+			}
+		}
+		return best ? best.t : "for a moment";
+	}
+	/** Turn a route into the coach's steps. Short steering blips are folded into the step before. */
+	function coach(scene, pieces) {
+		const groups = [];
+		pieces.forEach((pc, i) => {
+			const g = groups[groups.length - 1];
+			if (g && g.dir === pc.dir && (pc.lvl === g.lvl || pc.len <= .5)) {
+				g.len += pc.len;
+				g.to = pc.to;
+				g.last = i;
+			} else groups.push({
+				dir: pc.dir,
+				lvl: pc.lvl,
+				len: pc.len,
+				from: pc.from,
+				to: pc.to,
+				last: i
+			});
+		});
+		const lane = scene.entry.th;
+		return groups.map((g, i) => {
+			const next = groups[i + 1], lastStep = !next;
+			const verb = g.dir > 0 ? "Drive forward" : "Reverse";
+			let cue;
+			if (lastStep) cue = scene.template === "kerb" ? "until the car is straight, about 25 cm from the kerb" : "until the car is straight in the bay, about 35 cm from the back line";
+			else if (next.dir !== g.dir) {
+				const n = nearest(scene, g.to, g.dir);
+				cue = n.name && n.d <= 1.2 ? `and stop about ${fmt(n.d)} from ${n.name}` : landmarkCue(scene, g.to).replace(/^until/, "and stop when");
+			} else if (Math.abs(wrap(g.to.th - g.from.th)) / DEG >= 12) {
+				const toLane = Math.abs(wrap(g.to.th - lane)) / DEG, a = Math.min(toLane, 180 - toLane);
+				cue = scene.template === "kerb" ? `until the car is at about ${Math.round(a)}° to the kerb` : `until the car is at about ${Math.round(a)}° to the aisle`;
+			} else cue = landmarkCue(scene, g.to);
+			const detail = `${g.len.toFixed(1)} m`;
+			return {
+				n: i + 1,
+				text: `${verb}, ${steerWords(g.lvl, scene)}, ${cue}.`,
+				detail,
+				dir: g.dir,
+				lvl: g.lvl,
+				len: g.len,
+				end: g.to,
+				pieceEnd: g.last
+			};
+		});
+	}
+	//#endregion
+	//#region ../../../../../private/tmp/claude-502/-Users-adam2-projects-byd/a2601623-9589-4a1a-bbcd-cf4b270896b7/scratchpad/gen/src/templates.ts
+	function mulberry32(a) {
+		return () => {
+			a |= 0;
+			a = a + 1831565813 | 0;
+			let t = Math.imul(a ^ a >>> 15, 1 | a);
+			t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+			return ((t ^ t >>> 14) >>> 0) / 4294967296;
+		};
+	}
+	var CARS = [
+		[
+			2.7,
+			1.66,
+			.5
+		],
+		[
+			4.06,
+			1.75,
+			5
+		],
+		[
+			4.35,
+			1.83,
+			5
+		],
+		[
+			4.7,
+			1.83,
+			2
+		],
+		[
+			5,
+			1.9,
+			1.5
+		],
+		[
+			5.9,
+			2.08,
+			.4
+		]
+	];
+	function mk() {
+		const obs = [];
+		const box = (xs, zs) => {
+			const bx0 = Math.min(...xs), bx1 = Math.max(...xs), bz0 = Math.min(...zs), bz1 = Math.max(...zs);
+			return {
+				bx0,
+				bx1,
+				bz0,
+				bz1,
+				cx: (bx0 + bx1) / 2,
+				cz: (bz0 + bz1) / 2
+			};
+		};
+		return {
+			obs,
+			poly: (pts, name, h, cls) => obs.push({
+				kind: "poly",
+				pts,
+				name,
+				fill: "",
+				h,
+				cls,
+				label: "",
+				...box(pts.map((p) => p[0]), pts.map((p) => p[1]))
+			}),
+			circle: (x, z, r, name, h) => obs.push({
+				kind: "circle",
+				x,
+				z,
+				r,
+				name,
+				fill: "",
+				h,
+				cls: "wall",
+				label: "",
+				...box([x - r, x + r], [z - r, z + r])
+			})
+		};
+	}
+	/** Corners of a car-sized box centred at (cx, cz) pointing along th. */
+	function carBox(cx, cz, th, L, W) {
+		const c = Math.cos(th), s = Math.sin(th), P = (a, b) => [cx + a * c + b * s, cz - a * s + b * c];
+		return [
+			P(-L / 2, -W / 2),
+			P(L / 2, -W / 2),
+			P(L / 2, W / 2),
+			P(-L / 2, W / 2)
+		];
+	}
+	var rect = (x0, x1, z0, z1) => [
+		[x0, z0],
+		[x1, z0],
+		[x1, z1],
+		[x0, z1]
+	];
+	/** Parallel parking at a kerb on your right. Level 1 ≈ 1.5 car lengths of space, level 10 = car length + 0.8 m. */
+	function kerb(level, seed) {
+		const rnd = mulberry32(seed * 7919 + level), r = (a, b) => a + (b - a) * rnd(), t = (level - 1) / 9;
+		const pick = () => {
+			let tot = 0;
+			for (const c of CARS) tot += c[2];
+			let x = rnd() * tot;
+			for (const c of CARS) {
+				x -= c[2];
+				if (x <= 0) return c;
+			}
+			return CARS[1];
+		};
+		const { obs, poly, circle } = mk();
+		const spare = 2.4 - 1.6 * t + r(-.08, .08), G = CAR.L + spare;
+		const laneW = 3.4 - .45 * t, parkW = 2.1, K = 0;
+		const laneC = -2.1 - laneW / 2, farParked = level >= 4;
+		const farKerb = -2.1 - 2 * laneW - (farParked ? parkW : 0);
+		const cars = [], lines = [];
+		const place = (x0, L, W, out, tilt, far, name = far ? "a car opposite" : "a parked car") => {
+			const z = far ? farKerb + .2 + W / 2 + out : -.2 - W / 2 - out, th = (far ? Math.PI : 0) + tilt;
+			poly(carBox(x0 + L / 2, z, th, L, W), name, 1.5, "car");
+			cars.push({
+				x: x0 + L / 2,
+				z,
+				th,
+				L,
+				W
+			});
+		};
+		const [Lr, Wr] = pick(), [Lf, Wf] = pick();
+		const rearOut = .05 + .35 * t * rnd(), rearTilt = -(.5 + 2.5 * t) * rnd() * Math.PI / 180;
+		place(-Lr, Lr, Wr, rearOut, rearTilt, false, "the car behind the space");
+		place(G, Lf, Wf, .03 * rnd(), 0, false, "the car in front of the space");
+		for (let x = -Lr - r(.6, 1.2); x > -30;) {
+			const [L, W] = pick();
+			place(x - L, L, W, .12 * rnd(), 0, false);
+			x -= L + r(.6, 1.4);
+		}
+		for (let x = G + Lf + r(.6, 1.2); x < 24;) {
+			const [L, W] = pick();
+			place(x, L, W, .12 * rnd(), 0, false);
+			x += L + r(.6, 1.4);
+		}
+		if (farParked) for (let x = -30 + r(0, 2); x < 24;) {
+			const [L, W] = pick();
+			if (rnd() < .85) place(x, L, W, .1 * rnd(), 0, true);
+			x += L + r(.7, 2.5);
+		}
+		poly(rect(-34, 30, 3.2, 3.8), "a building", 3, "wall");
+		poly(rect(-34, 30, farKerb - 3.8, farKerb - 3.2), "a building", 3, "wall");
+		let post = "";
+		if (level >= 6 && rnd() < .7) {
+			const px = r(.6, Math.max(.7, G - .6));
+			circle(px, .55, .11, "the lamp post", 4);
+			post = `${px.toFixed(1)} m into the space`;
+		}
+		lines.push([
+			-34,
+			-2.1,
+			30,
+			-2.1
+		]);
+		lines.push([
+			-34,
+			-2.1 - laneW,
+			30,
+			-2.1 - laneW
+		]);
+		if (farParked) lines.push([
+			-34,
+			farKerb + parkW,
+			30,
+			farKerb + parkW
+		]);
+		const goalZ = -.25 - CAR.W / 2;
+		const goal = {
+			x: (G - CAR.L) / 2 + CAR.OVR,
+			z: goalZ,
+			th: 0
+		};
+		const goals = [];
+		for (let x = .3 + CAR.OVR; x <= G - .3 - (CAR.L - CAR.OVR) + 1e-9; x += .2) goals.push({
+			x,
+			z: goalZ,
+			th: 0
+		});
+		if (!goals.length) goals.push(goal);
+		const frontCar = cars[1], rearCar = cars[0];
+		return {
+			template: "kerb",
+			level,
+			seed,
+			way: "reverse",
+			obstacles: obs,
+			cars,
+			lines,
+			goals,
+			kerbs: [{
+				nx: 0,
+				nz: 1,
+				c: K,
+				name: "the kerb"
+			}, {
+				nx: 0,
+				nz: -1,
+				c: -farKerb,
+				name: "the far kerb"
+			}],
+			areas: [
+				{
+					kind: "pavement",
+					pts: rect(-34, 30, K, 3.2)
+				},
+				{
+					kind: "pavement",
+					pts: rect(-34, 30, farKerb - 3.2, farKerb)
+				},
+				{
+					kind: "target",
+					pts: rect(.1, G - .1, -2.1 + .05, -.05)
+				}
+			],
+			bounds: [
+				-30,
+				24,
+				farKerb - 3.8,
+				3.8
+			],
+			goal,
+			entry: {
+				x0: -16,
+				x1: -4,
+				z0: laneC - .45,
+				z1: laneC + .45,
+				th: 0
+			},
+			side: 1,
+			sideWord: "kerb",
+			landmarks: [{
+				name: "the front car's rear bumper",
+				x: G,
+				z: frontCar.z - frontCar.W / 2
+			}, {
+				name: "the rear car's front bumper",
+				x: 0,
+				z: rearCar.z - rearCar.W / 2
+			}],
+			knobs: {
+				space: `${G.toFixed(2)} m (car + ${spare.toFixed(2)} m)`,
+				lane: `${laneW.toFixed(2)} m`,
+				opposite: farParked ? "parked cars" : "open lane",
+				"car behind": `${(rearOut + .2).toFixed(2)} m from the kerb`,
+				post: post || "none"
+			}
+		};
+	}
+	/** A row of 90° bays on your left, entered forwards or in reverse. */
+	function bays(level, seed, way) {
+		const rnd = mulberry32(seed * 104729 + level * 31 + (way === "forward" ? 7 : 0)), r = (a, b) => a + (b - a) * rnd(), t = (level - 1) / 9;
+		const pick = () => {
+			let tot = 0;
+			for (const c of CARS.slice(0, 5)) tot += c[2];
+			let x = rnd() * tot;
+			for (const c of CARS.slice(0, 5)) {
+				x -= c[2];
+				if (x <= 0) return c;
+			}
+			return CARS[1];
+		};
+		const { obs, poly, circle } = mk();
+		const Wb = 2.7 - .4 * t, D = 5, A = Math.max(5, 7 - 2 * t + r(-.1, .1));
+		const cars = [], lines = [];
+		const nB = 6, oppo = level >= 4, pillarSide = level >= 8 ? rnd() < .5 ? -1 : 1 : 0;
+		const parkIn = (bx, top, slop, toward, name) => {
+			const [L, W] = pick();
+			const th = ((rnd() < .5 ? 1 : -1) > 0 ? Math.PI / 2 : -Math.PI / 2) + (rnd() - .5) * 2 * slop * 4 * Math.PI / 180;
+			const cx = bx + toward * slop * .28 * rnd(), cz = top ? -5 / 2 - .1 : A + D / 2 + .1;
+			poly(carBox(cx, cz, th, L, W), name, 1.5, "car");
+			cars.push({
+				x: cx,
+				z: cz,
+				th,
+				L,
+				W
+			});
+		};
+		for (let i = -6; i <= nB; i++) {
+			const bx = i * Wb;
+			lines.push([
+				bx - Wb / 2,
+				-5,
+				bx - Wb / 2,
+				0
+			]);
+			if (i === nB) lines.push([
+				bx + Wb / 2,
+				-5,
+				bx + Wb / 2,
+				0
+			]);
+			if (i === 0) continue;
+			const neighbour = Math.abs(i) === 1;
+			const name = i === -1 ? "the car in the near bay" : i === 1 ? "the car in the far bay" : "a parked car";
+			if (neighbour && level >= 2 || !neighbour && rnd() < .55 + .04 * level) parkIn(bx, true, neighbour ? Math.sign(i) === pillarSide ? .15 : t : .2, Math.sign(i) === pillarSide ? 0 : -Math.sign(i), name);
+		}
+		lines.push([
+			-6 * Wb - Wb / 2,
+			-5,
+			nB * Wb + Wb / 2,
+			-5
+		]);
+		for (let i = -6; i <= nB; i++) {
+			const bx = i * Wb;
+			lines.push([
+				bx - Wb / 2,
+				A,
+				bx - Wb / 2,
+				A + D
+			]);
+			if (i === nB) lines.push([
+				bx + Wb / 2,
+				A,
+				bx + Wb / 2,
+				A + D
+			]);
+			if (oppo && rnd() < .55 + .04 * level) parkIn(bx, false, .3, 0, "a car opposite");
+		}
+		lines.push([
+			-6 * Wb - Wb / 2,
+			A + D,
+			nB * Wb + Wb / 2,
+			A + D
+		]);
+		const X0 = -6 * Wb - Wb / 2 - 9, X1 = nB * Wb + Wb / 2 + 3;
+		poly(rect(X0, X1, -5.9, -5.35), "the wall", 2.5, "wall");
+		poly(rect(X0, X1, A + D + .35, A + D + .9), "the wall", 2.5, "wall");
+		let pillar = "";
+		if (pillarSide) {
+			circle(pillarSide * (Wb / 2 + .04), -.22, .17, "the pillar", 3);
+			pillar = pillarSide < 0 ? "near side" : "far side";
+		}
+		const goal = way === "reverse" ? {
+			x: 0,
+			z: -4.65 + CAR.OVR,
+			th: -Math.PI / 2
+		} : {
+			x: 0,
+			z: -4.65 + (CAR.L - CAR.OVR),
+			th: Math.PI / 2
+		};
+		return {
+			template: "bays",
+			level,
+			seed,
+			way,
+			obstacles: obs,
+			kerbs: [],
+			cars,
+			lines,
+			goals: [
+				0,
+				.15,
+				.3
+			].map((d) => ({
+				...goal,
+				z: goal.z + d
+			})),
+			areas: [{
+				kind: "target",
+				pts: rect(-Wb / 2 + .06, Wb / 2 - .06, -4.94, -.06)
+			}],
+			bounds: [
+				X0,
+				X1,
+				-5.9,
+				A + D + .9
+			],
+			goal,
+			entry: {
+				x0: X0 + 1.5,
+				x1: -Wb * 2.2,
+				z0: 1.4,
+				z1: A - 1.4,
+				th: 0
+			},
+			side: -1,
+			sideWord: "bay",
+			landmarks: [{
+				name: "the near bay line",
+				x: -Wb / 2,
+				z: 0
+			}, {
+				name: "the far bay line",
+				x: Wb / 2,
+				z: 0
+			}],
+			knobs: {
+				bay: `${Wb.toFixed(2)} m wide`,
+				aisle: `${A.toFixed(2)} m`,
+				neighbours: level >= 2 ? t > .3 ? "parked off-centre" : "parked neatly" : "none",
+				opposite: oppo ? "parked cars" : "empty bays",
+				pillar: pillar || "none"
+			}
+		};
+	}
+	function build(id, level, seed, way) {
+		return id === "kerb" ? kerb(level, seed) : bays(level, seed, way);
+	}
+	//#endregion
+	//#region ../../../../../private/tmp/claude-502/-Users-adam2-projects-byd/a2601623-9589-4a1a-bbcd-cf4b270896b7/scratchpad/gen/src/generate.ts
+	var R_REAR = Math.sqrt(CAR.R_CC * CAR.R_CC - CAR.WB * CAR.WB) - CAR.TRACK / 2;
+	function solve(scene, opts = {}) {
+		const [x0, x1, z0, z1] = scene.bounds, e = scene.entry;
+		const field = new Field(scene.obstacles, x0, x1, z0, z1, scene.kerbs);
+		const done = (p) => p.x >= e.x0 && p.x <= e.x1 && p.z >= e.z0 && p.z <= e.z1 && Math.abs(Math.atan2(Math.sin(p.th - e.th), Math.cos(p.th - e.th))) < 8 * DEG;
+		const heur = (p) => {
+			const dx = Math.max(e.x0 - p.x, 0, p.x - e.x1), dz = Math.max(e.z0 - p.z, 0, p.z - e.z1);
+			return Math.hypot(dx, dz) + .5 * R_REAR * Math.abs(Math.atan2(Math.sin(p.th - e.th), Math.cos(p.th - e.th)));
+		};
+		return {
+			field,
+			plan: search(field, scene.goals, done, heur, {
+				outward: true,
+				shotHeading: e.th,
+				...opts
+			})
+		};
+	}
+	/** Deterministic: the same template, level, seed and way in always give the same level. */
+	function generate(tpl, level, seed, way, opts = {}) {
+		const t0 = performance.now(), skipped = {
+			none: 0,
+			gaveUp: 0,
+			off: 0,
+			mismatch: 0
+		};
+		const tries = opts.tries ?? 6;
+		let fallback = null, knob = level;
+		for (let k = 0; k < tries; k++) {
+			const s = seed + k * 100003;
+			const scene = build(tpl, knob, s, way);
+			const { field, plan } = solve(scene, opts);
+			if (plan.status === "none") {
+				skipped.none++;
+				continue;
+			}
+			if (plan.status === "gave-up") {
+				skipped.gaveUp++;
+				continue;
+			}
+			if (exactCheck(scene, field, plan.pieces)) {
+				skipped.mismatch++;
+				continue;
+			}
+			const m = measure(scene, field, plan.pieces);
+			const lvl = {
+				scene,
+				field,
+				plan,
+				measure: m,
+				steps: coach(scene, plan.pieces),
+				usedSeed: s,
+				knobLevel: knob,
+				skipped: { ...skipped },
+				ms: 0
+			};
+			const off = m.score - level;
+			if (Math.abs(off) > 2.5) {
+				skipped.off++;
+				if (!fallback || Math.abs(m.score - level) < Math.abs(fallback.measure.score - level)) fallback = lvl;
+				knob = Math.max(1, Math.min(10, knob - Math.sign(off)));
+				continue;
+			}
+			lvl.skipped = skipped;
+			lvl.ms = performance.now() - t0;
+			return lvl;
+		}
+		if (fallback) {
+			fallback.skipped = skipped;
+			fallback.ms = performance.now() - t0;
+		}
+		return fallback;
+	}
+	//#endregion
+	//#region ../../../../../private/tmp/claude-502/-Users-adam2-projects-byd/a2601623-9589-4a1a-bbcd-cf4b270896b7/scratchpad/gen/src/demo.ts
+	var $ = (id) => document.getElementById(id);
+	var cv = $("genCanvas");
+	var ctx = cv.getContext("2d");
+	var COL = {
+		bg: "#0d0e12",
+		asphalt: "#1c1e24",
+		pavement: "#25282e",
+		kerb: "#8e939c",
+		bay: "#d9ab2b",
+		mark: "rgba(235,232,223,.55)",
+		car: "#23262d",
+		carLine: "#6d747a",
+		wall: "#c9ccc8",
+		ink: "#ebe8df",
+		mute: "#a7afb9",
+		yellow: "#f2c230",
+		cyan: "rgba(94,208,216,.95)",
+		green: "#5ed08a"
+	};
+	var MONO = "\"IBM Plex Mono\", ui-monospace, Menlo, monospace";
+	var S = {
+		tpl: "bays",
+		way: "reverse",
+		level: 4,
+		seed: 4821,
+		L: null,
+		anim: null,
+		at: -1
+	};
+	var W = 0;
+	var H = 0;
+	var DPR = 1;
+	var view = {
+		s: 10,
+		cx: 0,
+		cz: 0
+	};
+	var pts = [];
+	var dist = [];
+	function regenerate() {
+		stop();
+		$("genStatus").textContent = "Solving…";
+		requestAnimationFrame(() => setTimeout(() => {
+			S.L = generate(S.tpl, S.level, S.seed, S.way, {
+				maxMs: Infinity,
+				maxNodes: 15e4
+			});
+			pts = S.L ? sample(S.L.plan.pieces, .05) : [];
+			dist = [];
+			let d = 0;
+			pts.forEach((p, i) => {
+				if (i) d += Math.hypot(p.x - pts[i - 1].x, p.z - pts[i - 1].z);
+				dist.push(d);
+			});
+			S.at = -1;
+			fit();
+			draw();
+			panel();
+		}, 0));
+	}
+	function fit() {
+		const L = S.L;
+		if (!L) return;
+		let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+		const add = (x, z) => {
+			x0 = Math.min(x0, x);
+			x1 = Math.max(x1, x);
+			z0 = Math.min(z0, z);
+			z1 = Math.max(z1, z);
+		};
+		for (const p of pts) {
+			add(p.x - 1, p.z - 1);
+			add(p.x + 3.6 * Math.cos(p.th), p.z - 3.6 * Math.sin(p.th));
+			add(p.x + 1, p.z + 1);
+		}
+		for (const a of L.scene.areas) if (a.kind === "target") for (const [x, z] of a.pts) add(x, z);
+		const m = 2.2;
+		x0 -= m;
+		x1 += m;
+		z0 -= m;
+		z1 += m;
+		const [bx0, bx1, bz0, bz1] = L.scene.bounds;
+		x0 = Math.max(x0, bx0);
+		x1 = Math.min(x1, bx1);
+		z0 = Math.max(z0, bz0);
+		z1 = Math.min(z1, bz1);
+		view = {
+			s: Math.min(W / (x1 - x0), H / (z1 - z0)),
+			cx: (x0 + x1) / 2,
+			cz: (z0 + z1) / 2
+		};
+	}
+	var X = (x) => W / 2 + (x - view.cx) * view.s;
+	var Z = (z) => H / 2 + (z - view.cz) * view.s;
+	function poly(P) {
+		ctx.beginPath();
+		P.forEach(([x, z], i) => i ? ctx.lineTo(X(x), Z(z)) : ctx.moveTo(X(x), Z(z)));
+		ctx.closePath();
+	}
+	function foot(px, pz, th, P) {
+		const c = Math.cos(th), s = Math.sin(th);
+		return P.map(([a, b]) => [px + a * c + b * s, pz - a * s + b * c]);
+	}
+	function drawCar(p, style) {
+		poly(foot(p.x, p.z, p.th, BODY_FP));
+		if (style === "solid") {
+			ctx.fillStyle = "rgba(16,18,22,.96)";
+			ctx.fill();
+			ctx.strokeStyle = COL.ink;
+			ctx.lineWidth = 1.6;
+			ctx.setLineDash([]);
+			ctx.stroke();
+			for (const m of MIRROR_FP) {
+				poly(foot(p.x, p.z, p.th, m));
+				ctx.fillStyle = "rgba(16,18,22,.96)";
+				ctx.fill();
+				ctx.lineWidth = 1;
+				ctx.stroke();
+			}
+			poly(foot(p.x, p.z, p.th, [
+				[3.36, 0],
+				[2.96, -.27],
+				[2.96, .27]
+			]));
+			ctx.fillStyle = COL.yellow;
+			ctx.fill();
+		} else {
+			ctx.strokeStyle = style === "final" ? COL.green : "rgba(235,232,223,.45)";
+			ctx.lineWidth = 1.2;
+			ctx.setLineDash([5, 4]);
+			ctx.stroke();
+			ctx.setLineDash([]);
+		}
+	}
+	function draw() {
+		ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+		ctx.fillStyle = COL.bg;
+		ctx.fillRect(0, 0, W, H);
+		const L = S.L;
+		if (!L) {
+			ctx.fillStyle = COL.mute;
+			ctx.font = `500 13px ${MONO}`;
+			ctx.fillText("No level for these settings", 16, 28);
+			return;
+		}
+		const sc = L.scene, [bx0, bx1, bz0, bz1] = sc.bounds;
+		ctx.fillStyle = COL.asphalt;
+		ctx.fillRect(X(bx0), Z(bz0), (bx1 - bx0) * view.s, (bz1 - bz0) * view.s);
+		for (const a of sc.areas) if (a.kind === "pavement") {
+			poly(a.pts);
+			ctx.fillStyle = COL.pavement;
+			ctx.fill();
+		}
+		ctx.strokeStyle = COL.kerb;
+		ctx.lineWidth = 1;
+		for (const k of sc.kerbs) {
+			const z = k.c / k.nz;
+			ctx.beginPath();
+			ctx.moveTo(X(bx0), Z(z));
+			ctx.lineTo(X(bx1), Z(z));
+			ctx.stroke();
+		}
+		ctx.lineWidth = Math.max(1, .1 * view.s);
+		for (const [x0, z0, x1, z1] of sc.lines) {
+			ctx.strokeStyle = sc.template === "bays" ? COL.bay : COL.mark;
+			ctx.setLineDash(sc.template === "kerb" ? [3 * view.s, 3 * view.s] : []);
+			ctx.beginPath();
+			ctx.moveTo(X(x0), Z(z0));
+			ctx.lineTo(X(x1), Z(z1));
+			ctx.stroke();
+		}
+		ctx.setLineDash([]);
+		for (const a of sc.areas) if (a.kind === "target") {
+			poly(a.pts);
+			ctx.fillStyle = "rgba(94,208,138,.12)";
+			ctx.fill();
+			ctx.strokeStyle = "rgba(94,208,138,.6)";
+			ctx.setLineDash([4, 4]);
+			ctx.lineWidth = 1;
+			ctx.stroke();
+			ctx.setLineDash([]);
+		}
+		for (const o of sc.obstacles) {
+			if (o.kind === "circle") {
+				ctx.beginPath();
+				ctx.arc(X(o.x), Z(o.z), o.r * view.s, 0, 7);
+				ctx.fillStyle = COL.wall;
+				ctx.fill();
+				continue;
+			}
+			poly(o.pts);
+			if (o.cls === "car") {
+				ctx.fillStyle = COL.car;
+				ctx.fill();
+				ctx.strokeStyle = COL.carLine;
+				ctx.lineWidth = 1;
+				ctx.stroke();
+			} else {
+				ctx.fillStyle = "rgba(201,204,200,.85)";
+				ctx.fill();
+			}
+		}
+		for (let i = 1; i < pts.length; i++) {
+			const a = pts[i - 1], b = pts[i];
+			ctx.strokeStyle = b.dir > 0 ? COL.yellow : COL.cyan;
+			ctx.lineWidth = 2;
+			ctx.setLineDash(b.dir > 0 ? [] : [6, 4]);
+			ctx.beginPath();
+			ctx.moveTo(X(a.x), Z(a.z));
+			ctx.lineTo(X(b.x), Z(b.z));
+			ctx.stroke();
+		}
+		ctx.setLineDash([]);
+		const pcs = L.plan.pieces;
+		pcs.forEach((p, i) => {
+			if (i < pcs.length - 1 && pcs[i + 1].dir !== p.dir) drawCar(p.to, "ghost");
+		});
+		drawCar(pcs[pcs.length - 1].to, "final");
+		const placed = [];
+		L.steps.forEach((st) => {
+			const ox = X(st.end.x), oz = Z(st.end.z), done = S.at >= 0 && stepAt(S.at) > st.n - 1;
+			let x = ox, z = oz;
+			for (let k = 1; placed.some(([px, pz]) => Math.hypot(px - x, pz - z) < 21) && k < 12; k++) {
+				x = ox + 22 * k * .6;
+				z = oz + 22 * k * .8;
+			}
+			placed.push([x, z]);
+			if (x !== ox) {
+				ctx.strokeStyle = "rgba(242,194,48,.7)";
+				ctx.lineWidth = 1;
+				ctx.beginPath();
+				ctx.moveTo(ox, oz);
+				ctx.lineTo(x, z);
+				ctx.stroke();
+				ctx.beginPath();
+				ctx.arc(ox, oz, 2.5, 0, 7);
+				ctx.fillStyle = COL.yellow;
+				ctx.fill();
+			}
+			ctx.beginPath();
+			ctx.arc(x, z, 10, 0, 7);
+			ctx.fillStyle = done ? COL.yellow : "#0d0e12";
+			ctx.fill();
+			ctx.strokeStyle = COL.yellow;
+			ctx.lineWidth = 1.5;
+			ctx.stroke();
+			ctx.fillStyle = done ? "#0d0e12" : COL.yellow;
+			ctx.font = `600 11px ${MONO}`;
+			ctx.textAlign = "center";
+			ctx.textBaseline = "middle";
+			ctx.fillText(String(st.n), x, z + .5);
+		});
+		drawCar(S.at >= 0 ? pts[S.at] : pts[0], "solid");
+		const m = [
+			1,
+			2,
+			5,
+			10,
+			20
+		].find((n) => n * view.s >= 50) || 20, w = m * view.s, y = H - 12;
+		ctx.fillStyle = "rgba(13,14,18,.8)";
+		ctx.fillRect(6, H - 26, w + 52, 22);
+		ctx.strokeStyle = COL.ink;
+		ctx.lineWidth = 1;
+		ctx.beginPath();
+		ctx.moveTo(12, y);
+		ctx.lineTo(12 + w, y);
+		ctx.moveTo(12, y - 4);
+		ctx.lineTo(12, y);
+		ctx.moveTo(12 + w, y - 4);
+		ctx.lineTo(12 + w, y);
+		ctx.stroke();
+		ctx.fillStyle = COL.ink;
+		ctx.font = `500 10px ${MONO}`;
+		ctx.textAlign = "left";
+		ctx.textBaseline = "middle";
+		ctx.fillText(`${m} m`, 18 + w, y - 1);
+	}
+	/** Which coach step a route sample belongs to. */
+	function stepAt(i) {
+		const L = S.L;
+		const piece = pts[i].i;
+		const k = L.steps.findIndex((s) => s.pieceEnd >= piece);
+		return k < 0 ? L.steps.length - 1 : k;
+	}
+	function panel() {
+		const L = S.L, stats = $("genStats"), list = $("genSteps");
+		if (!L) {
+			stats.innerHTML = "";
+			list.innerHTML = "";
+			$("genStatus").textContent = "No route found for these settings. Try another seed.";
+			return;
+		}
+		const m = L.measure, sk = L.skipped;
+		const skippedText = [
+			sk.none && `${sk.none} with no route`,
+			sk.gaveUp && `${sk.gaveUp} gave up`,
+			sk.off && `${sk.off} eased to match the level`,
+			sk.mismatch && `${sk.mismatch} failed the exact check`
+		].filter(Boolean).join(", ") || "none";
+		const rows = [
+			["Level", `asked ${S.level} · measured ${m.score.toFixed(1)}`],
+			["Par", `${m.moves} ${m.moves === 1 ? "move" : "moves"}`],
+			["Route", `${m.length.toFixed(1)} m`],
+			["Tightest on the way in", `${Math.round(m.minClear * 100)} cm`],
+			...Object.entries(L.scene.knobs).map(([k, v]) => [k[0].toUpperCase() + k.slice(1), String(v)]),
+			["Solved in", `${Math.round(L.ms)} ms`],
+			["Seeds skipped", skippedText]
+		];
+		stats.replaceChildren(...rows.map(([k, v]) => {
+			const d = document.createElement("div");
+			const dt = document.createElement("dt");
+			dt.textContent = k;
+			const dd = document.createElement("dd");
+			dd.textContent = v;
+			d.append(dt, dd);
+			return d;
+		}));
+		list.replaceChildren(...L.steps.map((st) => {
+			const li = document.createElement("li");
+			const t = document.createElement("span");
+			t.textContent = st.text;
+			const d = document.createElement("small");
+			d.textContent = st.detail;
+			li.append(t, d);
+			return li;
+		}));
+		$("genStatus").textContent = `${S.tpl === "kerb" ? "Kerb" : "Bays"} · level ${S.level} · seed ${S.seed}${L.knobLevel !== S.level ? ` (settings eased to level ${L.knobLevel})` : ""}`;
+		cv.setAttribute("aria-label", `Generated ${S.tpl === "kerb" ? "parallel parking space" : "parking bay"}, level ${S.level}, par ${m.moves} moves. Steps: ${L.steps.map((s) => s.text).join(" ")}`);
+		highlight();
+	}
+	function highlight() {
+		const k = S.at >= 0 ? stepAt(S.at) : -1;
+		[...$("genSteps").children].forEach((li, i) => li.classList.toggle("now", i === k));
+	}
+	function stop() {
+		if (S.anim) cancelAnimationFrame(S.anim.raf);
+		S.anim = null;
+		$("genShow").textContent = "Show me";
+	}
+	function play() {
+		if (!S.L || !pts.length) return;
+		if (S.anim) {
+			stop();
+			return;
+		}
+		$("genShow").textContent = "Stop";
+		const speed = 1.6, pause = .6;
+		const times = [];
+		let t = 0;
+		pts.forEach((p, i) => {
+			if (i) {
+				t += (dist[i] - dist[i - 1]) / speed;
+				if (p.dir !== pts[i - 1].dir) t += pause;
+			}
+			times.push(t);
+		});
+		const t0 = performance.now();
+		const tick = (now) => {
+			const el = (now - t0) / 1e3;
+			let i = times.findIndex((x) => x >= el);
+			if (i < 0) i = pts.length - 1;
+			S.at = i;
+			draw();
+			highlight();
+			if (el < times[times.length - 1] + 1) S.anim = {
+				t0,
+				raf: requestAnimationFrame(tick)
+			};
+			else {
+				S.anim = null;
+				$("genShow").textContent = "Show me again";
+			}
+		};
+		S.anim = {
+			t0,
+			raf: requestAnimationFrame(tick)
+		};
+	}
+	function resize() {
+		const w = cv.parentElement.clientWidth, h = Math.round(Math.min(520, Math.max(300, w * .6)));
+		DPR = Math.min(window.devicePixelRatio || 1, 2);
+		W = w;
+		H = h;
+		cv.width = Math.round(w * DPR);
+		cv.height = Math.round(h * DPR);
+		cv.style.height = h + "px";
+		fit();
+		draw();
+	}
+	function press(group, attr, val) {
+		document.querySelectorAll(`#${group} button`).forEach((b) => b.setAttribute("aria-pressed", String(b.dataset[attr] === val)));
+	}
+	document.querySelectorAll("#genTpl button").forEach((b) => b.addEventListener("click", () => {
+		S.tpl = b.dataset.tpl;
+		press("genTpl", "tpl", S.tpl);
+		$("genWay").hidden = S.tpl === "kerb";
+		regenerate();
+	}));
+	document.querySelectorAll("#genWay button").forEach((b) => b.addEventListener("click", () => {
+		S.way = b.dataset.way;
+		press("genWay", "way", S.way);
+		regenerate();
+	}));
+	var lv = $("genLevel");
+	lv.addEventListener("input", () => {
+		$("genLevelOut").textContent = lv.value;
+	});
+	lv.addEventListener("change", () => {
+		S.level = +lv.value;
+		regenerate();
+	});
+	var sd = $("genSeed");
+	sd.addEventListener("change", () => {
+		const v = Math.max(1, Math.min(99999, Math.round(+sd.value) || 1));
+		sd.value = String(v);
+		S.seed = v;
+		regenerate();
+	});
+	$("genNew").addEventListener("click", () => {
+		S.seed = 1 + Math.floor(Math.random() * 99999);
+		sd.value = String(S.seed);
+		regenerate();
+	});
+	$("genShow").addEventListener("click", play);
+	window.addEventListener("resize", resize);
+	resize();
+	regenerate();
+	//#endregion
+})();
+
+</script>
+</html>
