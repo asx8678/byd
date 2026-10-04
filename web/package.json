@@ -1,0 +1,21 @@
+{
+  "name": "atto2-garage-trainer",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Parking trainer for a BYD Atto 2 in a surveyed underground garage: a plan view with the car's path, parking sensors and touches.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "build:artifact": "tsc --noEmit && vite build --mode artifact --outDir dist-artifact && node scripts/artifact.mjs",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3"
+  }
+}

@@ -1,0 +1,114 @@
+/* Layout: the plan of the garage fills the screen; top strip = readouts; bottom = steering wheel (left) and pedals (right).
+   Single dark theme by design: an underground garage at night. */
+:root{
+  --bg:#121317; --panel:rgba(18,19,24,.78); --panel-line:rgba(255,255,255,.10);
+  --fg:#ebe8df; --muted:#9b998f; --accent:#f2c230; --accent-2:#2f6fd1;
+  --ok:#5ed08a; --warn:#f0a53a; --bad:#ec5b4f;
+  --font-ui:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-num:"Barlow Condensed","Barlow",system-ui,sans-serif;
+  color-scheme:dark;
+}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-ui);overflow:hidden;-webkit-text-size-adjust:100%}
+body{touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;font-size:14px;line-height:1.35}
+[hidden]{display:none!important}
+#app{position:fixed;inset:0;overflow:hidden}
+#flash{position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 0 0 rgba(236,91,79,0);transition:box-shadow .25s}
+#flash.on{box-shadow:inset 0 0 60px 18px rgba(236,91,79,.75);transition:none}
+/* parking-sensor display on the main view: edge glow toward the obstacle, car graphic with zone bands, STOP card */
+.edge{position:absolute;pointer-events:none;opacity:0}
+#edgeF{left:0;right:0;top:0;height:24%;background:linear-gradient(to bottom,rgba(236,91,79,.8),rgba(236,91,79,0))}
+#edgeR{left:0;right:0;bottom:0;height:24%;background:linear-gradient(to top,rgba(236,91,79,.8),rgba(236,91,79,0))}
+#edgeL{top:0;bottom:0;left:0;width:16%;background:linear-gradient(to right,rgba(236,91,79,.8),rgba(236,91,79,0))}
+#edgeRt{top:0;bottom:0;right:0;width:16%;background:linear-gradient(to left,rgba(236,91,79,.8),rgba(236,91,79,0))}
+#pdcWrap{position:absolute;z-index:1;right:10px;top:0;width:clamp(84px,22vw,108px);display:flex;flex-direction:column;align-items:center;gap:4px;pointer-events:none;opacity:0;transition:opacity .3s}
+#pdcWrap.show{opacity:1}
+#pdcCv{display:block;width:100%;aspect-ratio:3/4;filter:drop-shadow(0 2px 6px rgba(0,0,0,.6))}
+#pdcTxt{font:600 10px/1 var(--font-num);letter-spacing:.07em;text-transform:uppercase;color:var(--muted);background:var(--panel);border:1px solid var(--panel-line);border-radius:999px;padding:5px 9px;white-space:nowrap;font-variant-numeric:tabular-nums;backdrop-filter:blur(6px)}
+#pdcTxt b{color:var(--fg);font-size:13px;margin-left:4px}
+#pdcTxt.ok b{color:var(--ok)} #pdcTxt.warn b{color:var(--warn)} #pdcTxt.bad{border-color:rgba(236,91,79,.6)} #pdcTxt.bad b{color:var(--bad)}
+#pdcStop{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);font:700 clamp(26px,8vw,40px)/1 var(--font-num);letter-spacing:.1em;color:#fff;background:rgba(236,91,79,.92);border:2px solid rgba(255,255,255,.75);border-radius:12px;padding:9px 18px 8px;text-align:center;pointer-events:none;opacity:0;transition:opacity .15s;z-index:2;box-shadow:0 8px 30px rgba(0,0,0,.45)}
+#pdcStop small{display:block;font:600 12px/1 var(--font-num);letter-spacing:.08em;margin-top:5px;color:rgba(255,255,255,.92);font-variant-numeric:tabular-nums}
+#pdcStop.show{opacity:1;animation:pdcBlink .6s steps(1,end) infinite}
+@keyframes pdcBlink{50%{background:rgba(236,91,79,.6)}}
+@media (orientation:landscape){ #pdcWrap{width:clamp(64px,10vw,84px);right:calc(clamp(92px,24vw,130px) + 24px)} }
+
+/* ---- top HUD ---- */
+#hud{position:absolute;z-index:1;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 8px) 10px 0;display:flex;gap:8px;align-items:flex-start;pointer-events:none}
+#readout{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.row{display:flex;gap:6px;flex-wrap:wrap}
+.tile{background:var(--panel);border:1px solid var(--panel-line);border-radius:10px;padding:5px 9px 6px;min-width:0;backdrop-filter:blur(6px)}
+.tile .k{font:600 10px/1 var(--font-num);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.tile .v{font:600 22px/1.05 var(--font-num);font-variant-numeric:tabular-nums;white-space:nowrap}
+.tile .v small{font-size:12px;color:var(--muted);margin-left:2px;font-weight:500}
+.tile.speed{flex:1}
+.tile.gear .v{color:var(--accent)}
+#sensors{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:5px 7px 6px}
+#sensors div{font:600 10px/1 var(--font-num);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+#sensors b{display:block;font:600 17px/1.1 var(--font-num);font-variant-numeric:tabular-nums;color:var(--fg)}
+#sensors b.ok{color:var(--ok)} #sensors b.warn{color:var(--warn)} #sensors b.bad{color:var(--bad)}
+#sensors div.armed{color:var(--accent)}
+#toolbar{display:flex;gap:6px;pointer-events:auto;flex-wrap:wrap}
+#toolbar button{font:600 11.5px/1 var(--font-num);letter-spacing:.05em;text-transform:uppercase;color:var(--fg);background:var(--panel);border:1px solid var(--panel-line);border-radius:999px;padding:9px 10px;backdrop-filter:blur(6px);cursor:pointer}
+#toolbar button:active{background:rgba(255,255,255,.14)}
+#toolbar button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---- plan view: the whole screen is a map of the bays with the path the car takes at the current steering ---- */
+#plan{position:absolute;inset:0;background:#0d0e12;overflow:hidden}
+#planCv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+#planInfo{position:absolute;left:6px;top:6px;background:rgba(12,13,17,.8);padding:5px 8px;border-radius:8px;font:600 14px/1.28 var(--font-num);font-variant-numeric:tabular-nums;white-space:nowrap;pointer-events:none}
+#planInfo span{font:600 10.5px/1 var(--font-num);letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-right:5px}
+#planBtns{position:absolute;right:6px;top:6px;display:flex;gap:6px}
+#planBtns button{height:30px;padding:0 10px;border-radius:8px;background:rgba(12,13,17,.84);border:1px solid var(--panel-line);color:var(--fg);font:600 12.5px/1 var(--font-num);letter-spacing:.05em;cursor:pointer}
+#planBtns button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#planFoot{position:absolute;left:6px;right:8px;bottom:6px;display:flex;justify-content:space-between;align-items:flex-end;gap:10px;font:600 13px/1.2 var(--font-num);color:var(--fg);pointer-events:none;font-variant-numeric:tabular-nums}
+#planPred{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:rgba(12,13,17,.78);padding:3px 7px;border-radius:6px}
+#planPred.bad{color:#ff8a7a}
+#planScale{flex:none;color:var(--muted);white-space:nowrap;text-shadow:0 1px 2px #000}
+#planScale i{display:inline-block;height:0;border-bottom:2px solid var(--muted);margin-right:5px;vertical-align:middle}
+
+/* ---- bottom controls ---- */
+#controls{position:absolute;z-index:1;left:0;right:0;bottom:0;padding:0 12px calc(env(safe-area-inset-bottom,0px) + 10px);display:flex;justify-content:space-between;align-items:flex-end;gap:10px;pointer-events:none}
+#wheelWrap{pointer-events:auto;display:flex;flex-direction:column;align-items:center;gap:6px;touch-action:none}
+#wheelSvg{width:clamp(150px,42vw,230px);height:auto;display:block;transform-origin:50% 50%;filter:drop-shadow(0 6px 14px rgba(0,0,0,.5));will-change:transform}
+#steerInfo{font:600 12px/1 var(--font-num);letter-spacing:.05em;color:var(--muted);text-transform:uppercase;font-variant-numeric:tabular-nums;white-space:nowrap}
+#steerInfo b{color:var(--fg);font-size:14px}
+#btnCenter{font:600 12px/1 var(--font-num);letter-spacing:.06em;text-transform:uppercase;color:var(--fg);background:var(--panel);border:1px solid var(--panel-line);border-radius:999px;padding:8px 14px;cursor:pointer}
+#pedals{pointer-events:auto;display:flex;flex-direction:column;gap:10px;touch-action:none}
+.pedal{width:clamp(92px,24vw,130px);height:clamp(60px,15vw,84px);border-radius:14px;border:1px solid var(--panel-line);background:var(--panel);color:var(--fg);font:700 24px/1 var(--font-num);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;backdrop-filter:blur(6px);cursor:pointer;touch-action:none}
+.pedal small{font:600 10px/1 var(--font-num);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.pedal.on{background:linear-gradient(to top,rgba(242,194,48,.5) calc(var(--lvl,0)*100%),rgba(242,194,48,.14) calc(var(--lvl,0)*100%));border-color:rgba(242,194,48,.6)}
+.pedal.rev.on{background:linear-gradient(to top,rgba(236,91,79,.45) calc(var(--lvl,0)*100%),rgba(236,91,79,.14) calc(var(--lvl,0)*100%));border-color:rgba(236,91,79,.6)}
+.pedal:focus-visible,#btnCenter:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---- banners ---- */
+#banner{position:absolute;z-index:3;width:max-content;box-sizing:border-box;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + clamp(150px,44vw,240px) + 78px);max-width:min(92vw,420px);background:var(--panel);border:1px solid var(--panel-line);border-radius:12px;padding:10px 14px;text-align:center;pointer-events:none;backdrop-filter:blur(8px);transition:opacity .3s;opacity:1}
+#banner.hide{opacity:0}
+#banner h2{margin:0 0 2px;font:700 20px/1.1 var(--font-num);letter-spacing:.02em;text-wrap:balance}
+#banner p{margin:0;color:var(--muted);font-size:13px}
+#banner.good{border-color:rgba(94,208,138,.55)} #banner.good h2{color:var(--ok)}
+#banner.bad{border-color:rgba(236,91,79,.55)} #banner.bad h2{color:var(--bad)}
+#banner .stats{display:grid;grid-template-columns:repeat(3,auto);gap:4px 14px;justify-content:center;margin-top:6px;font-variant-numeric:tabular-nums}
+#banner .stats span{font:600 10px/1 var(--font-num);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);display:block}
+#banner .stats b{font:600 16px/1.1 var(--font-num)}
+
+/* ---- sheets ---- */
+.sheet{position:absolute;left:0;right:0;bottom:0;max-height:78%;overflow:auto;background:#191a20;border-top:1px solid var(--panel-line);border-radius:16px 16px 0 0;padding:14px 16px calc(env(safe-area-inset-bottom,0px) + 18px);box-shadow:0 -12px 40px rgba(0,0,0,.5);z-index:5}
+.sheet h3{margin:0 0 10px;font:700 20px/1.1 var(--font-num);letter-spacing:.02em;display:flex;justify-content:space-between;align-items:center}
+.sheet h3 button{font:600 12px/1 var(--font-num);letter-spacing:.06em;text-transform:uppercase;color:var(--fg);background:rgba(255,255,255,.08);border:1px solid var(--panel-line);border-radius:999px;padding:8px 12px;cursor:pointer}
+.sheet h4{margin:14px 0 6px;font:600 11px/1 var(--font-num);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.sheet p,.sheet li{max-width:62ch;color:#d6d3ca;font-size:14px}
+.sheet ul{margin:0;padding-left:18px}
+.sheet li{margin:3px 0}
+.opt{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--panel-line)}
+.opt:last-child{border-bottom:0}
+.opt label{font-weight:500}
+.seg{display:flex;background:rgba(255,255,255,.06);border:1px solid var(--panel-line);border-radius:999px;padding:3px;gap:2px}
+.seg button{font:600 12px/1 var(--font-num);letter-spacing:.05em;text-transform:uppercase;color:var(--muted);background:transparent;border:0;border-radius:999px;padding:8px 12px;cursor:pointer}
+.seg button.on{background:var(--accent);color:#1a1300}
+table.dim{border-collapse:collapse;width:100%;max-width:520px;font-variant-numeric:tabular-nums;font-size:13px}
+table.dim td{padding:4px 6px 4px 0;border-bottom:1px solid var(--panel-line);vertical-align:top;color:#d6d3ca}
+table.dim td:first-child{color:var(--fg);font-weight:500;white-space:nowrap}
+table.dim td:nth-child(2){white-space:nowrap}
+kbd{font:500 12px var(--font-ui);background:rgba(255,255,255,.08);border:1px solid var(--panel-line);border-radius:5px;padding:1px 5px}
+@media (max-height:560px){ #viewLabel{display:none} }
+@media (prefers-reduced-motion:reduce){ #wheelSvg{transition:none} #banner{transition:none} #pdcStop.show{animation:none} }

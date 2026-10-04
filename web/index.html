@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Atto 2 Garage Trainer</title>
+<meta name="description" content="Parking trainer for a BYD Atto 2: a plan of the garage with the car's path at the current steering, parking sensors and touches.">
+<meta name="theme-color" content="#121317">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Atto 2 Parking">
+<link rel="icon" href="icon.svg" type="image/svg+xml" data-pwa>
+<link rel="apple-touch-icon" href="apple-touch-icon.png" data-pwa>
+<link rel="manifest" href="manifest.webmanifest" data-pwa>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap">
+</head>
+<body>
+<div id="app">
+  <section id="plan" aria-label="Plan view: wheel angles, the path at the current steering and what the car would touch first">
+    <canvas id="planCv"></canvas>
+    <div id="planInfo"></div>
+    <div id="planBtns"><button id="planMode" type="button">Whole area</button></div>
+    <div id="planFoot"><span id="planPred"></span><span id="planScale"></span></div>
+  </section>
+  <div id="flash"></div>
+  <div class="edge" id="edgeF"></div><div class="edge" id="edgeR"></div><div class="edge" id="edgeL"></div><div class="edge" id="edgeRt"></div>
+
+  <div id="hud">
+    <div id="readout">
+      <div class="row">
+        <div class="tile speed"><div class="k">Speed</div><div class="v"><span id="spd">0.0</span><small>km/h</small></div></div>
+        <div class="tile gear"><div class="k">Gear</div><div class="v" id="gear">P</div></div>
+        <div class="tile"><div class="k">Steer</div><div class="v"><span id="steerV">0°</span></div></div>
+      </div>
+      <div class="tile" style="padding:0">
+        <div id="sensors">
+          <div id="lF">Front<b id="sF">–</b></div><div id="lR">Rear<b id="sR">–</b></div><div>Left<b id="sL">–</b></div><div>Right<b id="sRt">–</b></div>
+        </div>
+      </div>
+      <div id="toolbar">
+        <button id="btnReset" type="button">Reset</button>
+        <button id="btnSettings" type="button">Setup</button>
+        <button id="btnInfo" type="button">Info</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="pdcWrap"><canvas id="pdcCv" aria-label="Parking sensor status"></canvas><div id="pdcTxt"><span id="pdcTg">Sensors</span><b id="pdcTd">clear</b></div></div>
+  <div id="pdcStop">STOP<small id="pdcStopD"></small></div>
+
+
+  <div id="banner"><h2 id="bTitle">Park in bay 561</h2><p id="bText">Coming from the left: drive along the aisle and turn left into 561, nose first. Mind pillar 560 and the concrete bench.</p><div id="bStats" class="stats" hidden></div></div>
+
+  <div id="controls">
+    <div id="wheelWrap">
+      <svg id="wheelSvg" viewBox="0 0 200 200" aria-label="Steering wheel, drag to turn">
+        <circle cx="100" cy="100" r="85" fill="none" stroke="#23242a" stroke-width="26"/>
+        <circle cx="100" cy="100" r="85" fill="none" stroke="#3a3c45" stroke-width="18"/>
+        <path d="M100 100 L26 100 M100 100 L174 100 M100 100 L100 170" stroke="#26272d" stroke-width="22" stroke-linecap="round" fill="none"/>
+        <circle cx="100" cy="100" r="31" fill="#1b1c21" stroke="#4a4d58" stroke-width="3"/>
+        <text x="100" y="106" text-anchor="middle" font-size="17" font-weight="700" fill="#9aa0ad" font-family="Barlow Condensed, Barlow, sans-serif" letter-spacing="1">BYD</text>
+        <path d="M100 8 l-7 13 h14 z" fill="#f2c230"/>
+      </svg>
+      <div id="steerInfo"><b id="steerTurns">0.0</b> turns</div>
+      <button id="btnCenter" type="button">Straighten</button>
+    </div>
+    <div id="pedals">
+      <button class="pedal fwd" id="btnFwd" type="button" aria-label="Drive forward (hold)">▲<small>Forward</small></button>
+      <button class="pedal rev" id="btnRev" type="button" aria-label="Reverse (hold)">▼<small>Reverse</small></button>
+    </div>
+  </div>
+
+  <div class="sheet" id="sheetSettings" hidden>
+    <h3>Settings <button type="button" data-close="sheetSettings">Close</button></h3>
+    <div class="opt"><label>Start, as you face the bays</label><div class="seg" data-opt="start"><button data-v="left" type="button">Left</button><button data-v="right" type="button">Right</button><button data-v="across" type="button">Across</button></div></div>
+    <div class="opt"><label>Target bay</label><div class="seg" data-opt="bay"><button data-v="561" type="button">561</button><button data-v="560" type="button">560</button></div></div>
+    <div class="opt"><label>Steering lock-to-lock</label><div class="seg" data-opt="steer"><button data-v="2.5" type="button">2.5</button><button data-v="2.7" type="button">2.7</button><button data-v="3.0" type="button">3.0</button><button data-v="1" type="button">1 (quick)</button></div></div>
+    <div class="opt"><label>Steering self-centres when rolling</label><div class="seg" data-opt="center"><button data-v="on" type="button">On</button><button data-v="off" type="button">Off</button></div></div>
+    <div class="opt"><label>Parking sensors (beeps and display)</label><div class="seg" data-opt="pdc"><button data-v="on" type="button">On</button><button data-v="off" type="button">Off</button></div></div>
+    <h4>Controls</h4>
+    <p>Hold <b>Forward</b> or <b>Reverse</b> to move: a short press creeps at about 4 km/h, keep holding and the car accelerates up to 20 km/h (10 km/h in reverse), the button fills up as the speed stage rises; release and the car brakes. Drag the wheel round like a real steering wheel. The screen is a map of the bays, north up: it draws the path the car takes at the current steering, an outline of the car every 0.8 m along it and, in red, where it would touch something first; Whole area zooms out to the bays and the aisle, Follow car keeps the car in the middle. Keyboard: <kbd>←</kbd> <kbd>→</kbd> steer, <kbd>↑</kbd> <kbd>↓</kbd> drive, <kbd>Space</kbd> straighten, <kbd>X</kbd> reset.</p>
+  </div>
+
+  <div class="sheet" id="sheetInfo" hidden>
+    <h3>Garage layout <button type="button" data-close="sheetInfo">Close</button></h3>
+    <p>The bays, pillars and walls come from the photo survey made in your other session, scaled from your Atto 2's rear track and wheelbase, the grey Clio's track and the drain cover in the aisle: about ±20 cm near 561, more further out. Your new photos of the empty bays agree on the bay widths and on where pillar 560 and 562 sit; they could not pin the depth closer than about ±0.4 m, so it keeps the survey's 4.72 m. The car's outline is traced from BYD's three-view drawing.</p>
+    <h4>BYD Atto 2</h4>
+    <table class="dim">
+      <tr><td>Length / width / height</td><td>4.33 / 1.83 / 1.675 m</td><td>DM-i; the EV is 4.31 m long</td></tr>
+      <tr><td>Wheelbase, track</td><td>2.62 m, 1.57 m</td><td>same track front and rear</td></tr>
+      <tr><td>Overhangs front / rear</td><td>0.883 / 0.827 m</td><td>BYD spec sheet</td></tr>
+      <tr><td>Tyres, kerb weight</td><td>215/55 R17, 1,510–1,620 kg</td><td>wheel Ø 0.67 m, 150 mm clearance</td></tr>
+      <tr><td>Turning radius, kerb to kerb</td><td>5.3 m</td><td>outer front wheel; 10.6 m circle</td></tr>
+      <tr><td>Turning radius, wall to wall</td><td>5.9 m</td><td>what the outer front corner sweeps</td></tr>
+      <tr><td>Rear-axle circle at full lock</td><td>3.82 m</td><td>the inner rear wheel runs 0.8 m inside it</td></tr>
+      <tr><td>Road-wheel angle at full lock</td><td>34.4°</td><td>inner wheel 40.8°, outer 29.6° (Ackermann)</td></tr>
+      <tr><td>Steering ratio, lock to lock</td><td>≈14:1, 2.7 turns</td><td>not published by BYD; typical for its electric rack, adjustable in Setup</td></tr>
+    </table>
+    <h4>Driving model</h4>
+    <p>Kinematic single-track model about the rear axle, which is accurate at parking speed: the car pivots around a point on the rear-axle line, the inner rear wheel cuts inside the front wheels, and the front corner swings wide when reversing. The front wheels follow Ackermann angles. A short press of Forward creeps at 4 km/h; after one second of holding the target speed climbs by 4 km/h every second up to 20 km/h (reverse 3 to 10 km/h), acceleration is limited to 2 m/s² and releasing brakes at 3.5 m/s², and the steering self-centres as the car rolls (switchable). On the map the yellow lines show both leading corners; the thin cyan line is the end that swings: the inner rear wheel going forward, the outer front corner reversing.</p>
+    <h4>Bays 559–562</h4>
+    <table class="dim">
+      <tr><td>Bay 561</td><td>2.41 × 4.72 m</td><td>line centre to line centre; 0.43 m more to the room wall past the head line</td></tr>
+      <tr><td>Bay 560</td><td>2.35 m wide</td><td>pillar 560 runs along its left side</td></tr>
+      <tr><td>Bay 562</td><td>5.5 × 2.3 m</td><td>a parallel spot along the technical room, right of 561</td></tr>
+      <tr><td>Concrete bench</td><td>1.83 × 0.33 × 0.5 m</td><td>covers the right 1.03 m of 561's head and runs on to the mesh door</td></tr>
+      <tr><td>Pillar 560</td><td>0.28 × 2.15 m</td><td>a wall stub between 559 and 560, from the aisle line back; double line behind it</td></tr>
+      <tr><td>Technical-room door</td><td>1.06 × 2.02 m</td><td>mesh door in the room wall, just right of the bench</td></tr>
+      <tr><td>Pillar by 562</td><td>0.75 × 0.75 m</td><td>0.8 m back from the aisle line, bike hoop and a blue fitting at its foot</td></tr>
+    </table>
+    <h4>Aisle</h4>
+    <table class="dim">
+      <tr><td>Aisle width</td><td>5.05 m</td><td>from the aisle line of 559–561 to the low wall opposite</td></tr>
+      <tr><td>Left end</td><td>10.4 m left of the 560|561 line</td><td>the black Peugeot 208 stands against the far wall there, leaving 2.7 m</td></tr>
+      <tr><td>Right side</td><td>two pillars 2.4 m apart</td><td>the way through to the rest of the garage, past the grey Clio</td></tr>
+      <tr><td>Ceiling / beams</td><td>2.6 / 2.28 m</td><td>sprinkler and water pipes under the beams</td></tr>
+      <tr><td>Wall stripes</td><td>yellow 1.06–1.21 m, blue 1.30–1.45 m</td><td>estimated from the 561 wall in your new photo</td></tr>
+    </table>
+    <h4>Parking sensors</h4>
+    <p>Twelve ultrasonic sensors as on the car: four in each bumper (two centre, two corner angled 35° out) and two per side. Each sees a 60° cone, 1.2 m ahead, 1.5 m behind, 0.6 m to the side, so a pillar beside a door is only heard once a corner sensor catches it, just like the real system. The beeper starts slow at the edge of range, speeds up through 1.0, 0.7 and 0.45 m, and becomes a continuous tone under 30 cm. Front sensors beep a higher note than the rear. Beeps need one tap on the wheel or a pedal first (phones only play sound after a touch). The sensor graphic at the right of the map works like the car's own screen: the bands around the car light up from the outside in, the end that is listening is brighter, a STOP card appears under 30 cm in the direction of travel, and the edge of the screen glows red on the side of the obstacle.</p>
+    <h4>What counts as parked</h4>
+    <p>All four corners inside the target bay lines, car stopped, heading within 6° of straight. Nose-in (as in the photos) or reversed both count; the result card shows your centring, angle and the gap to the bench.</p>
+  </div>
+</div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

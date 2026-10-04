@@ -7,7 +7,7 @@
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap">
 <style>
-/* Layout: full-bleed WebGL view; top strip = wheel-alignment preview + readouts; bottom = steering wheel (left) and pedals (right).
+/* Layout: the plan of the garage fills the screen; top strip = readouts; bottom = steering wheel (left) and pedals (right).
    Single dark theme by design: an underground garage at night. */
 :root{
   --bg:#121317; --panel:rgba(18,19,24,.78); --panel-line:rgba(255,255,255,.10);
@@ -15,14 +15,12 @@
   --ok:#5ed08a; --warn:#f0a53a; --bad:#ec5b4f;
   --font-ui:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   --font-num:"Barlow Condensed","Barlow",system-ui,sans-serif;
-  --mini-w:clamp(104px,29vw,156px);
   color-scheme:dark;
 }
 html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-ui);overflow:hidden;-webkit-text-size-adjust:100%}
 body{touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;font-size:14px;line-height:1.35}
 [hidden]{display:none!important}
 #app{position:fixed;inset:0;overflow:hidden}
-#gl{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
 #flash{position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 0 0 rgba(236,91,79,0);transition:box-shadow .25s}
 #flash.on{box-shadow:inset 0 0 60px 18px rgba(236,91,79,.75);transition:none}
 /* parking-sensor display on the main view: edge glow toward the obstacle, car graphic with zone bands, STOP card */
@@ -31,7 +29,7 @@ body{touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit
 #edgeR{left:0;right:0;bottom:0;height:24%;background:linear-gradient(to top,rgba(236,91,79,.8),rgba(236,91,79,0))}
 #edgeL{top:0;bottom:0;left:0;width:16%;background:linear-gradient(to right,rgba(236,91,79,.8),rgba(236,91,79,0))}
 #edgeRt{top:0;bottom:0;right:0;width:16%;background:linear-gradient(to left,rgba(236,91,79,.8),rgba(236,91,79,0))}
-#pdcWrap{position:absolute;right:10px;top:0;width:clamp(84px,22vw,108px);display:flex;flex-direction:column;align-items:center;gap:4px;pointer-events:none;opacity:0;transition:opacity .3s}
+#pdcWrap{position:absolute;z-index:1;right:10px;top:0;width:clamp(84px,22vw,108px);display:flex;flex-direction:column;align-items:center;gap:4px;pointer-events:none;opacity:0;transition:opacity .3s}
 #pdcWrap.show{opacity:1}
 #pdcCv{display:block;width:100%;aspect-ratio:3/4;filter:drop-shadow(0 2px 6px rgba(0,0,0,.6))}
 #pdcTxt{font:600 10px/1 var(--font-num);letter-spacing:.07em;text-transform:uppercase;color:var(--muted);background:var(--panel);border:1px solid var(--panel-line);border-radius:999px;padding:5px 9px;white-space:nowrap;font-variant-numeric:tabular-nums;backdrop-filter:blur(6px)}
@@ -44,13 +42,7 @@ body{touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit
 @media (orientation:landscape){ #pdcWrap{width:clamp(64px,10vw,84px);right:calc(clamp(92px,24vw,130px) + 24px)} }
 
 /* ---- top HUD ---- */
-#hud{position:absolute;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 8px) 10px 0;display:flex;gap:8px;align-items:flex-start;pointer-events:none}
-#miniWrap{width:var(--mini-w);flex:none;background:transparent;border:1px solid var(--panel-line);border-radius:4px;overflow:hidden;pointer-events:auto;cursor:pointer;-webkit-tap-highlight-color:transparent}
-#miniWrap.collapsed{width:auto;border-radius:999px;background:var(--panel);backdrop-filter:blur(6px)}
-#miniWrap.collapsed #mini{display:none}
-#miniWrap.collapsed #miniCap{border-top:0;padding:9px 12px;color:var(--fg);white-space:nowrap}
-#mini{display:block;width:100%;aspect-ratio:3/4}
-#miniCap{font:600 10px/1 var(--font-num);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:5px 7px;border-top:1px solid var(--panel-line);background:var(--panel);backdrop-filter:blur(6px)}
+#hud{position:absolute;z-index:1;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 8px) 10px 0;display:flex;gap:8px;align-items:flex-start;pointer-events:none}
 #readout{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
 .row{display:flex;gap:6px;flex-wrap:wrap}
 .tile{background:var(--panel);border:1px solid var(--panel-line);border-radius:10px;padding:5px 9px 6px;min-width:0;backdrop-filter:blur(6px)}
@@ -69,23 +61,22 @@ body{touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit
 #toolbar button:active{background:rgba(255,255,255,.14)}
 #toolbar button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
-/* ---- plan view: a map of the bays with the path the car takes at the current steering ---- */
-#plan{position:absolute;left:10px;right:10px;top:0;height:220px;border-radius:12px;background:#0d0e12;border:1px solid var(--panel-line);overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+/* ---- plan view: the whole screen is a map of the bays with the path the car takes at the current steering ---- */
+#plan{position:absolute;inset:0;background:#0d0e12;overflow:hidden}
 #planCv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
 #planInfo{position:absolute;left:6px;top:6px;background:rgba(12,13,17,.8);padding:5px 8px;border-radius:8px;font:600 14px/1.28 var(--font-num);font-variant-numeric:tabular-nums;white-space:nowrap;pointer-events:none}
 #planInfo span{font:600 10.5px/1 var(--font-num);letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-right:5px}
 #planBtns{position:absolute;right:6px;top:6px;display:flex;gap:6px}
 #planBtns button{height:30px;padding:0 10px;border-radius:8px;background:rgba(12,13,17,.84);border:1px solid var(--panel-line);color:var(--fg);font:600 12.5px/1 var(--font-num);letter-spacing:.05em;cursor:pointer}
-#planBtns button:focus-visible,#planShow:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#planBtns button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 #planFoot{position:absolute;left:6px;right:8px;bottom:6px;display:flex;justify-content:space-between;align-items:flex-end;gap:10px;font:600 13px/1.2 var(--font-num);color:var(--fg);pointer-events:none;font-variant-numeric:tabular-nums}
 #planPred{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:rgba(12,13,17,.78);padding:3px 7px;border-radius:6px}
 #planPred.bad{color:#ff8a7a}
 #planScale{flex:none;color:var(--muted);white-space:nowrap;text-shadow:0 1px 2px #000}
 #planScale i{display:inline-block;height:0;border-bottom:2px solid var(--muted);margin-right:5px;vertical-align:middle}
-#planShow{position:absolute;left:10px;top:0;font:600 11.5px/1 var(--font-num);letter-spacing:.05em;text-transform:uppercase;color:var(--fg);background:var(--panel);border:1px solid var(--panel-line);border-radius:999px;padding:9px 12px;backdrop-filter:blur(6px);cursor:pointer}
 
 /* ---- bottom controls ---- */
-#controls{position:absolute;left:0;right:0;bottom:0;padding:0 12px calc(env(safe-area-inset-bottom,0px) + 10px);display:flex;justify-content:space-between;align-items:flex-end;gap:10px;pointer-events:none}
+#controls{position:absolute;z-index:1;left:0;right:0;bottom:0;padding:0 12px calc(env(safe-area-inset-bottom,0px) + 10px);display:flex;justify-content:space-between;align-items:flex-end;gap:10px;pointer-events:none}
 #wheelWrap{pointer-events:auto;display:flex;flex-direction:column;align-items:center;gap:6px;touch-action:none}
 #wheelSvg{width:clamp(150px,42vw,230px);height:auto;display:block;transform-origin:50% 50%;filter:drop-shadow(0 6px 14px rgba(0,0,0,.5));will-change:transform}
 #steerInfo{font:600 12px/1 var(--font-num);letter-spacing:.05em;color:var(--muted);text-transform:uppercase;font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -108,9 +99,6 @@ body{touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit
 #banner .stats{display:grid;grid-template-columns:repeat(3,auto);gap:4px 14px;justify-content:center;margin-top:6px;font-variant-numeric:tabular-nums}
 #banner .stats span{font:600 10px/1 var(--font-num);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);display:block}
 #banner .stats b{font:600 16px/1.1 var(--font-num)}
-#viewLabel{position:absolute;left:50%;top:48%;transform:translate(-50%,-50%);transition:opacity .4s;opacity:1;z-index:2}
-#viewLabel.hide{opacity:0}
-#viewLabel{font:600 11px/1 var(--font-num);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);pointer-events:none;background:var(--panel);padding:6px 10px;border-radius:999px;border:1px solid var(--panel-line)}
 
 /* ---- sheets ---- */
 .sheet{position:absolute;left:0;right:0;bottom:0;max-height:78%;overflow:auto;background:#191a20;border-top:1px solid var(--panel-line);border-radius:16px 16px 0 0;padding:14px 16px calc(env(safe-area-inset-bottom,0px) + 18px);box-shadow:0 -12px 40px rgba(0,0,0,.5);z-index:5}
@@ -137,15 +125,16 @@ kbd{font:500 12px var(--font-ui);background:rgba(255,255,255,.08);border:1px sol
 </head>
 <body>
 <div id="app">
-  <canvas id="gl" aria-label="3D parking view"></canvas>
+  <section id="plan" aria-label="Plan view: wheel angles, the path at the current steering and what the car would touch first">
+    <canvas id="planCv"></canvas>
+    <div id="planInfo"></div>
+    <div id="planBtns"><button id="planMode" type="button">Whole area</button></div>
+    <div id="planFoot"><span id="planPred"></span><span id="planScale"></span></div>
+  </section>
   <div id="flash"></div>
   <div class="edge" id="edgeF"></div><div class="edge" id="edgeR"></div><div class="edge" id="edgeL"></div><div class="edge" id="edgeRt"></div>
 
   <div id="hud">
-    <div id="miniWrap">
-      <canvas id="mini" aria-label="Wheel alignment and surroundings preview"></canvas>
-      <div id="miniCap">360° view · tap to hide</div>
-    </div>
     <div id="readout">
       <div class="row">
         <div class="tile speed"><div class="k">Speed</div><div class="v"><span id="spd">0.0</span><small>km/h</small></div></div>
@@ -158,7 +147,6 @@ kbd{font:500 12px var(--font-ui);background:rgba(255,255,255,.08);border:1px sol
         </div>
       </div>
       <div id="toolbar">
-        <button id="btnView" type="button">Cam: Chase</button>
         <button id="btnReset" type="button">Reset</button>
         <button id="btnSettings" type="button">Setup</button>
         <button id="btnInfo" type="button">Info</button>
@@ -168,15 +156,7 @@ kbd{font:500 12px var(--font-ui);background:rgba(255,255,255,.08);border:1px sol
 
   <div id="pdcWrap"><canvas id="pdcCv" aria-label="Parking sensor status"></canvas><div id="pdcTxt"><span id="pdcTg">Sensors</span><b id="pdcTd">clear</b></div></div>
   <div id="pdcStop">STOP<small id="pdcStopD"></small></div>
-  <section id="plan" aria-label="Plan view: wheel angles, the path at the current steering and what the car would touch first">
-    <canvas id="planCv"></canvas>
-    <div id="planInfo"></div>
-    <div id="planBtns"><button id="planMode" type="button">Whole area</button><button id="planHide" type="button" aria-label="Hide the plan view">Hide</button></div>
-    <div id="planFoot"><span id="planPred"></span><span id="planScale"></span></div>
-  </section>
-  <button id="planShow" type="button" hidden>Show plan</button>
 
-  <div id="viewLabel">Drag the view to look around</div>
 
   <div id="banner"><h2 id="bTitle">Park in bay 561</h2><p id="bText">Coming from the left: drive along the aisle and turn left into 561, nose first. Mind pillar 560 and the concrete bench.</p><div id="bStats" class="stats" hidden></div></div>
 
@@ -205,16 +185,14 @@ kbd{font:500 12px var(--font-ui);background:rgba(255,255,255,.08);border:1px sol
     <div class="opt"><label>Target bay</label><div class="seg" data-opt="bay"><button data-v="561" type="button">561</button><button data-v="560" type="button">560</button></div></div>
     <div class="opt"><label>Steering lock-to-lock</label><div class="seg" data-opt="steer"><button data-v="2.5" type="button">2.5</button><button data-v="2.7" type="button">2.7</button><button data-v="3.0" type="button">3.0</button><button data-v="1" type="button">1 (quick)</button></div></div>
     <div class="opt"><label>Steering self-centres when rolling</label><div class="seg" data-opt="center"><button data-v="on" type="button">On</button><button data-v="off" type="button">Off</button></div></div>
-    <div class="opt"><label>Mirrors in cabin view</label><div class="seg" data-opt="mirrors"><button data-v="on" type="button">On</button><button data-v="off" type="button">Off</button></div></div>
-    <div class="opt"><label>Path guides on the floor</label><div class="seg" data-opt="guides"><button data-v="on" type="button">On</button><button data-v="off" type="button">Off</button></div></div>
     <div class="opt"><label>Parking sensors (beeps and display)</label><div class="seg" data-opt="pdc"><button data-v="on" type="button">On</button><button data-v="off" type="button">Off</button></div></div>
     <h4>Controls</h4>
-    <p>Hold <b>Forward</b> or <b>Reverse</b> to move: a short press creeps at about 4 km/h, keep holding and the car accelerates up to 20 km/h (10 km/h in reverse), the button fills up as the speed stage rises; release and the car brakes. Drag the wheel round like a real steering wheel. The 360° panel at the top is rendered live from above the car, with the yellow guidelines bending with your steering like the car's own screen. The plan card under it is a map of the bays: it draws the path the car takes at the current steering, an outline of the car every 0.8 m along it and, in red, where it would touch something first; Whole area zooms out and Hide puts it away. Drag the 3D view to look around. Keyboard: <kbd>←</kbd> <kbd>→</kbd> steer, <kbd>↑</kbd> <kbd>↓</kbd> drive, <kbd>Space</kbd> straighten, <kbd>C</kbd> view, <kbd>X</kbd> reset.</p>
+    <p>Hold <b>Forward</b> or <b>Reverse</b> to move: a short press creeps at about 4 km/h, keep holding and the car accelerates up to 20 km/h (10 km/h in reverse), the button fills up as the speed stage rises; release and the car brakes. Drag the wheel round like a real steering wheel. The screen is a map of the bays, north up: it draws the path the car takes at the current steering, an outline of the car every 0.8 m along it and, in red, where it would touch something first; Whole area zooms out to the bays and the aisle, Follow car keeps the car in the middle. Keyboard: <kbd>←</kbd> <kbd>→</kbd> steer, <kbd>↑</kbd> <kbd>↓</kbd> drive, <kbd>Space</kbd> straighten, <kbd>X</kbd> reset.</p>
   </div>
 
   <div class="sheet" id="sheetInfo" hidden>
     <h3>Garage layout <button type="button" data-close="sheetInfo">Close</button></h3>
-    <p>The bays, pillars and walls come from the photo survey made in your other session, scaled from your Atto 2's rear track and wheelbase, the grey Clio's track and the drain cover in the aisle: about ±20 cm near 561, more further out. Your new photos of the empty bays agree on the bay widths and on where pillar 560 and 562 sit; they could not pin the depth closer than about ±0.4 m, so it keeps the survey's 4.72 m. The car body is traced from BYD's three-view drawing.</p>
+    <p>The bays, pillars and walls come from the photo survey made in your other session, scaled from your Atto 2's rear track and wheelbase, the grey Clio's track and the drain cover in the aisle: about ±20 cm near 561, more further out. Your new photos of the empty bays agree on the bay widths and on where pillar 560 and 562 sit; they could not pin the depth closer than about ±0.4 m, so it keeps the survey's 4.72 m. The car's outline is traced from BYD's three-view drawing.</p>
     <h4>BYD Atto 2</h4>
     <table class="dim">
       <tr><td>Length / width / height</td><td>4.33 / 1.83 / 1.675 m</td><td>DM-i; the EV is 4.31 m long</td></tr>
@@ -228,7 +206,7 @@ kbd{font:500 12px var(--font-ui);background:rgba(255,255,255,.08);border:1px sol
       <tr><td>Steering ratio, lock to lock</td><td>≈14:1, 2.7 turns</td><td>not published by BYD; typical for its electric rack, adjustable in Setup</td></tr>
     </table>
     <h4>Driving model</h4>
-    <p>Kinematic single-track model about the rear axle, which is accurate at parking speed: the car pivots around a point on the rear-axle line, the inner rear wheel cuts inside the front wheels, and the front corner swings wide when reversing. The front wheels follow Ackermann angles. A short press of Forward creeps at 4 km/h; after one second of holding the target speed climbs by 4 km/h every second up to 20 km/h (reverse 3 to 10 km/h), acceleration is limited to 2 m/s² and releasing brakes at 3.5 m/s², and the steering self-centres as the car rolls (switchable). The yellow guidelines show both leading corners; the thin cyan line is the end that swings: the inner rear wheel going forward, the outer front corner reversing.</p>
+    <p>Kinematic single-track model about the rear axle, which is accurate at parking speed: the car pivots around a point on the rear-axle line, the inner rear wheel cuts inside the front wheels, and the front corner swings wide when reversing. The front wheels follow Ackermann angles. A short press of Forward creeps at 4 km/h; after one second of holding the target speed climbs by 4 km/h every second up to 20 km/h (reverse 3 to 10 km/h), acceleration is limited to 2 m/s² and releasing brakes at 3.5 m/s², and the steering self-centres as the car rolls (switchable). On the map the yellow lines show both leading corners; the thin cyan line is the end that swings: the inner rear wheel going forward, the outer front corner reversing.</p>
     <h4>Bays 559–562</h4>
     <table class="dim">
       <tr><td>Bay 561</td><td>2.41 × 4.72 m</td><td>line centre to line centre; 0.43 m more to the room wall past the head line</td></tr>
@@ -248,13 +226,12 @@ kbd{font:500 12px var(--font-ui);background:rgba(255,255,255,.08);border:1px sol
       <tr><td>Wall stripes</td><td>yellow 1.06–1.21 m, blue 1.30–1.45 m</td><td>estimated from the 561 wall in your new photo</td></tr>
     </table>
     <h4>Parking sensors</h4>
-    <p>Twelve ultrasonic sensors as on the car: four in each bumper (two centre, two corner angled 35° out) and two per side. Each sees a 60° cone, 1.2 m ahead, 1.5 m behind, 0.6 m to the side, so a pillar beside a door is only heard once a corner sensor catches it, just like the real system. The beeper starts slow at the edge of range, speeds up through 1.0, 0.7 and 0.45 m, and becomes a continuous tone under 30 cm. Front sensors beep a higher note than the rear. Beeps need one tap on the wheel or a pedal first (phones only play sound after a touch). The sensor graphic at the right of the 3D view works like the car's own screen: the bands around the car light up from the outside in, the end that is listening is brighter, a STOP card appears under 30 cm in the direction of travel, and the edge of the view glows red on the side of the obstacle.</p>
+    <p>Twelve ultrasonic sensors as on the car: four in each bumper (two centre, two corner angled 35° out) and two per side. Each sees a 60° cone, 1.2 m ahead, 1.5 m behind, 0.6 m to the side, so a pillar beside a door is only heard once a corner sensor catches it, just like the real system. The beeper starts slow at the edge of range, speeds up through 1.0, 0.7 and 0.45 m, and becomes a continuous tone under 30 cm. Front sensors beep a higher note than the rear. Beeps need one tap on the wheel or a pedal first (phones only play sound after a touch). The sensor graphic at the right of the map works like the car's own screen: the bands around the car light up from the outside in, the end that is listening is brighter, a STOP card appears under 30 cm in the direction of travel, and the edge of the screen glows red on the side of the obstacle.</p>
     <h4>What counts as parked</h4>
     <p>All four corners inside the target bay lines, car stopped, heading within 6° of straight. Nose-in (as in the photos) or reversed both count; the result card shows your centring, angle and the gap to the bench.</p>
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
 <script>
 (() => {
 'use strict';
@@ -296,128 +273,25 @@ const DOOR = [SU(4.06) - 0.53, SU(4.06) + 0.53];
 const STARTS = { left: [-8.6, 6.45, 0], right: [SU(7.0), SV(-0.42), Math.PI], across: [SU(3.3), SV(-3.35), 125*DEG] };   // rear-axle pose
 
 /* ---------- settings ---------- */
-const settings = { start:'left', bay:'561', steer:'2.7', mirrors:'on', guides:'on', pdc:'on', center:'on', mini:'on', plan:'on', planView:'car', layout:0 };
+const settings = { start:'left', bay:'561', steer:'2.7', mirrors:'on', guides:'on', pdc:'on', center:'on', planView:'car', layout:0 };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('atto2-garage') || '{}')); } catch (e) {}
 if (settings.steer === 'real') settings.steer = '2.7'; if (settings.steer === 'quick') settings.steer = '1';
 const saveSettings = () => { try { localStorage.setItem('atto2-garage', JSON.stringify(settings)); } catch (e) {} };
-if (settings.layout !== LAYOUT_V) { settings.layout = LAYOUT_V; settings.start = 'left'; settings.plan = 'on'; if (!BAYS[settings.bay]) settings.bay = '561'; saveSettings(); }   // new garage: start from the left, as you usually arrive
+if (settings.layout !== LAYOUT_V) { settings.layout = LAYOUT_V; settings.start = 'left'; if (!BAYS[settings.bay]) settings.bay = '561'; saveSettings(); }   // new garage: start from the left, as you usually arrive
 const LOCK = () => (parseFloat(settings.steer) || 2.7) * 180;   // steering-wheel degrees at full lock (turns lock-to-lock × 180)
 
 /* ---------- state ---------- */
-let x = 0, z = 0, th = 0, v = 0, spin = 0;           // rear-axle pose, speed, wheel roll
+let x = 0, z = 0, th = 0, v = 0;                     // rear-axle pose, speed
 let wheelAngle = 0, wheelTarget = null;              // steering wheel angle, degrees, clockwise +
-let lookYaw = 0, camMode = 'chase';
 let hits = 0, elapsed = 0, parkedShown = false, lastHitName = '', lastHitT = -9;
 let lastMoveDir = 1, started = false, inContact = false, holdT = 0;
 const input = { fwd:false, rev:false, kl:false, kr:false };
 const sensors = { front:9, rear:9, left:9, right:9 };
 
-/* ================= Three.js ================= */
-const canvas = $('gl');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, powerPreference:'high-performance' });
-const MAX_DPR = matchMedia('(pointer: coarse)').matches ? 1.5 : 2;   // phones: 1.5x is sharp and shades ~45% fewer pixels than 2x
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, MAX_DPR));
-renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.95;
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0f1013);
-scene.fog = new THREE.Fog(0x0f1013, 18, 46);
-const camera = new THREE.PerspectiveCamera(60, 1, 0.08, 120);
-
-/* ---------- procedural textures ---------- */
-function canvasTex(w, h, draw) {
-  const c = document.createElement('canvas'); c.width = w; c.height = h;
-  draw(c.getContext('2d'), w, h);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
-}
-const PX = 48; // floor px per metre
-const floorW = LOT.x1 - LOT.x0, floorD = LOT.z1 - LOT.z0;
-let floorTex;
-function drawFloor(ctx, W, H) {
-  const sx = W / floorW, sz = H / floorD;
-  const X = wx => (wx - LOT.x0) * sx, Z = wz => (wz - LOT.z0) * sz;
-  ctx.fillStyle = '#8c8a83'; ctx.fillRect(0, 0, W, H);
-  // concrete mottling
-  for (let i = 0; i < 2600; i++) {
-    const g = 110 + Math.random()*50; ctx.fillStyle = `rgba(${g},${g-2},${g-8},${0.08+Math.random()*0.1})`;
-    const r = 4 + Math.random()*40; ctx.beginPath(); ctx.ellipse(Math.random()*W, Math.random()*H, r, r*(0.4+Math.random()), Math.random()*6.3, 0, 6.3); ctx.fill();
-  }
-  const img = ctx.getImageData(0, 0, W, H), d = img.data;
-  for (let i = 0; i < d.length; i += 4) { const n = (Math.random()-0.5)*18; d[i]+=n; d[i+1]+=n; d[i+2]+=n; }
-  ctx.putImageData(img, 0, 0);
-  // damp patches and tyre polish along the aisle
-  ctx.fillStyle = 'rgba(38,38,44,.34)'; ctx.beginPath(); ctx.ellipse(X(-5.3), Z(6.2), 1.5*sx, 0.6*sz, -0.25, 0, 6.3); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(X(-3.1), Z(5.7), 0.8*sx, 0.35*sz, 0.4, 0, 6.3); ctx.fill();
-  ctx.fillStyle = 'rgba(60,58,56,.14)'; ctx.fillRect(X(-11.6), Z(6.0), 28.4*sx, 0.9*sz); ctx.fillRect(X(-11.6), Z(7.9), 28.4*sx, 0.9*sz);
-  // saw-cut joints in the slab (one runs down the middle of 561 through the drain cover)
-  ctx.strokeStyle = 'rgba(40,40,40,.5)'; ctx.lineWidth = 2;
-  for (const gx of [-10.4, -5.4, 0.1, 5.3, 10.5, 15.5]) { ctx.beginPath(); ctx.moveTo(X(gx), 0); ctx.lineTo(X(gx), H); ctx.stroke(); }
-  for (const gz of [-2.6, 2.6, 7.8, 12.6]) { ctx.beginPath(); ctx.moveTo(0, Z(gz)); ctx.lineTo(W, Z(gz)); ctx.stroke(); }
-  // painted lines
-  ctx.strokeStyle = '#d9b02a'; ctx.lineWidth = 0.1*sx; ctx.lineCap = 'square';
-  for (const [x0, z0, x1, z1] of LINES) { ctx.beginPath(); ctx.moveTo(X(x0), Z(z0)); ctx.lineTo(X(x1), Z(z1)); ctx.stroke(); }
-  // bay numbers, painted to read from the aisle
-  ctx.fillStyle = 'rgba(190,52,40,.8)'; ctx.font = `700 ${0.46*sz}px "Barlow Condensed", Impact, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  for (const [t, mx, mz] of MARKS.text) ctx.fillText(t, X(mx), Z(mz));
-  // drain cover in the aisle
-  const [m0, m1, n0, n1] = MARKS.manhole; ctx.fillStyle = '#4e4d4a'; ctx.fillRect(X(m0), Z(n0), (m1-m0)*sx, (n1-n0)*sz);
-  ctx.strokeStyle = '#2d2d2b'; ctx.lineWidth = 2; ctx.strokeRect(X(m0), Z(n0), (m1-m0)*sx, (n1-n0)*sz);
-  // arrow at the left end of the aisle, pointing towards the 208 as in the survey
-  const [ax, az] = MARKS.arrow; ctx.fillStyle = 'rgba(217,176,42,.85)'; ctx.beginPath();
-  for (const [px, pz] of [[0.55,0],[0.05,-0.32],[0.05,-0.12],[-0.6,-0.12],[-0.6,0.12],[0.05,0.12],[0.05,0.32]]) ctx.lineTo(X(ax-px), Z(az+pz));
-  ctx.closePath(); ctx.fill();
-}
-floorTex = canvasTex(Math.round(floorW*PX), Math.round(floorD*PX), drawFloor);
-floorTex.anisotropy = 8;
-
-const wallTex = canvasTex(64, 260, (c, w, h) => {
-  const g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#e9e7e1'); g.addColorStop(0.85, '#e4e2dc'); g.addColorStop(1, '#bfbcb3');
-  c.fillStyle = g; c.fillRect(0, 0, w, h);
-  const row = y => (2.6 - y) * 100;
-  c.fillStyle = '#e2b321'; c.fillRect(0, row(1.21), w, 15);
-  c.fillStyle = '#2a63c4'; c.fillRect(0, row(1.45), w, 15);
-});
-const doorTex = canvasTex(128, 256, (c, w, h) => {
-  c.fillStyle = '#4a4b47'; c.fillRect(0, 0, w, h);
-  c.strokeStyle = '#8c8d86'; c.lineWidth = 1;
-  for (let i = 0; i < w; i += 8) { c.beginPath(); c.moveTo(i, 0); c.lineTo(i, h); c.stroke(); }
-  for (let j = 0; j < h; j += 8) { c.beginPath(); c.moveTo(0, j); c.lineTo(w, j); c.stroke(); }
-  c.strokeStyle = '#d8d8d2'; c.lineWidth = 4; c.beginPath(); c.moveTo(0, 0); c.lineTo(w, h); c.moveTo(w, 0); c.lineTo(0, h); c.stroke();
-  c.strokeRect(2, 2, w-4, h-4);
-});
-function labelTex(txt, color, size) {
-  return canvasTex(256, 128, (c, w, h) => { c.clearRect(0,0,w,h); c.fillStyle = color || '#c23a2c'; c.font = `700 ${size||92}px "Barlow Condensed", Impact, sans-serif`; c.textAlign='center'; c.textBaseline='middle'; c.fillText(txt, w/2, h/2+4); });
-}
-function softShadowTex() {
-  return canvasTex(128, 64, (c, w, h) => { const g = c.createRadialGradient(w/2, h/2, 4, w/2, h/2, w/2); g.addColorStop(0, 'rgba(0,0,0,.75)'); g.addColorStop(0.55, 'rgba(0,0,0,.45)'); g.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = g; c.fillRect(0,0,w,h); });
-}
-
-/* ---------- materials ---------- */
-const M = {
-  floor: new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.95 }),
-  wall: new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.92 }),
-  wallPlain: new THREE.MeshStandardMaterial({ color: 0xe3e1da, roughness: 0.92 }),
-  ceiling: new THREE.MeshStandardMaterial({ color: 0x45433f, roughness: 1 }),
-  beam: new THREE.MeshStandardMaterial({ color: 0x55524d, roughness: 1 }),
-  pipeRed: new THREE.MeshStandardMaterial({ color: 0x6e2f27, roughness: 0.6 }),
-  pipeBlue: new THREE.MeshStandardMaterial({ color: 0x2a6fc9, roughness: 0.5 }),
-  barrel: new THREE.MeshStandardMaterial({ color: 0x0c0c0e, roughness: 0.45 }),
-  tank: new THREE.MeshStandardMaterial({ color: 0x2b7bd6, roughness: 0.35, metalness: 0.25 }),
-  bench: new THREE.MeshStandardMaterial({ color: 0xd4d1ca, roughness: 0.95 }),
-  teal: new THREE.MeshStandardMaterial({ color: 0xa6d2cc, roughness: 0.8 }),
-  greenBin: new THREE.MeshStandardMaterial({ color: 0x4d7d3a, roughness: 0.7 }),
-  greyBin: new THREE.MeshStandardMaterial({ color: 0x8b8e91, roughness: 0.7 }),
-  bag: new THREE.MeshStandardMaterial({ color: 0xe8e6e0, roughness: 0.9 }),
-  door: new THREE.MeshStandardMaterial({ map: doorTex, roughness: 0.8, metalness: 0.3 }),
-  dark: new THREE.MeshStandardMaterial({ color: 0x18191c, roughness: 0.85 }),
-  lower: new THREE.MeshStandardMaterial({ color: 0x4a4b49, roughness: 0.95 }),
-  steel: new THREE.MeshStandardMaterial({ color: 0x5b6670, roughness: 0.5, metalness: 0.6 }),
-  pipeGrey: new THREE.MeshStandardMaterial({ color: 0xa3a6a4, roughness: 0.6 }),
-  light: new THREE.MeshStandardMaterial({ color: 0xfff6e0, emissive: 0xfff2d0, emissiveIntensity: 2.2 }),
-  guide: new THREE.LineBasicMaterial({ color: 0xf2c230, transparent: true, opacity: 0.9 }),
-  guideR: new THREE.LineBasicMaterial({ color: 0xec5b4f, transparent: true, opacity: 0.9 }),
-};
-
-/* ---------- obstacles (2D collision + sensors) ---------- */
+/* ================= the garage: what the car can touch (2D, metres) ================= */
+const canvas = $('app');
+const MAX_DPR = matchMedia('(pointer: coarse)').matches ? 1.5 : 2;   // phones: 1.5x is sharp and paints ~45% fewer pixels than 2x
+let dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
 const obstacles = [];   // {kind:'poly', pts:[[x,z]..]} | {kind:'circle', x,z,r}; plus name, fill, h (height, m) and cls: wall | low | lowwall | car
 function regObs(o) {   // bounding box for quick culling, centre for labels
   if (o.kind === 'poly') { const xs = o.pts.map(p => p[0]), zs = o.pts.map(p => p[1]); o.bx0 = Math.min(...xs); o.bx1 = Math.max(...xs); o.bz0 = Math.min(...zs); o.bz1 = Math.max(...zs); }
@@ -426,704 +300,45 @@ function regObs(o) {   // bounding box for quick culling, centre for labels
 }
 const addRect = (x0, x1, z0, z1, name, fill, h, cls) => regObs({ kind:'poly', pts:[[x0,z0],[x1,z0],[x1,z1],[x0,z1]], name, fill, h: h ?? 2.6, cls: cls || 'wall' });
 const addCircle = (cx, cz, r, name, fill, h, cls) => regObs({ kind:'circle', x:cx, z:cz, r, name, fill, h: h ?? 1, cls: cls || 'low' });
-
-function box(x0, x1, y0, y1, z0, z1, mat, opt) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(x1-x0, y1-y0, z1-z0), mat);
-  m.position.set((x0+x1)/2, (y0+y1)/2, (z0+z1)/2); scene.add(m);
-  if (opt && opt.collide) addRect(x0, x1, z0, z1, opt.name || 'wall', opt.fill, y1, opt.cls);
-  return m;
-}
-const boxS = (u0, u1, y0, y1, v0, v1, mat, opt) => box(SU(Math.min(u0, u1)), SU(Math.max(u0, u1)), y0, y1, SV(Math.max(v0, v1)), SV(Math.min(v0, v1)), mat, opt);   // same, in survey coordinates
-function cyl(cx, cz, r, y0, y1, mat, opt) {
-  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, y1-y0, 28), mat);
-  m.position.set(cx, (y0+y1)/2, cz); scene.add(m);
-  if (opt && opt.collide) addCircle(cx, cz, opt.r || r, opt.name || 'object', opt.fill, y1, opt.cls);
-  return m;
-}
-function label(txt, px, py, pz, ry, size, color) {
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size/2), new THREE.MeshBasicMaterial({ map: labelTex(txt, color), transparent: true }));
-  m.position.set(px, py, pz); m.rotation.y = ry; scene.add(m); return m;
-}
-
-/* ---------- build the garage ---------- */
-const wallMats = {};
-function wallMat(h, y0 = 0) {   // the striped wall texture is drawn for a 2.6 m wall standing on the deck; other boxes sample it by height so the stripes line up
-  const k = h.toFixed(2) + '/' + y0; if (wallMats[k]) return wallMats[k];
-  const t = wallTex.clone(); t.needsUpdate = true; t.repeat.set(1, h/2.6); t.offset.set(0, y0/2.6);
-  return (wallMats[k] = new THREE.MeshStandardMaterial({ map: t, roughness: 0.92, envMapIntensity: 0.45 }));
-}
-function floorPiece(x0, x1, z0, z1, y, mat) {   // a floor plate that samples the shared floor texture by world position
-  const g = new THREE.PlaneGeometry(x1-x0, z1-z0); g.rotateX(-Math.PI/2); g.translate((x0+x1)/2, y, (z0+z1)/2);
-  const p = g.attributes.position, uv = g.attributes.uv;
-  for (let i = 0; i < p.count; i++) uv.setXY(i, (p.getX(i) - LOT.x0)/floorW, 1 - (p.getZ(i) - LOT.z0)/floorD);
-  const m = new THREE.Mesh(g, mat); scene.add(m); return m;
-}
+const rectS = (u0, u1, v0, v1, name, h, cls) => addRect(SU(Math.min(u0, u1)), SU(Math.max(u0, u1)), SV(Math.max(v0, v1)), SV(Math.min(v0, v1)), name, '', h, cls);   // in survey coordinates
 function buildGarage() {
-  const WALLF = 'rgba(214,211,204,.9)', H = 2.6;
-  // floors: the deck, the strip past the right-hand pillars, and the lower level seen over the low wall
-  for (const [x0, x1, z0, z1] of FLOORS) floorPiece(x0, x1, z0, z1, 0, M.floor);
-  floorPiece(PIT[0], PIT[1], PIT[2], PIT[3], -1.1, M.lower);
-  boxS(-2.4, 5.8, -1.1, H, -11.7, -11.5, wallMat(3.7));                 // far wall down there
-  boxS(1.4, 1.9, -1.1, H, -9.6, -9.0, wallMat(3.7));                     // and a pillar
-  boxS(-2.4, -2.26, -1.1, 0, -11.5, -5.25, M.wallPlain); boxS(5.6, 5.74, -1.1, 0, -11.5, -5.25, M.wallPlain);   // sides of the drop
-  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(floorW, floorD + 2.3), M.ceiling);
-  ceil.rotation.x = Math.PI/2; ceil.position.set((LOT.x0+LOT.x1)/2, H, (LOT.z0+LOT.z1)/2 + 1.1); ceil.layers.set(1); scene.add(ceil);
-
-  // the 561/562 technical room: its wall is the head of 561 and 562, cables run over its top
-  const roomM = wallMat(2.25);
-  box(SU(-0.79), SU(5.49), 0, 2.25, SV(8.15), 0, [roomM, roomM, M.dark, roomM, roomM, roomM], { collide:true, name:'wall of the 561/562 room', fill:WALLF });
-  const door = new THREE.Mesh(new THREE.PlaneGeometry(1.06, 2.02), M.door); door.position.set((DOOR[0] + DOOR[1])/2, 1.03, 0.012); scene.add(door);
-  box(SU(1.38), SU(3.21), 0, 0.5, 0, SV(4.82), M.bench, { collide:true, name:'concrete bench', fill:'rgba(212,209,202,.95)', cls:'low' });
-  box(SU(1.47), SU(1.75), 0.04, 0.27, SV(4.82) - 0.004, SV(4.82) + 0.002, M.dark);   // the inspection hole in its face
+  addRect(SU(-0.79), SU(5.49), SV(8.15), 0, 'wall of the 561/562 room', '', 2.25);   // the technical room: its wall is the head of 561 and 562
+  addRect(SU(1.38), SU(3.21), 0, SV(4.82), 'concrete bench', '', 0.5, 'low');
   // back walls: behind 559 and 560 the wall stands 0.25 m further back than the room; the alcove with the bins is left of 559
-  boxS(-5.05, -0.79, 0, H, 5.40, 5.62, M.wall, { collide:true, name:'back wall', fill:WALLF });
-  boxS(-5.27, -5.05, 0, H, 5.40, 7.77, M.wall, { collide:true, name:'back wall', fill:WALLF });
-  boxS(-10.4, -5.05, 0, H, 7.55, 7.77, M.wall, { collide:true, name:'back wall', fill:WALLF });
-  boxS(-10.62, -10.4, 0, H, -5.25, 7.77, M.wall, { collide:true, name:'end wall', fill:WALLF });
-  // pillar 560: a long wall stub between 559 and 560 from the aisle line back
-  boxS(-2.63, -2.35, 0, H, 0.05, 2.20, M.wall, { collide:true, name:'pillar 560', fill:WALLF });
+  rectS(-5.05, -0.79, 5.40, 5.62, 'back wall'); rectS(-5.27, -5.05, 5.40, 7.77, 'back wall'); rectS(-10.4, -5.05, 7.55, 7.77, 'back wall');
+  rectS(-10.62, -10.4, -5.25, 7.77, 'end wall');
+  rectS(-2.63, -2.35, 0.05, 2.20, 'pillar 560');   // a long wall stub between 559 and 560 from the aisle line back
   // the far side of the aisle: full wall on the left (the 208 stands against it), then a low wall over the lower level
-  boxS(-10.4, -2.86, 0, H, -5.25, -4.85, M.wall, { collide:true, name:'wall', fill:WALLF });
-  boxS(-2.86, -2.26, -1.1, H, -5.6, -4.79, wallMat(3.7, -1.1), { collide:true, name:'pillar', fill:WALLF });
-  boxS(-2.26, 5.6, -1.1, 1.6, -5.25, -5.05, wallMat(2.7, -1.1), { collide:true, name:'low wall', fill:WALLF, cls:'lowwall' });
-  boxS(5.6, 6.1, -1.1, H, -5.65, -5.05, wallMat(3.7, -1.1), { collide:true, name:'pillar', fill:WALLF });
-  // right of 561: the pillar by 562 (bike hoop and a blue fitting at its foot) and one in the aisle, the way out between them
-  boxS(5.2, 5.7, 0, H, -2.1, -1.6, M.wall, { collide:true, name:'pillar', fill:WALLF });
-  boxS(4.6, 5.35, 0, H, 0.78, 1.53, M.wall, { collide:true, name:'pillar by 562', fill:WALLF });
-  boxS(5.38, 5.62, 0, 0.12, 1.05, 1.2, M.pipeBlue);
-  const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.022, 8, 18, Math.PI), M.steel); hoop.position.set(SU(5.62), 0.38, SV(1.43)); hoop.scale.set(1, 1.15, 1); scene.add(hoop);
+  rectS(-10.4, -2.86, -5.25, -4.85, 'wall'); rectS(-2.86, -2.26, -5.6, -4.79, 'pillar');
+  rectS(-2.26, 5.6, -5.25, -5.05, 'low wall', 1.6, 'lowwall'); rectS(5.6, 6.1, -5.65, -5.05, 'pillar');
+  // right of 561: the pillar by 562 with its bike hoop, and one in the aisle, the way out between them
+  rectS(5.2, 5.7, -2.1, -1.6, 'pillar'); rectS(4.6, 5.35, 0.78, 1.53, 'pillar by 562');
   addRect(SU(5.38), SU(5.86), SV(1.48), SV(1.38), 'bike hoop', '#9aa0a6', 0.65, 'low');
   // the rest of the garage to the right, and its outer walls
-  for (const pu of [10.05, 15.05]) for (const pv of [-6.0, 0.7, 6.6]) boxS(pu, pu + 0.5, 0, H, pv, pv + 0.6, M.wall, { collide:true, name:'pillar', fill:WALLF });
-  boxS(6.1, 18.2, 0, H, -9.2, -9.0, M.wall, { collide:true, name:'wall', fill:WALLF });
-  boxS(18.0, 18.2, 0, H, -9.2, 10.2, M.wall, { collide:true, name:'wall', fill:WALLF });
-  boxS(5.49, 18.2, 0, H, 10.0, 10.2, M.wall, { collide:true, name:'wall', fill:WALLF });
-  boxS(5.49, 5.69, 0, H, 8.15, 10.0, M.wall, { collide:true, name:'wall', fill:WALLF });
-  for (const [tu, tv] of [[8.7, 7.4], [9.45, 7.85]]) {
-    cyl(SU(tu), SV(tv), 0.3, 0.12, 0.9, M.tank, { collide:true, name:'blue tank', fill:'#2b7bd6', cls:'low' });
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.3, 18, 10, 0, 6.3, 0, 1.3), M.tank); cap.position.set(SU(tu), 0.9, SV(tv)); scene.add(cap);
-    for (const a of [0, 2.1, 4.2]) cyl(SU(tu) + Math.cos(a)*0.2, SV(tv) + Math.sin(a)*0.2, 0.025, 0, 0.14, M.dark);
-  }
-  obstacles.filter(o => o.name === 'blue tank').forEach(o => o.h = 1.05);
-  // clutter: bins in the alcove and at the back of 560, the leaning board, bags, a bucket hanging on the room corner
-  boxS(-7.2, -6.0, 0, 1.1, 5.9, 6.65, M.greenBin, { collide:true, name:'green bins', fill:'#4d7d3a', cls:'low' });
-  boxS(-2.25, -1.8, 0, 0.5, 5.0, 5.38, M.greyBin, { collide:true, name:'grey bin', fill:'#8b8e91', cls:'low' });
-  const board = new THREE.Mesh(new THREE.BoxGeometry(0.03, 1.2, 2.4), M.teal); board.position.set(SU(-10.22), 0.6, SV(5.4)); board.rotation.z = -0.12; scene.add(board);
-  for (const [bu, bv, r] of [[-1.55, 5.22, 0.2], [-1.25, 5.25, 0.16], [-1.02, 5.2, 0.13]]) { const b = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 10), M.bag); b.position.set(SU(bu), r*0.8, SV(bv)); b.scale.set(1, 0.8, 1); scene.add(b); }
-  cyl(SU(-0.85), SV(5.0), 0.14, 1.75, 2.0, M.barrel);
-
-  // beams, pipes, light fittings (overhead geometry lives on layer 1: only the cabin camera and the mirrors see it, so chase and top views stay clear)
-  for (const bz of [SV(-0.35), SV(5.25), SV(-5.15)]) box(SU(-10.4), SU(18.0), 2.28, H, bz-0.18, bz+0.18, M.beam).layers.set(1);
-  for (const bx of [SU(-2.5), SU(5.1), SU(10.3)]) box(bx-0.18, bx+0.18, 2.3, H, SV(7.6), SV(-5.05), M.beam).layers.set(1);
-  const pipe = (z, y, r, mat, x0, x1) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, x1-x0, 10), mat); m.rotation.z = Math.PI/2; m.position.set((x0+x1)/2, y, z); m.layers.set(1); scene.add(m); };
-  pipe(SV(0.25), 2.2, 0.075, M.pipeRed, SU(-10.3), SU(17.9)); pipe(SV(-4.8), 2.24, 0.06, M.pipeRed, SU(-10.3), SU(17.9));
-  pipe(0.12, 2.32, 0.035, M.pipeGrey, SU(-0.79), SU(5.49)); pipe(0.1, 2.12, 0.03, M.pipeBlue, SU(-0.79), SU(2.2));
-  const lamps = [[1.3, -2.4], [-5.0, -1.4], [7.6, -1.6], [-6.8, 3.6], [12.8, 0.6], [2.0, 3.0], [-9.0, -2.0]].map(([u, v]) => [SU(u), SV(v)]);
-  for (const [lx, lz] of lamps) {
-    box(lx-0.62, lx+0.62, 2.48, 2.56, lz-0.06, lz+0.06, M.light).layers.set(1);
-    const pl = new THREE.PointLight(0xfff0d6, 12, 20, 2); pl.position.set(lx, 2.42, lz); scene.add(pl);
-  }
-  scene.add(new THREE.AmbientLight(0xffffff, 0.14));
-  scene.add(new THREE.HemisphereLight(0xd8dde8, 0x2a2927, 0.4));
-
-  // wall and pillar numbers
-  label('561', SU(0.9), 1.92, 0.012, 0, 0.72); label('562', SU(5.0), 1.92, 0.012, 0, 0.72);
-  label('560', SU(-2.35) + 0.012, 1.95, SV(0.95), Math.PI/2, 0.72); label('559', SU(-2.63) - 0.012, 1.95, SV(0.95), -Math.PI/2, 0.72);
-  label('564', SU(10.05) - 0.012, 1.9, SV(1.0), -Math.PI/2, 0.6); label('570', SU(-5.9), 1.9, SV(-4.85) - 0.012, Math.PI, 0.6);
-
+  for (const pu of [10.05, 15.05]) for (const pv of [-6.0, 0.7, 6.6]) rectS(pu, pu + 0.5, pv, pv + 0.6, 'pillar');
+  rectS(6.1, 18.2, -9.2, -9.0, 'wall'); rectS(18.0, 18.2, -9.2, 10.2, 'wall'); rectS(5.49, 18.2, 10.0, 10.2, 'wall'); rectS(5.49, 5.69, 8.15, 10.0, 'wall');
+  for (const [tu, tv] of [[8.7, 7.4], [9.45, 7.85]]) addCircle(SU(tu), SV(tv), 0.3, 'blue tank', '#2b7bd6', 1.05, 'low');
+  rectS(-7.2, -6.0, 5.9, 6.65, 'green bins', 1.1, 'low'); rectS(-2.25, -1.8, 5.0, 5.38, 'grey bin', 0.5, 'low');
   // parked cars: the black Peugeot 208 at the left end, the grey Clio past the pillars on the right, and the rest of the garage
-  parkCar({ L:4.055, W:1.745, H:1.43, WB:2.54, color:0x0e0f11, label:'Peugeot 208' }, SU(-3.85 - 4.055/2), SV(-3.6), 0, 'black Peugeot 208');
-  parkCar({ L:4.03, W:1.72, H:1.49, WB:2.575, color:0x7d8288, label:'Clio' }, SU(5.05 + 4.03/2), SV(-3.5), 0, 'grey Clio');
-  parkCar({ L:4.63, W:1.89, H:1.71, WB:2.77, color:0x6d5a45 }, SU(12.6), SV(3.7), Math.PI/2, 'parked SUV');
-  parkCar({ L:3.92, W:1.65, H:1.47, WB:2.46, color:0xe9e9e6 }, SU(12.6), SV(-2.6), -Math.PI/2, 'white car');
-  parkCar({ L:4.76, W:1.82, H:1.43, WB:2.82, color:0x0f1113 }, SU(15.6), SV(3.7), Math.PI/2, 'black saloon');
-  parkCar({ L:4.37, W:1.90, H:1.63, WB:2.66, color:0xd9dbd8 }, SU(15.6), SV(-2.6), -Math.PI/2, 'white SUV');
-  parkCar({ L:4.76, W:1.82, H:1.43, WB:2.82, color:0x0f1113 }, SU(12.7), SV(-6.9), Math.PI/2, 'black saloon');
-}
-
-/* ---------- car builder (local frame: x forward, z right, rear axle at origin) ----------
-   Hero = BYD Atto 2 DM-i: lofted body shell, slim headlights joined by the black badge bar and the full-width DRL line,
-   wide lower intake with silver trim, full-width rear light bar with BYD lettering, hooked corner lamps, ATTO 2 badge,
-   black lower bumpers with silver skid plates, roof spoiler, roof rails, arch cladding, 17" twin-spoke wheels. */
-const glassMat = new THREE.MeshStandardMaterial({ color: 0x3b4b5a, roughness: 0.1, metalness: 0.45, transparent: true, opacity: 0.5, side: THREE.DoubleSide, envMapIntensity: 0.7 });
-const tyreMat = new THREE.MeshStandardMaterial({ color: 0x111113, roughness: 0.9 });
-const rimMat = new THREE.MeshStandardMaterial({ color: 0x7c8187, roughness: 0.35, metalness: 0.8 });
-const rimBedMat = new THREE.MeshStandardMaterial({ color: 0x2a2c30, roughness: 0.6, metalness: 0.4 });
-const claddingMat = new THREE.MeshStandardMaterial({ color: 0x0e0f11, roughness: 0.95 });
-const blackGloss = new THREE.MeshStandardMaterial({ color: 0x0a0b0d, roughness: 0.2, metalness: 0.3 });
-const chromeMat = new THREE.MeshStandardMaterial({ color: 0xd2d5da, roughness: 0.25, metalness: 0.9 });
-const silverMat = new THREE.MeshStandardMaterial({ color: 0xa7abb0, roughness: 0.45, metalness: 0.6 });
-const reflectorMat = new THREE.MeshStandardMaterial({ color: 0x8a1410, roughness: 0.3 });
-const shadowTex = softShadowTex();
-
-function textTex(txt, color, w, h, size) {
-  return canvasTex(w || 512, h || 128, (c, cw, ch) => { c.clearRect(0, 0, cw, ch); c.fillStyle = color || '#d9dce1'; c.font = `700 ${size || 96}px "Barlow Condensed", Impact, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.letterSpacing = '6px'; c.fillText(txt, cw/2, ch/2 + 4); });
-}
-function plateTex(txt) {
-  return canvasTex(512, 112, (c, w, h) => { c.fillStyle = '#f2f2ee'; c.fillRect(0, 0, w, h); c.strokeStyle = '#2b2b2b'; c.lineWidth = 6; c.strokeRect(4, 4, w-8, h-8); c.fillStyle = '#1b1b1b'; c.font = '700 64px "Barlow Condensed", Impact, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.letterSpacing = '4px'; c.fillText(txt, w/2, h/2 + 3); });
-}
-function lightBarTex() {
-  return canvasTex(1024, 96, (c, w, h) => {
-    const g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#5a0d0a'); g.addColorStop(0.5, '#ff3b2a'); g.addColorStop(1, '#6a100c');
-    c.fillStyle = g; c.fillRect(0, 0, w, h);
-    c.fillStyle = 'rgba(255,255,255,.18)'; for (let i = 0; i < w; i += 24) c.fillRect(i, 10, 10, h-20);     // knot-style segmenting
-    c.fillStyle = '#2a0806'; c.fillRect(w/2-130, 0, 260, h);
-    c.fillStyle = '#e8eaee'; c.font = '700 74px "Barlow Condensed", Impact, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.letterSpacing = '10px'; c.fillText('BYD', w/2, h/2 + 3);
-  });
-}
-function grilleTex() {
-  return canvasTex(256, 128, (c, w, h) => { c.fillStyle = '#0c0d0f'; c.fillRect(0, 0, w, h); c.fillStyle = '#2a2c30'; for (let y = 6; y < h; y += 16) for (let x = (y/16 % 2) * 8; x < w; x += 16) { c.beginPath(); c.arc(x, y, 4.5, 0, 6.3); c.fill(); } for (const y of [32, 64, 96]) { c.fillStyle = '#3a3d42'; c.fillRect(0, y-3, w, 6); } });
-}
-const TEX = { byd: null, atto: null, bar: null, grille: null, plateF: null, plateR: null, shell: null };
-function tex(k, make) { if (!TEX[k]) TEX[k] = make(); return TEX[k]; }
-
-/* ================= car body ================= */
-// One lofted shell in a nose frame (X metres back from the nose, Y up, Z to the right), traced from BYD's three-view photos
-// with the camera perspective taken out and held to the spec sheet: 4330 × 1830 × 1675 mm, wheelbase 2620, overhangs 883 / 827.
-// Paint, trim, lamps, shut lines and the window and wheel-arch openings are baked once into a texture atlas from the same
-// surface; every car in the garage reuses the shell scaled to its own length, width and height.
-function pchip(xs, ys) {   // monotone cubic through the key sections: smooth, never overshoots
-  const n = xs.length, h = [], d = [], m = new Array(n);
-  for (let i = 0; i < n-1; i++) { h[i] = xs[i+1] - xs[i]; d[i] = (ys[i+1] - ys[i]) / h[i]; }
-  m[0] = d[0]; m[n-1] = d[n-2];
-  for (let i = 1; i < n-1; i++) { if (d[i-1]*d[i] <= 0) m[i] = 0; else { const w1 = 2*h[i] + h[i-1], w2 = h[i] + 2*h[i-1]; m[i] = (w1 + w2) / (w1/d[i-1] + w2/d[i]); } }
-  return x => {
-    if (x <= xs[0]) return ys[0]; if (x >= xs[n-1]) return ys[n-1];
-    let lo = 0, hi = n-1; while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (xs[mid] <= x) lo = mid; else hi = mid; }
-    const t = (x - xs[lo]) / h[lo], t2 = t*t, t3 = t2*t;
-    return (2*t3 - 3*t2 + 1)*ys[lo] + (t3 - 2*t2 + t)*h[lo]*m[lo] + (-2*t3 + 3*t2)*ys[lo+1] + (t3 - t2)*h[lo]*m[lo+1];
-  };
-}
-const BODY = (() => {
-  // key sections. top: centreline silhouette (bonnet, windscreen, roof, rear glass, tailgate); bot: underside;
-  // hw / yw: half width and the height where the side is widest; hs / ys: shoulder; hb / yb: belt, where the glass starts;
-  // hr / yr: roof edge (top of the side glass, the A and D pillars). On the bonnet and the tailgate face there is no glasshouse.
-  const K = [
-    //  X      top    bot    hw     yw    ys     hs     yb     hb     yr     hr
-    [0.000, 0.800, 0.275, 0.520, 0.52, 0.740, 0.500, 0.780, 0.460, 0.795, 0.400],
-    [0.025, 0.842, 0.250, 0.630, 0.53, 0.790, 0.610, 0.825, 0.560, 0.837, 0.470],
-    [0.070, 0.885, 0.228, 0.720, 0.55, 0.838, 0.695, 0.866, 0.645, 0.879, 0.535],
-    [0.140, 0.932, 0.214, 0.795, 0.57, 0.885, 0.770, 0.912, 0.705, 0.925, 0.580],
-    [0.250, 0.990, 0.206, 0.848, 0.59, 0.937, 0.820, 0.965, 0.748, 0.983, 0.610],
-    [0.380, 1.035, 0.205, 0.878, 0.61, 0.978, 0.848, 1.008, 0.774, 1.027, 0.628],
-    [0.550, 1.075, 0.210, 0.903, 0.62, 1.010, 0.866, 1.045, 0.790, 1.066, 0.640],
-    [0.880, 1.115, 0.225, 0.915, 0.62, 1.040, 0.874, 1.080, 0.798, 1.104, 0.650],
-    [1.150, 1.142, 0.200, 0.910, 0.57, 1.058, 0.872, 1.108, 0.800, 1.132, 0.665],
-    [1.250, 1.158, 0.192, 0.907, 0.53, 1.063, 0.870, 1.122, 0.800, 1.146, 0.680],
-    [1.450, 1.300, 0.188, 0.905, 0.47, 1.068, 0.870, 1.132, 0.798, 1.250, 0.662],
-    [1.650, 1.442, 0.187, 0.905, 0.48, 1.073, 0.870, 1.141, 0.795, 1.385, 0.640],
-    [1.880, 1.582, 0.186, 0.905, 0.52, 1.078, 0.870, 1.150, 0.790, 1.528, 0.618],
-    [2.150, 1.612, 0.185, 0.905, 0.55, 1.083, 0.871, 1.157, 0.788, 1.553, 0.612],
-    [2.600, 1.622, 0.185, 0.905, 0.60, 1.087, 0.872, 1.163, 0.786, 1.562, 0.608],
-    [3.100, 1.618, 0.190, 0.907, 0.68, 1.092, 0.873, 1.170, 0.782, 1.560, 0.602],
-    [3.500, 1.604, 0.205, 0.915, 0.76, 1.097, 0.876, 1.178, 0.772, 1.548, 0.592],
-    [3.700, 1.588, 0.215, 0.905, 0.76, 1.098, 0.866, 1.183, 0.765, 1.535, 0.585],
-    [3.860, 1.535, 0.232, 0.893, 0.74, 1.100, 0.855, 1.188, 0.740, 1.500, 0.600],
-    [3.970, 1.380, 0.245, 0.878, 0.72, 1.098, 0.842, 1.185, 0.730, 1.348, 0.622],
-    [4.080, 1.195, 0.255, 0.858, 0.70, 1.090, 0.824, 1.168, 0.722, 1.183, 0.635],
-    [4.140, 1.105, 0.262, 0.840, 0.68, 1.055, 0.805, 1.085, 0.735, 1.098, 0.635],
-    [4.200, 1.015, 0.270, 0.815, 0.66, 0.965, 0.785, 0.995, 0.725, 1.008, 0.625],
-    [4.250, 0.920, 0.280, 0.780, 0.64, 0.870, 0.752, 0.898, 0.700, 0.912, 0.610],
-    [4.290, 0.820, 0.292, 0.735, 0.62, 0.775, 0.710, 0.800, 0.660, 0.813, 0.580],
-    [4.315, 0.755, 0.300, 0.690, 0.60, 0.710, 0.665, 0.738, 0.620, 0.750, 0.550],
-    [4.330, 0.700, 0.310, 0.620, 0.58, 0.655, 0.600, 0.682, 0.560, 0.695, 0.500] ];
-  const NAMES = ['top', 'bot', 'hw', 'yw', 'ys', 'hs', 'yb', 'hb', 'yr', 'hr'], XS = K.map(r => r[0]), F = {};
-  NAMES.forEach((n, i) => F[n] = pchip(XS, K.map(r => r[i+1])));
-  const L = 4.33, XF = 3.503, WX = [0.883, 3.503], WR = 0.334, R_OPEN = 0.448, R_CLAD = 0.528;
-  const at = X => { const s = { X }; for (const n of NAMES) s[n] = F[n](X); return s; };
-  // half ring: bottom centre, underbody, sill corner, lower side, upper side, shoulder, glass side, roof edge, crown
-  const SEGS = [2, 3, 5, 8, 5, 9, 3, 6], NH = 41, NR = 82, segOf = [], segStart = [];
-  SEGS.forEach((c, k) => { segStart.push(segOf.length); for (let i = 0; i < c; i++) segOf.push(k); });
-  segStart.push(NH);
-  function half(s) {
-    const { top, bot, hw, yw, ys, hs, yb, hb, yr, hr } = s, p7x = Math.max(0.06, hr - 0.12), p7y = yr + (top - yr)*0.8;
-    const C = [
-      [0, bot, null, null, hw - 0.12, bot],
-      [hw - 0.12, bot, hw - 0.035, bot, hw - 0.02, bot + 0.1],
-      [hw - 0.02, bot + 0.1, hw - 0.03, (bot + 0.1 + yw)/2, hw, yw],
-      [hw, yw, hw + 0.004, yw + (ys - yw)*0.35, hs, ys],
-      [hs, ys, hs, yb - 0.006, hb, yb],
-      [hb, yb, (hb + hr)/2 + 0.012, (yb + yr)/2, hr, yr],
-      [hr, yr, hr - 0.014, yr + (top - yr)*0.55, p7x, p7y],
-      [p7x, p7y, p7x*0.45, top, 0, top] ];
-    const out = [[0, bot]];
-    C.forEach((c, k) => { const n = SEGS[k]; for (let i = 1; i <= n; i++) { const t = i/n, a = (1-t)*(1-t), b = 2*t*(1-t), d = t*t;
-      out.push(c[2] === null ? [c[0] + (c[4] - c[0])*t, c[1] + (c[5] - c[1])*t] : [a*c[0] + b*c[2] + d*c[4], a*c[1] + b*c[3] + d*c[5]]); } });
-    return out;
-  }
-  // u runs along the car by surface distance, so the steep nose and tailgate get their share of the atlas
-  const NT = 1600, uX = new Float32Array(NT + 1), uS = new Float32Array(NT + 1);
-  { let acc = 0, prev = at(0);
-    for (let i = 1; i <= NT; i++) { const X = L*i/NT, s = at(X); acc += Math.hypot(X - prev.X, s.top - prev.top, 0.5*(s.bot - prev.bot)) + 0.6*Math.abs(s.hw - prev.hw); uX[i] = X; uS[i] = acc; prev = s; }
-    for (let i = 0; i <= NT; i++) uS[i] /= acc; }
-  const look = (A, B, v) => { let lo = 0, hi = NT; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (A[m] <= v) lo = m; else hi = m; } const f = (v - A[lo]) / Math.max(1e-9, A[hi] - A[lo]); return B[lo] + (B[hi] - B[lo])*f; };
-  const Xofu = u => look(uS, uX, u), uofX = X => look(uX, uS, X);
-  function upperY(h, az) {   // height of the upper surface (belt to crown) at lateral distance az
-    for (let k = NH; k > segStart[5]; k--) { const a = h[k], b = h[k-1]; if (b[0] >= az) return a[1] + (b[1] - a[1]) * (az - a[0]) / Math.max(1e-6, b[0] - a[0]); }
-    return h[segStart[5]][1];
-  }
-  function sideZ(h, Y) {   // lateral position of the body side at height Y
-    for (let k = segStart[1]; k < segStart[5]; k++) { const a = h[k], b = h[k+1]; if ((a[1] - Y)*(b[1] - Y) <= 0) return a[0] + (b[0] - a[0]) * (Y - a[1]) / ((b[1] - a[1]) || 1e-6); }
-    return h[segStart[3]][0];
-  }
-  function faceX(az, Y) {   // where the tailgate face passes through (az, Y)
-    let lo = 4.1, hi = L; for (let i = 0; i < 30; i++) { const m = (lo + hi)/2; if (upperY(half(at(m)), az) > Y) lo = m; else hi = m; } return (lo + hi)/2;
-  }
-  const cladTop = pchip([0, 0.35, 0.6, 1.3, 1.55, 2.9, 3.15, 3.98, 4.12, 4.33], [0.30, 0.30, 0.33, 0.39, 0.41, 0.42, 0.43, 0.52, 0.58, 0.60]);
-  return { L, XF, WX, WR, R_OPEN, R_CLAD, at, half, NH, NR, segOf, segStart, Xofu, uofX, upperY, sideZ, faceX, cladTop };
-})();
-
-/* ---- surface finish: one function paints every texel of the shell and the two end caps ---- */
-const BAKE = (() => {
-  const AA = 0.0045, clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
-  const cov = d => d <= -AA ? 1 : d >= AA ? 0 : 0.5 - d/(2*AA);
-  // [r, g, b, alpha, paint mask (= clearcoat), roughness, metalness, emissive r, g, b]; colours in sRGB
-  const PAINT = [1, 1, 1, 1, 1, 0.42, 0.12, 0, 0, 0];
-  const MAT = {
-    clad:   [0.085, 0.088, 0.095, 1, 0, 0.78, 0, 0, 0, 0],
-    under:  [0.06, 0.06, 0.065, 1, 0, 0.9, 0, 0, 0, 0],
-    gloss:  [0.025, 0.027, 0.03, 1, 0, 0.1, 0, 0, 0, 0],
-    gap:    [0.015, 0.015, 0.017, 1, 0, 0.9, 0, 0, 0, 0],
-    silver: [0.66, 0.68, 0.70, 1, 0, 0.32, 0.85, 0, 0, 0],
-    chrome: [0.85, 0.86, 0.88, 1, 0, 0.12, 1, 0, 0, 0],
-    lensR:  [0.30, 0.02, 0.02, 1, 0, 0.08, 0, 0.22, 0.01, 0.0],
-    lampR:  [0.95, 0.15, 0.10, 1, 0, 0.2, 0, 1, 0.09, 0.05],
-    lensF:  [0.05, 0.06, 0.075, 1, 0, 0.06, 0.6, 0, 0, 0],
-    drl:    [0.95, 0.97, 1, 1, 0, 0.2, 0, 1, 1, 1],
-    proj:   [0.6, 0.65, 0.75, 1, 0, 0.1, 0.8, 0.35, 0.4, 0.5],
-    grille: [0.045, 0.045, 0.05, 1, 0, 0.6, 0, 0, 0, 0],
-    refl:   [0.42, 0.03, 0.03, 1, 0, 0.15, 0, 0.1, 0.0, 0.0],
-    rev:    [0.8, 0.8, 0.82, 1, 0, 0.15, 0, 0.04, 0.04, 0.04] };
-  const mix = (P, c, M) => { if (c <= 0) return; for (let i = 0; i < 10; i++) if (i !== 3) P[i] += (M[i] - P[i])*c; };
-  const cut = (P, c) => { if (c > 0) P[3] *= 1 - c; };
-  const segDist = (px, py, ax, ay, bx, by) => { const dx = bx - ax, dy = by - ay, t = clamp01(((px - ax)*dx + (py - ay)*dy) / (dx*dx + dy*dy)); return Math.hypot(px - ax - t*dx, py - ay - t*dy); };
-  const sdTri = (px, py, T) => { let d = Infinity, inside = true; const s0 = Math.sign((T[2] - T[0])*(T[5] - T[1]) - (T[3] - T[1])*(T[4] - T[0]));
-    for (let e = 0; e < 3; e++) { const x0 = T[e*2], y0 = T[e*2+1], x1 = T[(e*2+2) % 6], y1 = T[(e*2+3) % 6]; d = Math.min(d, segDist(px, py, x0, y0, x1, y1)); if (Math.sign((x1 - x0)*(py - y0) - (y1 - y0)*(px - x0)) !== s0) inside = false; }
-    return inside ? -d : d; };
-  const FANG = [0.865, 0.615, 0.875, 0.355, 0.73, 0.44];
-  // seg: 0 underbody … 7 crown, -1 for an end cap; s: the section; clad: cladding top at this X
-  function texel(P, X, Y, az, seg, s, clad) {
-    for (let i = 0; i < 10; i++) P[i] = PAINT[i];
-    if (seg === 0) mix(P, 1, MAT.under);
-    // door, bonnet and tailgate shut lines (under the cladding, which covers their ends)
-    if (seg >= 2 && seg <= 4 && Y > clad && Y < s.yb && X > 1.3 && X < 3.4) {
-      const d = Math.min(Math.abs(X - (1.43 + 0.035*(1.13 - Y))), Math.abs(X - (2.535 + 0.02*(1.13 - Y))), Math.abs(X - (3.272 - 0.03*(1.17 - Y)))) - 0.0016;
-      if (d < AA) mix(P, cov(d)*0.9, MAT.gap);
-    }
-    if (X > 0.1 && X < 1.2 && (seg === 4 || seg === 5)) { const d = Math.abs(az - (s.hb - 0.012)) - 0.0016; if (d < AA) mix(P, cov(d)*0.8, MAT.gap); }
-    // lower cladding: sills, bumper corners, wheel-arch flares; the arch openings are cut out
-    let dc = Y - clad, dArch = 9;
-    if (az > 0.5 && Y < 1.0) for (const xw of BODY.WX) { const dist = Math.hypot(X - xw, Y - BODY.WR); dc = Math.min(dc, Math.max(BODY.R_OPEN - 0.03 - dist, dist - BODY.R_CLAD)); dArch = Math.min(dArch, dist - BODY.R_OPEN); }
-    if (dc < AA) mix(P, cov(dc), MAT.clad);
-    if (az > 0.72 && X > 1.55 && X < 3.05 && Y < 0.34) mix(P, cov(Math.min(Math.max(1.62 - X, X - 2.16, 0.262 - Y, Y - 0.318), Math.max(2.52 - X, X - 3.0, 0.262 - Y, Y - 0.318))), PAINT);   // body-colour inserts in the sills
-    if (az > 0.55 && dArch < AA) cut(P, cov(dArch));
-    // cowl panel between the bonnet and the windscreen
-    if (seg >= 5 && X > 1.15 && X < 1.45) { const d = Math.max(1.172 - X, X - (1.25 + 0.13*(az/0.68)**2), az - s.hr); if (d < AA) mix(P, cov(d), MAT.clad); }
-    // glass: side windows with the B pillar and the dark rear quarter, windscreen, tailgate glass; black frit and frames round them
-    if (seg === 5 && X > 1.38 && X < 3.7) {
-      const ylo = s.yb + 0.022, yhi = s.yr - 0.03;
-      const dF = Math.max(1.565 - X, X - 2.462, ylo - Y, Y - yhi);
-      const dR = Math.max(2.608 - X, X - 3.262, ylo - Y, Y - yhi, (X - 3.262)*0.75 + (Y - 1.36)*0.66);
-      const dQ = Math.max(3.262 - X, X - (3.655 - (Y - 1.19)*0.62), ylo - Y, Y - yhi);
-      const dB = Math.max(2.462 - X, X - 2.608, ylo - Y, Y - yhi);
-      const dS = Math.max(1.40 - X, X - 1.565, s.yb - Y, Y - Math.min(yhi, 1.25));
-      const dDark = Math.min(dF, dR, dQ, dB, dS) - 0.015;
-      if (dDark < AA) mix(P, cov(dDark), MAT.gloss);
-      cut(P, cov(Math.min(dF, dR)));
-    } else if (seg >= 6) {
-      if (X > 1.15 && X < 1.95) { const dW = Math.max(1.25 + 0.13*(az/0.68)**2 - X, X - (1.862 - 0.06*(az/0.6)**2), az - (s.hr - 0.062)); if (dW < 0.03 + AA) { mix(P, cov(dW - 0.028), MAT.gloss); cut(P, cov(dW)); } }
-      if (X > 3.8 && X < 4.15) { const dG = Math.max(3.872 - X, X - (4.072 - 0.02*(az/0.62)**2), az - (s.hr - 0.058)); if (dG < 0.03 + AA) { mix(P, cov(dG - 0.02), MAT.gloss); cut(P, cov(dG)); } }
-    }
-    // tail lamps: a thin full-width bar and the two hooked clusters, wrapping round the corners
-    if (X > 3.88 && Y > 0.95 && Y < 1.1 && seg >= 2) {
-      const taper = clamp01((az - 0.5)/0.08) * clamp01((X - 3.9)/0.05), dLens = Math.abs(Y - 1.035) - 0.047*taper;
-      if (taper > 0 && dLens < AA) {
-        mix(P, cov(dLens), MAT.lensR);
-        const dX = Math.min(segDist(az, Y, 0.585, 0.996, 0.84, 1.072), segDist(az, Y, 0.585, 1.072, 0.84, 0.996)) - 0.0035;
-        mix(P, cov(Math.min(Math.abs(dLens + 0.006) - 0.0032, dX)) * cov(dLens), MAT.lampR);
-      }
-      const dBar = Math.max(Math.abs(Y - 1.04) - 0.0055, az - 0.56); if (dBar < AA) mix(P, cov(dBar), MAT.lampR);
-    }
-    // headlamps: slim units under the bonnet edge, DRL along their lower edge hooking down into the chrome strip
-    if (X < 0.48 && az > 0.38 && Y > 0.7 && Y < 1.02 && seg !== 0) {
-      const t = clamp01((az - 0.42)/0.43), sx = clamp01((X - 0.06)/0.38), yl = 0.786 + 0.072*t + 0.105*sx, hg = 0.034 + 0.034*t*(1 - sx) + 0.014*(1 - sx);
-      const dL = Math.max(yl - Y, Y - (yl + hg), 0.425 - az, X - 0.455);
-      if (dL < AA) {
-        mix(P, cov(dL), MAT.lensF);
-        mix(P, cov(Math.max(Math.abs(Y - (yl + 0.0065)) - 0.0035, 0.43 - az, X - 0.43)), MAT.drl);
-        if (X < 0.15) for (const pa of [0.56, 0.645]) mix(P, cov(Math.hypot(az - pa, Y - (yl + hg*0.6 + 0.004)) - 0.011), MAT.proj);
-      }
-      if (X < 0.08) mix(P, cov(segDist(az, Y, 0.47, 0.792, 0.405, 0.733) - 0.0035), MAT.drl);
-    }
-    if (X < 0.07) {   // nose: gloss panel for the logo, chrome strip, lower intake with slats, plate recess, silver skid
-      mix(P, cov(Math.max(az - 0.44, 0.738 - Y, Y - 0.832)), MAT.gloss);
-      mix(P, cov(Math.max(az - 0.445, Math.abs(Y - 0.727) - 0.0055)), MAT.chrome);
-      const dI = Math.max(az - (0.565 - (0.43 - Y)*0.35), 0.27 - Y, Y - 0.43);
-      if (dI < AA) { mix(P, cov(dI), MAT.grille); mix(P, cov(Math.abs(((Y - 0.27) % 0.032) - 0.016) - 0.004) * cov(dI + 0.012) * 0.8, MAT.clad); }
-      mix(P, cov(Math.max(az - 0.28, 0.455 - Y, Y - 0.578)), MAT.grille);
-      mix(P, cov(Math.max(az - 0.62, Math.abs(Y - 0.243) - 0.011)), MAT.silver);
-    }
-    if (X < 0.35 && az > 0.62 && Y > 0.3 && Y < 0.66 && seg !== 0) mix(P, cov(sdTri(az, Y, FANG)), MAT.grille);   // corner air curtains
-    if (X > 4.08) {   // tail: plate recess, reflectors and reversing lamps, silver skid, tailgate shut lines
-      mix(P, cov(Math.max(az - 0.33, 0.43 - Y, Y - 0.612)), MAT.grille);
-      const dR = Math.max(Math.abs(Y - 0.53) - 0.014, 0.42 - az, az - 0.80); if (dR < AA) mix(P, cov(dR), az > 0.63 && az < 0.71 ? MAT.rev : MAT.refl);
-      mix(P, cov(Math.max(az - 0.72, 0.30 - Y, Y - (0.395 + 0.03*(1 - (az/0.72)**2)))), MAT.silver);
-      if (Y > 0.655) mix(P, cov(Math.min(Math.max(Math.abs(Y - 0.665) - 0.0016, az - 0.70), Math.max(Math.abs(az - 0.70) - 0.0016, 0.665 - Y, Y - 1.17)))*0.85, MAT.gap);
-    }
-  }
-  const put = (P, col, prp, emi, o) => {
-    const k = (1 - P[4])*255; col[o] = P[0]*k; col[o+1] = P[1]*k; col[o+2] = P[2]*k; col[o+3] = P[3]*255;   // trim colour pre-multiplied by (1 - paint)
-    prp[o] = P[4]*255; prp[o+1] = P[5]*255; prp[o+2] = P[6]*255; prp[o+3] = 255;
-    emi[o] = P[7]*255; emi[o+1] = P[8]*255; emi[o+2] = P[9]*255; emi[o+3] = 255;
-  };
-  const tex = (data, w, h, srgb) => { const t = new THREE.DataTexture(data, w, h, THREE.RGBAFormat); t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
-    t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter; t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy()); t.needsUpdate = true; return t; };
-  function set(w, h, fill) {
-    const col = new Uint8Array(w*h*4), prp = new Uint8Array(w*h*4), emi = new Uint8Array(w*h*4), P = new Float32Array(10);
-    fill(P, (o) => put(P, col, prp, emi, o));
-    return { col: tex(col, w, h, true), prp: tex(prp, w, h, false), emi: tex(emi, w, h, true) };
-  }
-  let cache = null;
-  function textures() {
-    if (cache) return cache;
-    const W = 2048, H = 1024;
-    const shell = set(W, H, (P, out) => {
-      for (let c = 0; c < W; c++) {
-        const X = BODY.Xofu((c + 0.5)/W), s = BODY.at(X), h = BODY.half(s), clad = BODY.cladTop(X);
-        for (let r = 0; r < H; r++) {
-          const jf = (r + 0.5)/H * BODY.NR, jh = jf <= BODY.NH ? jf : BODY.NR - jf, k = Math.min(BODY.NH - 1, Math.floor(jh)), f = jh - k;
-          texel(P, X, h[k][1] + (h[k+1][1] - h[k][1])*f, h[k][0] + (h[k+1][0] - h[k][0])*f, BODY.segOf[k], s, clad);
-          out((r*W + c)*4);
-        }
-      }
-    });
-    const cap = X => set(512, 256, (P, out) => { const s = BODY.at(X), clad = BODY.cladTop(X);
-      for (let r = 0; r < 256; r++) for (let c = 0; c < 512; c++) { texel(P, X, 0.1 + (r + 0.5)/256, Math.abs(-1 + 2*(c + 0.5)/512), -1, s, clad); out((r*512 + c)*4); } });
-    cache = { shell, front: cap(0), rear: cap(BODY.L) };
-    return cache;
-  }
-  return { textures };
-})();
-
-function bodyGeometry(nu, X0, X1, j0, j1, inset, step) {   // loft between two stations over ring vertices j0..j1 (0..NR, bottom centre to bottom centre), every step-th one
-  step = step || 1; const u0 = BODY.uofX(X0), u1 = BODY.uofX(X1), nv = (j1 - j0)/step + 1, pos = new Float32Array(nu*nv*3), uv = new Float32Array(nu*nv*2), idx = [];
-  for (let i = 0; i < nu; i++) {
-    const u = u0 + (u1 - u0)*i/(nu - 1), X = BODY.Xofu(u), h = BODY.half(BODY.at(X));
-    for (let j = j0; j <= j1; j += step) {
-      const r = j <= BODY.NH ? h[j] : h[BODY.NR - j], k = i*nv + (j - j0)/step;
-      pos[k*3] = BODY.XF - X; pos[k*3+1] = r[1]; pos[k*3+2] = j <= BODY.NH ? r[0] : -r[0]; uv[k*2] = u; uv[k*2+1] = j/BODY.NR;
-    }
-  }
-  for (let i = 0; i < nu-1; i++) for (let j = 0; j < nv-1; j++) { const a = i*nv + j, b = a + 1, c = a + nv + 1, d = a + nv; idx.push(a, b, c, a, c, d); }
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
-  if (inset) { const n = g.attributes.normal.array; for (let k = 0; k < pos.length; k++) pos[k] -= n[k]*inset; g.computeVertexNormals(); }
-  return g;
-}
-function capGeometry(X, front) {   // flat end face, UVs into its own 2 × 1 m texture (z −1…1, y 0.1…1.1)
-  const h = BODY.half(BODY.at(X)), pts = [];
-  for (let j = 0; j < BODY.NR; j++) { const r = j <= BODY.NH ? h[j] : h[BODY.NR - j]; pts.push([j <= BODY.NH ? r[0] : -r[0], r[1]]); }
-  let cz = 0, cy = 0; for (const p of pts) { cz += p[0]; cy += p[1]; } cz /= pts.length; cy /= pts.length;
-  const pos = [], uv = [], x = BODY.XF - X;
-  for (let j = 0; j < pts.length; j++) { const a = pts[j], b = pts[(j + 1) % pts.length]; for (const p of (front ? [[cz, cy], b, a] : [[cz, cy], a, b])) { pos.push(x, p[1], p[0]); uv.push((p[0] + 1)/2, p[1] - 0.1); } }
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.computeVertexNormals();
-  if ((g.attributes.normal.getX(0) > 0) !== front) { for (let k = 0; k < pos.length; k += 9) for (let q = 0; q < 3; q++) { const t = pos[k+3+q]; pos[k+3+q] = pos[k+6+q]; pos[k+6+q] = t; } for (let k = 0; k < uv.length; k += 6) for (let q = 0; q < 2; q++) { const t = uv[k+2+q]; uv[k+2+q] = uv[k+4+q]; uv[k+4+q] = t; }
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.computeVertexNormals(); }
-  return g;
-}
-function mergeGeos(list) {   // concatenate indexed or non-indexed geometries that carry position + normal (+ uv)
-  const pos = [], nrm = [], idx = []; let base = 0;
-  for (const g0 of list) { const g = g0.index ? g0 : g0; const p = g.attributes.position, n = g.attributes.normal;
-    for (let i = 0; i < p.count; i++) { pos.push(p.getX(i), p.getY(i), p.getZ(i)); nrm.push(n.getX(i), n.getY(i), n.getZ(i)); }
-    if (g.index) for (let i = 0; i < g.index.count; i++) idx.push(base + g.index.getX(i)); else for (let i = 0; i < p.count; i++) idx.push(base + i);
-    base += p.count; }
-  const out = new THREE.BufferGeometry(); out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); out.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3)); out.setIndex(idx); return out;
-}
-function paintShader(m) {   // paint colour weighted by the props map's red channel (also the clearcoat mask), plus the atlas's trim colour
-  m.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', `
-#ifdef USE_MAP
-  vec4 sampledDiffuseColor = texture2D( map, vMapUv );
-  float paintMask = texture2D( roughnessMap, vRoughnessMapUv ).r;
-  diffuseColor.rgb = sampledDiffuseColor.rgb + diffuseColor.rgb * paintMask;   // the atlas colour is already weighted by (1 - paint)
-  diffuseColor.a *= sampledDiffuseColor.a;
-#endif`); };
-  m.customProgramCacheKey = () => 'atto-paint';
-  return m;
-}
-function alphaOnly(m) {   // take only the atlas's alpha (the window and arch openings), keep the material colour
-  m.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', '#ifdef USE_MAP\n  diffuseColor.a *= texture2D( map, vMapUv ).a;\n#endif'); };
-  m.customProgramCacheKey = () => 'atto-alpha-only';
-  return m;
-}
-const CARGEO = {};   // geometry shared by every car (built in the Atto 2's own frame, scaled per car)
-function carGeo(key, make) { if (!CARGEO[key]) CARGEO[key] = make(); return CARGEO[key]; }
-const glassShellMat = new THREE.MeshPhysicalMaterial({ color: 0x0b0e12, metalness: 0, roughness: 0.04, transparent: true, opacity: 0.55, envMapIntensity: 1.3, side: THREE.DoubleSide, depthWrite: false });
-const glassParkedMat = new THREE.MeshStandardMaterial({ color: 0x0d1013, metalness: 0.2, roughness: 0.06, transparent: true, opacity: 0.86, envMapIntensity: 1.1, depthWrite: false });   // parked cars have no interior, so their glass is darker
-const linerMat = new THREE.MeshStandardMaterial({ color: 0x0b0b0c, roughness: 0.95, side: THREE.DoubleSide });
-const gunmetalMat = new THREE.MeshStandardMaterial({ color: 0x4d5157, roughness: 0.32, metalness: 0.85 });
-const railMat = new THREE.MeshStandardMaterial({ color: 0x6b7076, roughness: 0.4, metalness: 0.7 });
-const stopLampMat = new THREE.MeshStandardMaterial({ color: 0x5a0a08, emissive: 0xff2419, emissiveIntensity: 1.2 });
-const barrelMat = new THREE.MeshStandardMaterial({ color: 0x1e2023, roughness: 0.6, metalness: 0.4, side: THREE.DoubleSide });
-
-function buildCar(spec, hero) {
-  const g = new THREE.Group();
-  const { L, W, H } = spec, sx = L/BODY.L, sy = H/1.675, sz = W/1.83;
-  const OVF = 0.883*sx, WB = hero ? spec.WB : 2.62*sx, xf = WB + OVF, xr = xf - L;
-  const T = BAKE.textures();
-  const matFor = (set, emissive) => {
-    const o = { color: spec.color, map: set.col, roughnessMap: set.prp, metalnessMap: set.prp, roughness: 1, metalness: 1, emissive: 0xffffff, emissiveMap: set.emi, emissiveIntensity: emissive, alphaTest: 0.5, envMapIntensity: hero ? 0.95 : 0.6 };
-    return paintShader(hero ? new THREE.MeshPhysicalMaterial({ ...o, clearcoat: 1, clearcoatMap: set.prp, clearcoatRoughness: 0.07 }) : new THREE.MeshStandardMaterial(o));
-  };
-  const shellMat = matFor(T.shell, hero ? 1.6 : 0.06);
-  const paint = hero ? new THREE.MeshPhysicalMaterial({ color: spec.color, roughness: 0.42, metalness: 0.12, clearcoat: 1, clearcoatRoughness: 0.07, envMapIntensity: 0.95 }) : new THREE.MeshStandardMaterial({ color: spec.color, roughness: 0.42, metalness: 0.12, envMapIntensity: 0.6 });
-  // everything on the body lives in the Atto 2's frame, scaled to this car
-  const bodyG = new THREE.Group(); bodyG.scale.set(sx, sy, sz); bodyG.position.x = xf - BODY.XF*sx; g.add(bodyG);
-  const add = (geo, mat, px, py, pz, rot, parent) => { const m = new THREE.Mesh(geo, mat); m.position.set(px, py, pz); if (rot) m.rotation.set(rot[0], rot[1], rot[2]); (parent || bodyG).add(m); return m; };
-  const lx = X => BODY.XF - X;                      // nose-frame X → body-frame x
-  const place = (geo, px, py, pz, ry, rz, sc) => geo.clone().applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(px, py, pz), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ry || 0, rz || 0)), new THREE.Vector3(sc || 1, sc || 1, sc || 1)));
-  const s23 = BODY.segStart[5];
-  // shell (parked cars: coarser loft, every other ring vertex), end caps, glass; the hero also gets the inside of its panels
-  const body = add(carGeo(hero ? 'shellHi' : 'shellLo', () => bodyGeometry(hero ? 120 : 40, 0, BODY.L, 0, BODY.NR, 0, hero ? 1 : 2)), shellMat, 0, 0, 0);
-  if (hero) add(body.geometry, alphaOnly(new THREE.MeshStandardMaterial({ color: 0x26282c, map: T.shell.col, roughness: 0.95, side: THREE.BackSide, alphaTest: 0.5 })), 0, 0, 0);
-  add(carGeo('capF', () => capGeometry(0, true)), matFor(T.front, 0), 0, 0, 0);
-  add(carGeo('capR', () => capGeometry(BODY.L, false)), matFor(T.rear, hero ? 0.8 : 0.03), 0, 0, 0);
-  add(carGeo(hero ? 'glassHi' : 'glassLo', () => bodyGeometry(hero ? 70 : 26, 1.2, 4.2, s23, BODY.NR - s23, 0.004, hero ? 1 : 2)), hero ? glassShellMat : glassParkedMat, 0, 0, 0);
-  // wheel-arch liners behind the openings
-  add(carGeo('liners', () => { const dip = 0.26, cyl = new THREE.CylinderGeometry(BODY.R_OPEN + 0.01, BODY.R_OPEN + 0.01, 0.34, 20, 1, true, Math.PI/2 - dip, Math.PI + 2*dip).rotateX(Math.PI/2), wall = new THREE.CircleGeometry(BODY.R_OPEN + 0.01, 20, -dip, Math.PI + 2*dip), parts = [];   // down to the sill line, not below it
-    for (const X of BODY.WX) for (const sg of [-1, 1]) parts.push(place(cyl, lx(X), BODY.WR, sg*0.73), place(wall, lx(X), BODY.WR, sg*0.56));
-    return mergeGeos(parts); }), linerMat, 0, 0, 0);
-  // painted add-ons (mirror shells, roof spoiler), black add-ons (mirror glass, handles, fin), mirror bases, roof rails
-  const mirrorAt = (sg, geo, ox, oy, oz) => { const m = new THREE.Matrix4().compose(new THREE.Vector3(lx(1.63), 1.185, sg*0.94), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -sg*0.12, 0)), new THREE.Vector3(1, 1, 1)); return geo.clone().applyMatrix4(new THREE.Matrix4().makeTranslation(ox, oy, oz)).applyMatrix4(m); };
-  const spoilerGeo = () => { const sh = new THREE.Shape(), P = [[3.58, 1.601], [3.75, 1.594], [3.88, 1.574], [3.95, 1.547], [3.963, 1.529], [3.95, 1.514], [3.86, 1.513], [3.78, 1.55], [3.62, 1.592]];
-    P.forEach(([X, Y], i) => i ? sh.lineTo(lx(X), Y) : sh.moveTo(lx(X), Y)); sh.closePath();
-    const geo = new THREE.ExtrudeGeometry(sh, { depth: 1.18, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.008, bevelSegments: 2, steps: 16 }).translate(0, 0, -0.59);
-    const p = geo.attributes.position, s0 = BODY.at(3.7), h0 = BODY.half(s0);   // bend it to the roof's crown so it sits on the roof, with its ends curling down
-    for (let i = 0; i < p.count; i++) p.setY(i, p.getY(i) - (s0.top - BODY.upperY(h0, Math.min(Math.abs(p.getZ(i)), s0.hr + 0.01))));
-    geo.computeVertexNormals(); return geo; };
-  const mShell = new THREE.SphereGeometry(1, 16, 10, 0, Math.PI).rotateY(Math.PI/2).scale(0.1, 0.066, 0.098);
-  add(carGeo('paintParts', () => mergeGeos([spoilerGeo(), mirrorAt(-1, mShell, 0, 0, 0), mirrorAt(1, mShell, 0, 0, 0)])), paint, 0, 0, 0);
-  add(carGeo('mirrorBases', () => mergeGeos([-1, 1].map(sg => mirrorAt(sg, new THREE.BoxGeometry(0.09, 0.035, 0.13), -0.02, -0.05, -sg*0.075)))), claddingMat, 0, 0, 0);
-  add(carGeo('blackParts', () => { const parts = [], mg = new THREE.CircleGeometry(1, 24).rotateY(-Math.PI/2).scale(1, 0.058, 0.088);
-    for (const sg of [-1, 1]) parts.push(mirrorAt(sg, mg, -0.002, 0, 0));
-    for (const X of [2.13, 3.11]) for (const sg of [-1, 1]) parts.push(place(new THREE.BoxGeometry(0.15, 0.02, 0.012), lx(X), 1.005, sg*(BODY.sideZ(BODY.half(BODY.at(X)), 1.005) + 0.004)));
-    const fin = new THREE.Shape(); fin.moveTo(lx(3.45), 0); fin.lineTo(lx(3.62), 0); fin.quadraticCurveTo(lx(3.6), 0.05, lx(3.55), 0.062); fin.quadraticCurveTo(lx(3.5), 0.03, lx(3.45), 0);
-    parts.push(new THREE.ExtrudeGeometry(fin, { depth: 0.045, bevelEnabled: true, bevelThickness: 0.008, bevelSize: 0.008, bevelSegments: 2 }).translate(0, BODY.at(3.55).top - 0.01, -0.0225));
-    return mergeGeos(parts); }), blackGloss, 0, 0, 0);
-  add(carGeo(hero ? 'railsHi' : 'railsLo', () => { const parts = [];
-    for (const sg of [-1, 1]) { const pts = []; for (let X = 2.06; X <= 3.62; X += 0.078) { const s = BODY.at(X), az = s.hr - 0.072; pts.push(new THREE.Vector3(lx(X), BODY.upperY(BODY.half(s), az) + 0.008, sg*az)); }
-      parts.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), hero ? 40 : 14, 0.013, hero ? 6 : 4, false)); }
-    return mergeGeos(parts); }), railMat, 0, 0, 0);
-  if (hero) {
-    add(new THREE.BoxGeometry(0.01, 0.012, 0.3), stopLampMat, lx(3.948), 1.511, 0);
-    for (const [zz, ry] of [[-0.3, 0.18], [0.36, 0.22]]) add(new THREE.BoxGeometry(0.02, 0.012, 0.52), blackGloss, lx(1.29), 1.168, zz, [0, ry, 0]);   // wipers
-    add(new THREE.BoxGeometry(0.018, 0.016, 0.4), blackGloss, lx(4.04) - 0.012, 1.24, 0.16, [0, 0, 0.6]);
-    add(new THREE.PlaneGeometry(0.21, 0.045), new THREE.MeshBasicMaterial({ map: tex('byd', () => textTex('BYD', '#d9dce1')), transparent: true }), lx(0) + 0.004, 0.785, 0, [0, Math.PI/2, 0]);
-    add(new THREE.PlaneGeometry(0.52, 0.11), new THREE.MeshStandardMaterial({ map: tex('plateF', () => plateTex('BYD  ATTO 2')), roughness: 0.5 }), lx(0) + 0.006, 0.517, 0, [0, Math.PI/2, 0]);
-    add(new THREE.PlaneGeometry(0.52, 0.11), new THREE.MeshStandardMaterial({ map: tex('plateR', () => plateTex('BYD  ATTO 2  DM-i')), roughness: 0.5 }), lx(BODY.L) - 0.006, 0.52, 0, [0, -Math.PI/2, 0]);
-    const badge = (key, make, w, h, az, Y) => { const X = BODY.faceX(Math.abs(az), Y), X2 = BODY.faceX(Math.abs(az), Y + 0.04), tilt = Math.atan2(X - X2, 0.04);
-      const m = add(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex(key, make), transparent: true }), lx(X) - 0.004, Y, az); m.rotation.set(0, -Math.PI/2, 0); m.rotateX(-tilt); };
-    badge('bydR', () => textTex('BYD', '#d9dce1'), 0.2, 0.043, 0, 0.972);
-    badge('atto', () => textTex('ATTO 2', '#d9dce1', 512, 128, 86), 0.16, 0.04, 0.63, 0.80);
-    badge('dmi', () => textTex('DM-i', '#d9dce1', 512, 128, 86), 0.11, 0.028, -0.66, 0.79);
-  }
-  // wheels: rounded tyre, five twin-spoke alloy; the hero's turn and roll and show a brake disc and calliper, parked cars' are merged
-  const wheels = {}, TR = hero ? spec.TRACK : W - 0.25, WRc = hero ? CAR.WR : 0.334*Math.min(sx, sy), wsc = WRc/0.334;
-  const tyreGeo = carGeo(hero ? 'tyreHi' : 'tyreLo', () => new THREE.LatheGeometry([[0.211, -0.092], [0.245, -0.104], [0.29, -0.107], [0.318, -0.1], [0.331, -0.08], [0.334, -0.045], [0.334, 0.045], [0.331, 0.08], [0.318, 0.1], [0.29, 0.107], [0.245, 0.104], [0.211, 0.092]].map(p => new THREE.Vector2(p[0], p[1])), hero ? 36 : 14).rotateX(Math.PI/2));
-  const rimGeo = carGeo(hero ? 'rimHi' : 'rimLo', () => { const parts = [];
-    for (let k = 0; k < 5; k++) for (const off of (hero ? [-0.11, 0.11] : [0])) parts.push(new THREE.BoxGeometry(0.15, hero ? 0.026 : 0.045, 0.022).translate(0.128, 0, 0).rotateZ(k*Math.PI*2/5 + off).translate(0, 0, 0.066));
-    parts.push(new THREE.CylinderGeometry(0.062, 0.066, 0.04, hero ? 20 : 10).rotateX(Math.PI/2).translate(0, 0, 0.062));
-    if (hero) parts.push(new THREE.TorusGeometry(0.207, 0.011, 6, 36).translate(0, 0, 0.078));
-    else parts.push(new THREE.CylinderGeometry(0.212, 0.212, 0.17, 14, 1, true).rotateX(Math.PI/2));
-    return mergeGeos(parts); });
-  const wheelSpots = [['fl', WB, -TR/2], ['fr', WB, TR/2], ['rl', 0, -TR/2], ['rr', 0, TR/2]];
-  if (hero) {
-    const barrelGeo = mergeGeos([new THREE.CylinderGeometry(0.212, 0.212, 0.17, 28, 1, true).rotateX(Math.PI/2), new THREE.CircleGeometry(0.212, 28).translate(0, 0, -0.03)]), capGeo = new THREE.CircleGeometry(0.035, 16).translate(0, 0, 0.083);
-    const discGeo = new THREE.CylinderGeometry(0.155, 0.155, 0.022, 28).rotateX(Math.PI/2), discMat = new THREE.MeshStandardMaterial({ color: 0x5b5e62, roughness: 0.45, metalness: 0.8 }), calMat = new THREE.MeshStandardMaterial({ color: 0x2a2b2e, roughness: 0.55 });
-    for (const [key, wx, wz] of wheelSpots) {
-      const steerG = new THREE.Group(); steerG.position.set(wx, WRc, wz);
-      const spinG = new THREE.Group(); steerG.add(spinG);
-      const flip = new THREE.Group(); if (wz < 0) flip.rotation.y = Math.PI; spinG.add(flip);
-      add(tyreGeo, tyreMat, 0, 0, 0, null, flip); add(barrelGeo, barrelMat, 0, 0, 0, null, flip); add(rimGeo, gunmetalMat, 0, 0, 0, null, flip); add(capGeo, blackGloss, 0, 0, 0, null, flip);
-      const dg = new THREE.Group(); if (wz < 0) dg.rotation.y = Math.PI; steerG.add(dg);
-      add(discGeo, discMat, 0, 0, 0.012, null, dg); add(new THREE.BoxGeometry(0.06, 0.11, 0.045), calMat, -0.1, 0.07, 0.02, [0, 0, 0.6], dg);
-      g.add(steerG); wheels[key] = { steer: steerG, spin: spinG };
-    }
-  } else {
-    const tyreAndPlate = carGeo('tyrePlateLo', () => mergeGeos([tyreGeo, new THREE.CircleGeometry(0.212, 14).translate(0, 0, -0.03)]));
-    add(mergeGeos(wheelSpots.map(([, wx, wz]) => place(tyreAndPlate, wx, WRc, wz, wz < 0 ? Math.PI : 0, 0, wsc))), tyreMat, 0, 0, 0, null, g);
-    add(mergeGeos(wheelSpots.map(([, wx, wz]) => place(rimGeo, wx, WRc, wz, wz < 0 ? Math.PI : 0, 0, wsc))), rimMat, 0, 0, 0, null, g);
-  }
-  // soft shadow
-  const sh = new THREE.Mesh(new THREE.PlaneGeometry(L + 0.5, W + 0.5), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false }));
-  sh.rotation.x = -Math.PI/2; sh.position.set((xr + xf)/2, 0.012, 0); g.add(sh);
-  return { group: g, wheels, body, hood: new THREE.Group(), caps: [], bodyMat: shellMat, xr, xf, belt: 1.15*sy };
+  parkCar({ L:4.055, W:1.745, H:1.43, WB:2.54, label:'Peugeot 208' }, SU(-3.85 - 4.055/2), SV(-3.6), 0, 'black Peugeot 208');
+  parkCar({ L:4.03, W:1.72, H:1.49, WB:2.575, label:'Clio' }, SU(5.05 + 4.03/2), SV(-3.5), 0, 'grey Clio');
+  parkCar({ L:4.63, W:1.89, H:1.71, WB:2.77 }, SU(12.6), SV(3.7), Math.PI/2, 'parked SUV');
+  parkCar({ L:3.92, W:1.65, H:1.47, WB:2.46 }, SU(12.6), SV(-2.6), -Math.PI/2, 'white car');
+  parkCar({ L:4.76, W:1.82, H:1.43, WB:2.82 }, SU(15.6), SV(3.7), Math.PI/2, 'black saloon');
+  parkCar({ L:4.37, W:1.90, H:1.63, WB:2.66 }, SU(15.6), SV(-2.6), -Math.PI/2, 'white SUV');
+  parkCar({ L:4.76, W:1.82, H:1.43, WB:2.82 }, SU(12.7), SV(-6.9), Math.PI/2, 'black saloon');
 }
 function parkCar(spec, cx, cz, heading, name) {
-  spec.TRACK = spec.W - 0.25;
-  const c = buildCar(spec, false);
-  const OVR = 0.827*(spec.L/4.33), half = spec.L/2 - OVR;   // the shared body keeps the Atto 2's overhang ratio
+  const OVR = 0.827*(spec.L/4.33), half = spec.L/2 - OVR;   // parked cars keep the Atto 2's overhang ratio
   const ax = cx - Math.cos(heading)*half, az = cz + Math.sin(heading)*half;
-  c.group.position.set(ax, 0, az); c.group.rotation.y = heading; scene.add(c.group);
-  const pts = carCorners(ax, az, heading, spec.L, spec.W, spec.WB, OVR);
-  regObs({ kind:'poly', pts, name, fill:'#' + spec.color.toString(16).padStart(6,'0'), h: spec.H, cls:'car', label: spec.label || '' });
+  regObs({ kind:'poly', pts: carCorners(ax, az, heading, spec.L, spec.W, spec.WB, OVR), name, h: spec.H, cls:'car', label: spec.label || '' });
 }
 function carCorners(ax, az, h, L, W, WB, OVR) {
   const cs = Math.cos(h), sn = Math.sin(h), x0 = -OVR, x1 = L - OVR, hw = W/2;
   const P = (lx, lz) => [ax + lx*cs + lz*sn, az - lx*sn + lz*cs];
   return [P(x0,-hw), P(x1,-hw), P(x1,hw), P(x0,hw)];
 }
-
-/* ---------- hero car + cabin ---------- */
-const hero = buildCar({ ...CAR, color: 0x121417 }, true);
-scene.add(hero.group);
-const cabin = new THREE.Group(); hero.group.add(cabin);
-const CAB_DX = CAR.OVF - 0.77; cabin.position.x = CAB_DX;   // the cabin was laid out for a 0.77 m front overhang
-let clusterTex, screenTex, clusterCtx, wheelHub;
-const mirrors = [];
-function buildCabin() {
-  const dashMat = new THREE.MeshStandardMaterial({ color: 0x121317, roughness: 0.95 });
-  const dashTop = new THREE.MeshStandardMaterial({ color: 0x15161a, roughness: 0.97 });
-  const trimLight = new THREE.MeshStandardMaterial({ color: 0x8e9299, roughness: 0.4, metalness: 0.6 });
-  const seatMat = new THREE.MeshStandardMaterial({ color: 0x24262b, roughness: 0.95 });
-  const add = (geo, mat, px, py, pz) => { const m = new THREE.Mesh(geo, mat); m.position.set(px, py, pz); cabin.add(m); return m; };
-  // dashboard body, top and the light trim strip across it (as in the Atto 2)
-  add(new THREE.BoxGeometry(0.75, 0.3, 1.7), dashMat, 2.1, 0.77, 0);
-  add(new THREE.BoxGeometry(0.72, 0.05, 1.7), dashTop, 2.08, 0.945, 0);
-  add(new THREE.BoxGeometry(0.06, 0.03, 1.66), trimLight, 1.74, 0.86, 0);
-  add(new THREE.BoxGeometry(0.2, 0.08, 1.66), dashTop, 1.78, 0.68, 0);
-  // centre console and seats
-  add(new THREE.BoxGeometry(1.3, 0.3, 0.26), dashMat, 1.0, 0.56, 0);
-  add(new THREE.BoxGeometry(0.42, 0.06, 0.2), trimLight, 1.35, 0.72, 0);
-  for (const s of [-1, 1]) {
-    add(new THREE.BoxGeometry(0.55, 0.18, 0.52), seatMat, 0.95, 0.62, s*0.37);
-    add(new THREE.BoxGeometry(0.14, 0.62, 0.5), seatMat, 0.62, 0.98, s*0.37);
-    add(new THREE.BoxGeometry(0.14, 0.26, 0.26), seatMat, 0.6, 1.4, s*0.37);
-    // door panels and sills
-    add(new THREE.BoxGeometry(2.4, 0.7, 0.04), dashMat, 1.0, 0.72, s*0.79);
-    add(new THREE.BoxGeometry(0.9, 0.05, 0.05), trimLight, 1.1, 0.98, s*0.765);
-  }
-  add(new THREE.BoxGeometry(2.6, 0.02, 1.1), dashMat, 0.9, 0.42, 0);
-  add(new THREE.BoxGeometry(0.55, 0.3, 1.08), seatMat, 0.05, 0.62, 0);       // rear bench
-  add(new THREE.BoxGeometry(0.14, 0.55, 1.3), seatMat, -0.3, 1.0, 0);
-  // instrument cluster + centre screen
-  const cc = document.createElement('canvas'); cc.width = 320; cc.height = 120; clusterCtx = cc.getContext('2d');
-  clusterTex = new THREE.CanvasTexture(cc); clusterTex.colorSpace = THREE.SRGBColorSpace;
-  add(new THREE.BoxGeometry(0.1, 0.11, 0.26), dashMat, 1.8, 1.02, -0.37);
-  const cl = add(new THREE.PlaneGeometry(0.23, 0.086), new THREE.MeshBasicMaterial({ map: clusterTex }), 1.745, 1.03, -0.37);
-  cl.rotation.set(-0.25, -Math.PI/2, 0, 'YXZ');   // face the driver, top tilted away
-  screenTex = canvasTex(400, 250, (c, w, h) => {
-    c.fillStyle = '#0d1118'; c.fillRect(0,0,w,h);
-    c.fillStyle = '#152033'; c.fillRect(0,0,w,34);
-    c.fillStyle = '#9fb3cf'; c.font = '600 20px Barlow, sans-serif'; c.textAlign = 'left'; c.fillText('09:30', 14, 24);
-    c.textAlign = 'right'; c.fillText('BYD', w-14, 24);
-    const tiles = ['Navigation', 'Media', 'Phone', 'Climate', 'Camera', 'Settings'];
-    tiles.forEach((t, i) => { const tx = 14 + (i%3)*126, ty = 50 + Math.floor(i/3)*96; c.fillStyle = i===4 ? '#1f5fd1' : '#1a2334'; c.fillRect(tx, ty, 116, 84); c.fillStyle = '#dfe6f2'; c.font = '500 16px Barlow, sans-serif'; c.textAlign = 'left'; c.fillText(t, tx+10, ty+70); });
-  });
-  add(new THREE.BoxGeometry(0.06, 0.22, 0.33), dashMat, 1.76, 0.99, 0.12);
-  const sc = add(new THREE.PlaneGeometry(0.3, 0.19), new THREE.MeshBasicMaterial({ map: screenTex }), 1.725, 0.995, 0.12);
-  sc.rotation.set(-0.15, -Math.PI/2, 0, 'YXZ');
-  // steering wheel: mount faces the driver, tilted 24°, hub spins with the steering
-  const mount = new THREE.Group(); mount.position.set(1.4, 0.9, -0.37);
-  const qFace = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), -Math.PI/2);
-  const qTilt = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1), 0.42);
-  mount.quaternion.copy(qTilt).multiply(qFace); cabin.add(mount);
-  wheelHub = new THREE.Group(); mount.add(wheelHub);
-  const rimW = new THREE.Mesh(new THREE.TorusGeometry(0.185, 0.021, 10, 40), new THREE.MeshStandardMaterial({ color: 0x202126, roughness: 0.55 })); wheelHub.add(rimW);
-  for (const a of [Math.PI, 0, -Math.PI/2]) { const sp = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.035, 0.02), new THREE.MeshStandardMaterial({ color: 0x9da2a8, roughness: 0.4, metalness: 0.7 })); sp.position.set(Math.cos(a)*0.095, Math.sin(a)*0.095, 0); sp.rotation.z = a; wheelHub.add(sp); }
-  const hubm = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.03, 16), new THREE.MeshStandardMaterial({ color: 0x1b1c21, roughness: 0.6 })); hubm.rotation.x = Math.PI/2; wheelHub.add(hubm);
-  const col = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.3, 10), dashMat); col.rotation.x = Math.PI/2; col.position.z = 0.16; mount.add(col);
-  // mirrors (render targets)
-  const mk = (w, h, pos, dir, fov, ratio, near) => {
-    const rt = new THREE.WebGLRenderTarget(w, h); rt.texture.repeat.x = -1; rt.texture.offset.x = 1;   // a mirror shows the view behind flipped left-right
-    const cam = new THREE.PerspectiveCamera(fov, w/h, near || 0.25, 70); cam.layers.enable(1);
-    const quad = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: rt.texture }));
-    const border = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0x0b0c10 }));
-    overlay.add(border); overlay.add(quad);
-    mirrors.push({ rt, cam, quad, border, ratio, pos: new THREE.Vector3(...pos), dir: new THREE.Vector3(...dir).normalize() });
-  };
-  mk(320, 100, [1.55 + CAB_DX, 1.42, 0], [-1, -0.03, 0], 22, 3.2, 2.6);     // interior mirror: near plane past the tailgate, so it shows the garage, not the seats
-  mk(256, 160, [1.92 + CAB_DX, 1.1, -1.0], [-1, -0.06, -0.3], 30, 1.6);     // left door mirror
-  mk(256, 160, [1.92 + CAB_DX, 1.1, 1.0], [-1, -0.06, 0.3], 30, 1.6);       // right door mirror
-  add(new THREE.BoxGeometry(0.03, 0.08, 0.26), dashMat, 1.55, 1.42, 0);   // mirror housing, the picture itself is drawn in the overlay
-}
-const overlay = new THREE.Scene();
-const overlayCam = new THREE.OrthographicCamera(0, 1, 1, 0, -10, 10);
-function layoutOverlay() {   // one row under the HUD: left mirror, interior mirror, right mirror (CSS pixel units)
-  layoutPdc();
-  const w = canvas.clientWidth, h = canvas.clientHeight; if (!w || !h || !mirrors.length) return;
-  overlayCam.right = w; overlayCam.top = h; overlayCam.updateProjectionMatrix();
-  const hudB = $('hud').getBoundingClientRect().bottom + 10;
-  const side = Math.min(w*0.27, 190), rear = Math.min(w*0.40, 300), gap = Math.max(6, w*0.02);
-  const sideH = side/1.6, rearH = rear/3.2, rowY = hudB + sideH/2;
-  const place = (m, cx, cy, pw, ph) => { m.quad.scale.set(pw, ph, 1); m.quad.position.set(cx, h - cy, 0); m.border.scale.set(pw+4, ph+4, 1); m.border.position.set(cx, h - cy, -1); };
-  place(mirrors[1], gap + side/2, rowY, side, sideH);
-  place(mirrors[0], w/2, hudB + rearH/2, rear, rearH);
-  place(mirrors[2], w - gap - side/2, rowY, side, sideH);
-}
-buildGarage(); buildCabin();
-function makeEnvironment() {   // a simple lit garage box, prefiltered for reflections on paint, glass and chrome
-  const env = new THREE.Scene();
-  const P = (w, h, color, px, py, pz, rx, ry) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide })); m.position.set(px, py, pz); m.rotation.set(rx, ry, 0); env.add(m); return m; };
-  P(60, 60, 0x6f6d67, 0, -1.1, 0, -Math.PI/2, 0);
-  P(60, 60, 0x232220, 0, 1.9, 0, Math.PI/2, 0);
-  for (const [px, pz, ry] of [[0, -20, 0], [0, 20, Math.PI], [-20, 0, Math.PI/2], [20, 0, -Math.PI/2]]) {
-    P(60, 3.0, 0xe2e0d9, px, 0.4, pz, 0, ry);
-    P(60, 0.17, 0x2a63c4, px*0.998, 0.52, pz*0.998, 0, ry); P(60, 0.17, 0xe2b321, px*0.998, 0.3, pz*0.998, 0, ry);
-  }
-  for (let i = -4; i <= 4; i++) for (let j = -4; j <= 4; j++) P(1.3, 0.16, new THREE.Color(1.7, 1.6, 1.4), i*4.6+1.2, 1.85, j*4.6, Math.PI/2, 0);
-  const pm = new THREE.PMREMGenerator(renderer); const rt = pm.fromScene(env, 0.03); pm.dispose(); return rt.texture;
-}
-scene.environment = makeEnvironment();
-for (const k in M) if (M[k].isMeshStandardMaterial) M[k].envMapIntensity = 0.45;
-
-/* ---------- path guides on the floor ---------- */
-const guideGeo = [0, 1, 2].map(() => new THREE.BufferGeometry());
-M.guideC = new THREE.LineBasicMaterial({ color: 0x5ed0d8, transparent: true, opacity: 0.9 });
-M.ribbon = new THREE.MeshBasicMaterial({ color: 0xf2c230, transparent: true, opacity: 0.92, depthWrite: false, side: THREE.DoubleSide });
-M.ribbonR = new THREE.MeshBasicMaterial({ color: 0xec5b4f, transparent: true, opacity: 0.92, depthWrite: false, side: THREE.DoubleSide });
-// the two corner guidelines are 8 cm ribbons on the floor, like the car's own camera overlay
-const ribbons = [0, 1].map(() => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(42*2*3), 3)); const idx = []; for (let k = 0; k < 41; k++) idx.push(2*k, 2*k+1, 2*k+2, 2*k+1, 2*k+3, 2*k+2); g.setIndex(idx); const m = new THREE.Mesh(g, M.ribbon); m.frustumCulled = false; m.renderOrder = 2; scene.add(m); return m; });
-function fillRibbon(mesh, pts, width) {
-  const arr = mesh.geometry.attributes.position.array, n = pts.length;
-  for (let k = 0; k < n; k++) {
-    const a = pts[Math.max(0, k-1)], b = pts[Math.min(n-1, k+1)];
-    let tx = b[0]-a[0], tz = b[1]-a[1]; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
-    const nx = -tz*width/2, nz = tx*width/2;
-    const [w1x, w1z] = toWorld(pts[k][0]+nx, pts[k][1]+nz), [w2x, w2z] = toWorld(pts[k][0]-nx, pts[k][1]-nz);
-    arr[k*6] = w1x; arr[k*6+1] = 0.035; arr[k*6+2] = w1z; arr[k*6+3] = w2x; arr[k*6+4] = 0.035; arr[k*6+5] = w2z;
-  }
-  mesh.geometry.attributes.position.needsUpdate = true;
-}
-// top-down camera for the 360° panel (layer 2 carries the gear decal on the roof)
-const topCam = new THREE.OrthographicCamera(-5, 5, 5, -5, 1, 60); topCam.layers.set(0); topCam.layers.enable(2);
-let miniRect = null, decalState = '';
-const decalCanvas = document.createElement('canvas'); decalCanvas.width = 512; decalCanvas.height = 192;
-const decalTex = new THREE.CanvasTexture(decalCanvas); decalTex.colorSpace = THREE.SRGBColorSpace;
-function drawDecal(g, dirSign) {   // gear letter in a rounded box on the roof, chevrons on the bonnet pointing the way the car will move
-  const c = decalCanvas.getContext('2d'), w = decalCanvas.width, h = decalCanvas.height; c.clearRect(0, 0, w, h);
-  c.strokeStyle = 'rgba(255,255,255,.95)'; c.lineWidth = 7; c.lineJoin = 'round'; c.lineCap = 'round';
-  const bx = w*0.36, by = h/2, bs = 84; c.lineWidth = 9; c.beginPath(); c.roundRect(bx-bs/2, by-bs/2, bs, bs, 14); c.stroke();
-  c.fillStyle = '#fff'; c.font = '700 66px "Barlow Condensed", Impact, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(g, bx, by+3);
-  const cx0 = dirSign >= 0 ? w*0.72 : w*0.14;
-  for (const o of [0, 52]) { const x0 = cx0 + dirSign*o; c.beginPath(); c.moveTo(x0 - dirSign*40, by-50); c.lineTo(x0, by); c.lineTo(x0 - dirSign*40, by+50); c.stroke(); }
-  decalTex.needsUpdate = true;
-}
-const decal = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 1.125), new THREE.MeshBasicMaterial({ map: decalTex, transparent: true, depthTest: false }));
-decal.rotation.x = -Math.PI/2; decal.rotation.z = -Math.PI/2; decal.position.set(1.4, CAR.H + 0.1, 0); decal.layers.set(2); decal.renderOrder = 5; hero.group.add(decal);
-function layoutMini() { const r = mini.getBoundingClientRect(), c = canvas.getBoundingClientRect(); miniRect = { x: r.left - c.left, y: c.bottom - r.bottom, w: r.width, h: r.height }; }
-function setMini(open) { settings.mini = open ? 'on' : 'off'; saveSettings(); $('miniWrap').classList.toggle('collapsed', !open); $('miniCap').textContent = open ? '360° view · tap to hide' : 'Show 360° view'; layoutMini(); layoutOverlay(); }
-$('miniWrap').addEventListener('click', () => setMini(settings.mini !== 'on'));
-function renderMini() {
-  if (settings.mini !== 'on' || !miniRect || miniRect.w < 10) return;
-  const vw = 11.5, vh = vw * miniRect.h / miniRect.w, cs = Math.cos(th), sn = Math.sin(th);
-  const cx = x + (CAR.WB/2)*cs, cz = z - (CAR.WB/2)*sn, off = vh*0.14;
-  topCam.left = -vw/2; topCam.right = vw/2; topCam.top = vh/2; topCam.bottom = -vh/2; topCam.updateProjectionMatrix();
-  topCam.position.set(cx + cs*off, 30, cz - sn*off); topCam.up.set(cs, 0, -sn); topCam.lookAt(cx + cs*off, 0, cz - sn*off);
-  const ds = gearName() + lastMoveDir; if (ds !== decalState) { decalState = ds; drawDecal(gearName(), lastMoveDir); }
-  renderer.setScissorTest(true); renderer.setViewport(miniRect.x, miniRect.y, miniRect.w, miniRect.h); renderer.setScissor(miniRect.x, miniRect.y, miniRect.w, miniRect.h);
-  renderer.render(scene, topCam);
-  renderer.setScissorTest(false); renderer.setViewport(0, 0, canvas.clientWidth, canvas.clientHeight);
-}
-const guideLines = guideGeo.map(g => { g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(42*3), 3)); const l = new THREE.Line(g, M.guide); l.frustumCulled = false; scene.add(l); return l; });
+buildGarage();
 
 /* ================= 2D geometry helpers ================= */
 function heroCorners(px, pz, h) { return carCorners(px, pz, h, CAR.L, CAR.W, CAR.WB, CAR.OVR); }
@@ -1203,103 +418,17 @@ function ackermann(deltaLeft) {                                   // front wheel
   const inner = Math.atan(CAR.WB / (Rc - T/2)), outer = Math.atan(CAR.WB / (Rc + T/2));
   return deltaLeft > 0 ? [inner, outer] : [-outer, -inner];
 }
-function pathPoints(lx, lz, dir, n, step) {                       // predicted path of a local point, in local coords
-  const dl = -steerDeg() * DEG, out = [];
-  if (Math.abs(dl) < 0.004) { for (let k = 0; k <= n; k++) out.push([lx + dir*k*step, lz]); return out; }
-  const Rc = CAR.WB / Math.tan(dl), ix = 0, iz = -Rc, rx = lx - ix, rz = lz - iz;
-  for (let k = 0; k <= n; k++) { const a = dir*k*step / Rc; const c = Math.cos(a), s = Math.sin(a); out.push([ix + rx*c + rz*s, iz - rx*s + rz*c]); }
-  return out;
-}
-function guidePaths(fwd, n, step) {   // both leading corners, plus the end that swings: inner rear wheel going forward, outer front corner reversing
-  const sg = Math.sign(steerDeg()) || 1;
-  if (fwd) return [pathPoints(CAR.WB+CAR.OVF, -CAR.W/2, 1, n, step), pathPoints(CAR.WB+CAR.OVF, CAR.W/2, 1, n, step), pathPoints(0, sg*CAR.TRACK/2, 1, n, step)];
-  return [pathPoints(-CAR.OVR, -CAR.W/2, -1, n, step), pathPoints(-CAR.OVR, CAR.W/2, -1, n, step), pathPoints(CAR.WB+CAR.OVF, -sg*CAR.W/2, -1, n, step)];
-}
 const toWorld = (lx, lz) => { const cs = Math.cos(th), sn = Math.sin(th); return [x + lx*cs + lz*sn, z - lx*sn + lz*cs]; };
 
-/* ================= cameras ================= */
-function camClip(ax, az, bx, bz) {   // fraction of the segment car→camera that stays clear of walls and pillars
-  let t = 1;
-  for (const o of obstacles) {
-    if (o.kind !== 'poly' || o.cls !== 'wall') continue;
-    for (let i = 0; i < o.pts.length; i++) {
-      const p = o.pts[i], q = o.pts[(i+1) % o.pts.length];
-      const d = (bx-ax)*(q[1]-p[1]) - (bz-az)*(q[0]-p[0]); if (Math.abs(d) < 1e-9) continue;
-      const u = ((p[0]-ax)*(q[1]-p[1]) - (p[1]-az)*(q[0]-p[0])) / d, w = ((p[0]-ax)*(bz-az) - (p[1]-az)*(bx-ax)) / d;
-      if (u >= 0 && u <= 1 && w >= 0 && w <= 1) t = Math.min(t, Math.max(0.12, u - 0.08));
-    }
-  }
-  return t;
-}
-const camState = { pos: new THREE.Vector3(), look: new THREE.Vector3(), init: false };
-function updateCamera(dt) {
-  const cs = Math.cos(th), sn = Math.sin(th);
-  const cx = x + (CAR.WB/2)*cs, cz = z - (CAR.WB/2)*sn;
-  if (camMode === 'chase') {
-    camera.fov = 58; camera.up.set(0, 1, 0);
-    const yaw = th + lookYaw, back = 7.4, up = 3.8;
-    let bx = cx - Math.cos(yaw)*back, bz = cz + Math.sin(yaw)*back;
-    const t = camClip(cx, cz, bx, bz); bx = cx + (bx-cx)*t; bz = cz + (bz-cz)*t;
-    const tp = new THREE.Vector3(bx, up + (1 - t)*2.4, bz);   // pulled in by a wall behind: rise instead, so the view looks down past the car
-    const tl = new THREE.Vector3(cx, 0.9, cz);
-    if (!camState.init) { camState.pos.copy(tp); camState.look.copy(tl); camState.init = true; }
-    const k = 1 - Math.exp(-7*dt); camState.pos.lerp(tp, k); camState.look.lerp(tl, k);
-    camera.position.copy(camState.pos); camera.lookAt(camState.look);
-  } else if (camMode === 'cabin') {
-    camera.fov = camera.aspect < 1 ? 72 : 60; camera.up.set(0, 1, 0);
-    const [ex, ez] = toWorld(1.0 + CAB_DX, -0.37); const yaw = th + lookYaw;
-    camera.position.set(ex, 1.3, ez);
-    camera.lookAt(ex + Math.cos(yaw), 1.3 - 0.02, ez - Math.sin(yaw));
-  } else {
-    camera.fov = 56; camera.up.set(0, 0, -1);
-    camera.position.set(cx, 23, 5.6); camera.lookAt(cx, 0, 5.6);
-  }
-  camera.layers.set(0); if (camMode === 'cabin') camera.layers.enable(1);
-  const shift = camMode !== 'cabin' && planBand ? planBand.shift : 0, cw = canvas.clientWidth, ch = canvas.clientHeight;   // keep the car in the band the plan card leaves free
-  if (shift && cw && ch) camera.setViewOffset(cw, ch, 0, -shift, cw, ch); else if (camera.view && camera.view.enabled) camera.clearViewOffset();
-  camera.updateProjectionMatrix();
-}
-
-/* ================= HUD: mini preview ================= */
-const mini = $('mini'), miniCtx = mini.getContext('2d');
-let dpr = Math.min(window.devicePixelRatio || 1, 2);
-function drawMini() {   // transparent overlay on the live top-down render: sensor arcs around the car and the turning radius
-  const w = mini.clientWidth, h = mini.clientHeight; if (!w || !h) return;
-  const bw = Math.round(w*dpr), bh = Math.round(h*dpr);
-  if (mini.width !== bw || mini.height !== bh) { mini.width = bw; mini.height = bh; }
-  const c = miniCtx; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, w, h);
-  const s = w / 11.5, ox = w/2, oy = h*(0.5+0.14);
-  const hw = CAR.W/2*s, yF = -(CAR.WB+CAR.OVF)*s, yR = CAR.OVR*s;
-  // parking-sensor zones: three bands per sensor, lit from the outside in as an obstacle closes (red band solid under 30 cm)
-  const bandsFor = g => PDC_BANDS[g];
-  const bcol = ['rgba(236,91,79,', 'rgba(240,165,58,', 'rgba(94,208,138,'];
-  c.lineCap = 'butt';
-  for (const sd of SENSORS) {
-    const bands = bandsFor(sd.g), px = ox + sd.lz*s, py = oy - sd.lx*s, ang = Math.atan2(-Math.cos(sd.a), Math.sin(sd.a));
-    for (let i = 0; i < bands.length-1; i++) {
-      const r0 = bands[i]*s, r1 = bands[i+1]*s, lit = sd.d < bands[i+1];
-      c.beginPath(); c.arc(px, py, (r0+r1)/2, ang - PDC.half, ang + PDC.half); c.lineWidth = Math.max(2, r1 - r0 - 2); c.strokeStyle = bcol[Math.min(i, 2)] + (lit ? '.9)' : '.14)'); c.stroke();
-    }
-    if (sd.d < 0.3) { c.beginPath(); c.arc(px, py, 0.15*s, ang - PDC.half, ang + PDC.half); c.lineWidth = 0.28*s; c.strokeStyle = 'rgba(236,91,79,.95)'; c.stroke(); }
-  }
-  const sdm = steerDeg();
-  c.fillStyle = 'rgba(255,255,255,.85)'; c.font = '600 10px Barlow, sans-serif'; c.textAlign = 'right';
-  c.fillText(Math.abs(sdm) > 0.5 ? `R ${Math.hypot(CAR.WB/Math.tan(Math.abs(sdm)*DEG) + CAR.TRACK/2, CAR.WB).toFixed(1)} m` : 'straight', w-6, 12);
-  c.textAlign = 'left'; const pm = Math.min(pdc.front, pdc.rear, pdc.left, pdc.right); c.fillText(pm < 9 ? pm.toFixed(2) + ' m' : 'clear', 6, 12);
-}
-
-/* ================= HUD: parking-sensor display on the main 3D view ================= */
+/* ================= HUD: parking-sensor display over the map ================= */
 const pdcCv = $('pdcCv'), pdcCtx = pdcCv.getContext('2d');
 const edgeEl = { top: $('edgeF'), bottom: $('edgeR'), left: $('edgeL'), right: $('edgeRt') }, edgeLast = { top: -1, bottom: -1, left: -1, right: -1 };
 let pdcKey = '', pdcTxtKey = '';
-function layoutPdc() {   // under the readout column (or the plan card); in cabin view with mirrors, under the mirror row instead
+function layoutPdc() {   // under the readouts, clear of the plan's buttons; the STOP card in the middle of the map
   layoutPlan();
-  const c = canvas.getBoundingClientRect(); let top = $('readout').getBoundingClientRect().bottom - c.top + 8;
-  if (planBand && !planEl.hidden && !planBand.side) top = Math.max(top, planBand.planBottom + 8);
-  $('pdcWrap').style.right = planBand && planBand.side && !planEl.hidden ? (planBand.side + 20) + 'px' : '';
-  $('pdcStop').style.top = planBand && planBand.shift ? Math.round((planBand.top + planBand.bottom)/2) + 'px' : '';
-  if (camMode === 'cabin' && settings.mirrors === 'on') top = Math.max(top, $('hud').getBoundingClientRect().bottom - c.top + 10 + Math.min(canvas.clientWidth*0.27, 190)/1.6 + 8);
-  $('pdcWrap').style.top = top + 'px';
+  const c = canvas.getBoundingClientRect();
+  $('pdcWrap').style.top = (planBand ? planBand.top + 40 : $('readout').getBoundingClientRect().bottom - c.top + 8) + 'px';
+  $('pdcStop').style.top = planBand ? Math.round(PV.oy) + 'px' : '';
 }
 const zoneOf = sd => sd.d < 0.3 ? 9 : PDC_BANDS[sd.g].reduce((n, b, i) => i && sd.d < b ? n + 1 : n, 0);   // bands lit for one sensor, 9 = under 30 cm
 function drawPdcIcon(g, armed, blinkOn) {   // top-view car with the zone bands around it, like the car's own PDC graphic
@@ -1349,11 +478,11 @@ function updatePdcDisplay(now) {
   // STOP card for the end that is moving, like the car's own screen
   const stop = armed && pdc[g] < 0.3;
   $('pdcStop').classList.toggle('show', stop); if (stop) $('pdcStopD').textContent = pdc[g].toFixed(2) + ' m ' + (g === 'front' ? 'ahead' : 'behind');
-  // red glow on the screen edge facing the obstacle: screen-fixed in chase and cabin view, follows the heading in the bird's-eye view
+  // red glow on the screen edge facing the obstacle; the map is north up, so it follows the car's heading
   const I = { top: 0, bottom: 0, left: 0, right: 0 }, cs = Math.cos(th), sn = Math.sin(th);
   for (const k of ['front', 'rear', 'left', 'right']) {
     const s = on && inRange(k) ? clamp((0.75 - pdc[k]) / 0.45, 0, 1) : 0; if (!s) continue;
-    const [ux, uy] = camMode === 'top' ? (k === 'front' ? [cs, sn] : k === 'rear' ? [-cs, -sn] : k === 'right' ? [sn, -cs] : [-sn, cs]) : (k === 'front' ? [0, 1] : k === 'rear' ? [0, -1] : k === 'right' ? [1, 0] : [-1, 0]);
+    const [ux, uy] = k === 'front' ? [cs, sn] : k === 'rear' ? [-cs, -sn] : k === 'right' ? [sn, -cs] : [-sn, cs];
     I.top += Math.max(0, uy)*s; I.bottom += Math.max(0, -uy)*s; I.right += Math.max(0, ux)*s; I.left += Math.max(0, -ux)*s;
   }
   for (const k in edgeEl) { const o = Math.min(1, I[k]); if (Math.abs(o - edgeLast[k]) > 0.02) { edgeLast[k] = o; edgeEl[k].style.opacity = o.toFixed(2); } }
@@ -1368,20 +497,7 @@ function updatePdcDisplay(now) {
   if (key !== pdcKey) { pdcKey = key; drawPdcIcon(g, armed, blinkOn); }
 }
 
-/* ================= cluster texture ================= */
-let clusterT = 0;
-function drawCluster() {
-  const c = clusterCtx, w = 320, h = 120;
-  c.fillStyle = '#0b0e14'; c.fillRect(0, 0, w, h);
-  c.fillStyle = '#1b2436'; c.fillRect(0, 0, w, 14);
-  c.fillStyle = '#e8ecf4'; c.font = '600 46px "Barlow Condensed", sans-serif'; c.textAlign = 'right'; c.fillText((Math.abs(v)*3.6).toFixed(1), 118, 78);
-  c.font = '500 14px Barlow, sans-serif'; c.fillStyle = '#8fa0bc'; c.fillText('km/h', 118, 98);
-  c.textAlign = 'center'; c.font = '600 34px "Barlow Condensed", sans-serif'; c.fillStyle = '#f2c230'; c.fillText(gearName(), 160, 72);
-  c.textAlign = 'left'; c.fillStyle = '#8fa0bc'; c.font = '500 14px Barlow, sans-serif'; c.fillText('steer', 200, 42);
-  c.fillStyle = '#e8ecf4'; c.font = '600 26px "Barlow Condensed", sans-serif'; c.fillText(steerText(), 200, 70);
-  c.fillStyle = '#8fa0bc'; c.font = '500 13px Barlow, sans-serif'; c.fillText(`front ${fmtD(sensors.front)}   rear ${fmtD(sensors.rear)}`, 200, 96);
-  clusterTex.needsUpdate = true;
-}
+/* ================= readout text ================= */
 const gearName = () => input.fwd || v > 0.05 ? 'D' : input.rev || v < -0.05 ? 'R' : 'P';
 const fmtD = d => d >= 5 ? '> 5 m' : d.toFixed(2) + ' m';
 const steerText = () => { const sd = steerDeg(); return (Math.abs(sd) < 0.5 ? '0°' : Math.abs(sd).toFixed(0) + '° ' + (sd > 0 ? 'R' : 'L')); };
@@ -1406,12 +522,6 @@ const pedal = (el, key) => {
   el.addEventListener('contextmenu', e => e.preventDefault());
 };
 pedal($('btnFwd'), 'fwd'); pedal($('btnRev'), 'rev');
-// look-around drag on the 3D view
-let lookPointer = null, lookX = 0, lookActive = false;
-canvas.addEventListener('pointerdown', e => { lookPointer = e.pointerId; lookX = e.clientX; lookActive = true; try { canvas.setPointerCapture(e.pointerId); } catch (err) {} });
-canvas.addEventListener('pointermove', e => { if (e.pointerId !== lookPointer) return; const dx = e.clientX - lookX; lookX = e.clientX; if (camMode !== 'top') lookYaw = clamp(lookYaw - dx*0.0065, -2.6, 2.6); });
-const endLook = e => { if (e.pointerId === lookPointer) { lookPointer = null; lookActive = false; } };
-canvas.addEventListener('pointerup', endLook); canvas.addEventListener('pointercancel', endLook);
 // keyboard
 window.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT') return;
@@ -1420,7 +530,6 @@ window.addEventListener('keydown', e => {
   if (e.key === 'ArrowLeft') { input.kl = true; wheelTarget = null; }
   if (e.key === 'ArrowRight') { input.kr = true; wheelTarget = null; }
   if (e.key === ' ') { wheelTarget = 0; e.preventDefault(); }
-  if (e.key === 'c' || e.key === 'C') cycleView();
   if (e.key === 'x' || e.key === 'X' || e.key === 'r' || e.key === 'R') resetCar();
   if (e.key.startsWith('Arrow')) e.preventDefault();
 });
@@ -1431,11 +540,6 @@ window.addEventListener('keyup', e => {
   if (e.key === 'ArrowRight') input.kr = false;
 });
 // toolbar + sheets
-const VIEWS = ['chase', 'cabin', 'top'], VIEW_NAMES = { chase:'Chase', cabin:'Cabin', top:'Top' };
-let hintT = 0;
-function setView(m) { camMode = m; lookYaw = 0; camState.init = false; $('btnView').textContent = 'Cam: ' + VIEW_NAMES[m]; const vl = $('viewLabel'); vl.textContent = m === 'top' ? 'Bird’s-eye view, north up' : m === 'cabin' ? 'Drag the view to turn your head' : 'Drag the view to look around'; vl.classList.remove('hide'); clearTimeout(hintT); hintT = setTimeout(() => vl.classList.add('hide'), 3200); layoutOverlay(); }
-function cycleView() { setView(VIEWS[(VIEWS.indexOf(camMode)+1) % VIEWS.length]); }
-$('btnView').addEventListener('click', cycleView);
 $('btnReset').addEventListener('click', resetCar);
 $('btnSettings').addEventListener('click', () => toggleSheet('sheetSettings'));
 $('btnInfo').addEventListener('click', () => toggleSheet('sheetInfo'));
@@ -1449,12 +553,9 @@ document.querySelectorAll('.seg[data-opt]').forEach(seg => {
     if (key === 'start' || key === 'bay') resetCar();
     if (key === 'steer') wheelAngle = clamp(wheelAngle, -LOCK(), LOCK());
     if (key === 'pdc') { if (settings.pdc === 'on') initAudio(); else tone(false); }
-    if (key === 'mirrors') layoutOverlay();
-    guideLines[2].visible = settings.guides === 'on'; ribbons.forEach(r => r.visible = settings.guides === 'on');
   }));
   sync();
 });
-guideLines[2].visible = settings.guides === 'on'; guideLines[0].visible = guideLines[1].visible = false; ribbons.forEach(r => r.visible = settings.guides === 'on');
 
 /* ================= parking sensors: 12 ultrasonic sensors, 60° cones, bumper-height ranges ================= */
 const PDC = { front: 1.2, rear: 1.5, side: 0.6, half: 30*DEG };
@@ -1538,7 +639,7 @@ function showBanner(cls, title, text, stats, ttl) {
 }
 function resetCar() {
   [x, z, th] = STARTS[settings.start] || STARTS.left; pred = null;
-  v = 0; wheelAngle = 0; wheelTarget = null; hits = 0; elapsed = 0; started = false; inContact = false; parkedShown = false; lookYaw = 0; camState.init = false; lastMoveDir = 1;
+  v = 0; wheelAngle = 0; wheelTarget = null; hits = 0; elapsed = 0; started = false; inContact = false; parkedShown = false; lastMoveDir = 1;
   input.fwd = input.rev = false; $('btnFwd').classList.remove('on'); $('btnRev').classList.remove('on');
   const from = settings.start === 'right' ? 'Coming from the right, between the pillars.' : settings.start === 'across' ? 'Starting across the aisle, angled at the bays.' : 'Coming from the left, as you usually do.';
   showBanner('', `Park in bay ${settings.bay}`, from + (settings.bay === '561' ? ' Mind pillar 560 and the bench; the plan shows where each move ends.' : ' Pillar 560 runs along its left side.'), null, 8000);
@@ -1565,7 +666,7 @@ function checkParked() {
 
 /* ================= plan view: a map of the bays with the path the car takes at the current steering ================= */
 const planEl = $('plan'), planCv = $('planCv'), planCtx = planCv.getContext('2d');
-const PV = { cx: 0, cz: 4, s: 24, w: 0, h: 0, init: false };
+const PV = { cx: 0, cz: 4, s: 24, w: 0, h: 0, oy: 0, band: 0, init: false };
 const PLAN_CORNERS = [[3.40, -0.76], [3.40, 0.76], [-0.76, -0.76], [-0.76, 0.76]];   // FL, FR, RL, RR, on the rounded corners of the footprint
 let planBand = null, pred = null, predKey = '', predT = -1, planInfoTxt = '', planPredTxt = '', planScaleW = -1;
 function predictPath(dir) {   // roll the car along its current arc in 6 cm steps until it would touch something, 6 m at most
@@ -1585,32 +686,23 @@ function predictPath(dir) {   // roll the car along its current arc in 6 cm step
   }
   return { tr, ghosts, hit, part, dist: Math.abs(s), end: [px, pz, ph], dir };
 }
-function layoutPlan() {   // under the HUD: full width in portrait, a card on the right in landscape; in portrait the 3D picture moves down into the band left free
+function layoutPlan() {   // the map is the whole screen: its readouts sit under the HUD and above the wheel and pedals, the car in the band between
   const c = canvas.getBoundingClientRect(), W = c.width, H = c.height; if (!W || !H) return;
   const hudB = $('hud').getBoundingClientRect().bottom - c.top + 8;
   const ctlT = Math.min($('wheelWrap').getBoundingClientRect().top, $('pedals').getBoundingClientRect().top) - c.top - 8;
-  const land = W > H, want = settings.plan === 'on' && camMode !== 'cabin';
-  let show = false, h = 0;
-  if (want && land) {
-    h = Math.min(240, $('pedals').getBoundingClientRect().top - c.top - 10 - hudB); show = h >= 120;
-    if (show) { planEl.style.left = 'auto'; planEl.style.right = '10px'; planEl.style.width = Math.round(Math.min(W*0.42, 420)) + 'px'; }
-  } else if (want) {
-    h = Math.round(clamp(H*0.29, 150, 250)); if (ctlT - (hudB + h) < 110) h = Math.round(ctlT - hudB - 110); show = h >= 130;
-    if (show) { planEl.style.left = '10px'; planEl.style.right = '10px'; planEl.style.width = 'auto'; }
-  }
-  planEl.hidden = !show; if (show) { planEl.style.top = hudB + 'px'; planEl.style.height = h + 'px'; }
-  const pill = $('planShow'); pill.hidden = !(settings.plan !== 'on' && camMode !== 'cabin'); pill.style.top = hudB + 'px';
-  const top = show && !land ? hudB + h : hudB, bot = Math.max(top + 60, ctlT);
-  planBand = { top, bottom: bot, shift: show && !land ? Math.round((top + bot)/2 - H/2) : 0, planBottom: show ? hudB + h : hudB, side: show && land ? Math.round(Math.min(W*0.42, 420)) : 0 };
+  const fb = W > H ? H - 10 : ctlT;   // landscape: the wheel and pedals sit at the sides, so the car can use the full height
+  $('planInfo').style.top = $('planBtns').style.top = hudB + 'px'; $('planFoot').style.bottom = Math.max(6, H - ctlT + 4) + 'px';
+  PV.oy = clamp((hudB + 70 + fb - 30)/2, 0, H); PV.band = Math.max(120, fb - hudB - 100);
+  planBand = { top: hudB, bottom: ctlT };
 }
 function planView(dt) {
   let tx, tz, ts;
-  if (settings.planView === 'area') { const x0 = -7.8, x1 = 7.6, z0 = -1.0, z1 = 10.9; tx = (x0 + x1)/2; tz = (z0 + z1)/2; ts = Math.min(PV.w/(x1 - x0), PV.h/(z1 - z0)); }
-  else { tx = x + 1.34*Math.cos(th); tz = z - 1.34*Math.sin(th); ts = Math.min(PV.w, PV.h)/9.5; }
+  if (settings.planView === 'area') { const x0 = -10.8, x1 = 7.6, z0 = -1.0, z1 = 10.9; /* the end wall on the left, where you start, to the pillars past 562 */ tx = (x0 + x1)/2; tz = (z0 + z1)/2; ts = Math.min(PV.w/(x1 - x0), PV.band/(z1 - z0)); }
+  else { tx = x + 1.34*Math.cos(th); tz = z - 1.34*Math.sin(th); ts = Math.min(PV.w, PV.band)/11; }
   const k = PV.init ? 1 - Math.exp(-8*dt) : 1; PV.init = true;
   PV.cx += (tx - PV.cx)*k; PV.cz += (tz - PV.cz)*k; PV.s += (ts - PV.s)*k;
 }
-const PS = (px, pz) => [PV.w/2 + (px - PV.cx)*PV.s, PV.h/2 + (pz - PV.cz)*PV.s];
+const PS = (px, pz) => [PV.w/2 + (px - PV.cx)*PV.s, PV.oy + (pz - PV.cz)*PV.s];
 const rectPts = r => [[r[0], r[2]], [r[1], r[2]], [r[1], r[3]], [r[0], r[3]]];
 function planPath(c, pts, close) { c.beginPath(); for (let i = 0; i < pts.length; i++) { const [sx, sy] = PS(pts[i][0], pts[i][1]); if (i) c.lineTo(sx, sy); else c.moveTo(sx, sy); } if (close !== false) c.closePath(); }
 const zoneCol = d => d < 0.3 ? '#ec5b4f' : d < 0.5 ? '#ff8a3d' : d < 1.0 ? '#f2c230' : '#5ed08a';
@@ -1632,7 +724,7 @@ function drawPlan(now, dt) {
   for (const [t, mx, mz] of MARKS.text) { const [sx, sy] = PS(mx, mz); c.fillText(t, sx, sy); }
   c.fillStyle = '#2c2f35'; planPath(c, rectPts(MARKS.manhole)); c.fill();
   // what is solid: walls and pillars light, low things amber, parked cars dark with their names
-  const vx0 = PV.cx - w/2/s - 1, vx1 = PV.cx + w/2/s + 1, vz0 = PV.cz - h/2/s - 1, vz1 = PV.cz + h/2/s + 1;
+  const vx0 = PV.cx - w/2/s - 1, vx1 = PV.cx + w/2/s + 1, oy = PV.oy, vz0 = PV.cz - oy/s - 1, vz1 = PV.cz + (h - oy)/s + 1;
   c.lineWidth = 1;
   for (const o of obstacles) {
     if (o.bx1 < vx0 || o.bx0 > vx1 || o.bz1 < vz0 || o.bz0 > vz1) continue;
@@ -1704,12 +796,9 @@ function drawPlan(now, dt) {
 }
 const syncPlanBtn = () => { $('planMode').textContent = settings.planView === 'area' ? 'Follow car' : 'Whole area'; };
 $('planMode').addEventListener('click', () => { settings.planView = settings.planView === 'area' ? 'car' : 'area'; saveSettings(); syncPlanBtn(); });
-$('planHide').addEventListener('click', () => { settings.plan = 'off'; saveSettings(); layoutOverlay(); });
-$('planShow').addEventListener('click', () => { settings.plan = 'on'; saveSettings(); PV.init = false; layoutOverlay(); });
 syncPlanBtn();
-
 /* ================= main loop ================= */
-let last = performance.now(), lastSig = '', lastDrawT = 0, wakeUntil = 0, poseSig = '', mirrorTick = 0;
+let last = performance.now(), lastSig = '', lastDrawT = 0, wakeUntil = 0, poseSig = '';
 const wake = () => { wakeUntil = performance.now() + 1500; };   // keep drawing for a moment after any touch, so panels and fades settle
 ['pointerdown', 'pointerup', 'keydown', 'resize'].forEach(ev => window.addEventListener(ev, wake, { passive: true }));
 function frame(now) {
@@ -1744,34 +833,15 @@ function frame(now) {
       if (!inContact) { inContact = true; hits++; lastHitT = now/1000; lastHitName = hit.name; $('flash').classList.add('on'); setTimeout(() => $('flash').classList.remove('on'), 60); beep(160, 0.2, 0.15); showBanner('bad', `Touched the ${hit.name}` + (collides.part ? ` with the ${collides.part}` : ''), 'Stop, straighten up and back away. Touches: ' + hits, null, 2200); }
       v = 0; break;
     }
-    x = nx; z = nz; th = nth; spin -= v*h/CAR.WR; inContact = false;
+    x = nx; z = nz; th = nth; inContact = false;
   }
-  if (!lookActive) lookYaw += (0 - lookYaw) * (1 - Math.exp(-4*dt));
   const ps = x.toFixed(4) + ',' + z.toFixed(4) + ',' + th.toFixed(5);
   if (ps !== poseSig) { poseSig = ps; updateSensors(); updatePdc(); }   // sensor rays only when the car has moved
   checkParked(); pdcAudio(now/1000); updatePdcDisplay(now/1000);
-  // nothing moved, nothing to redraw: skip the HUD, panels and WebGL (the phone can idle instead of re-rendering the same picture)
-  updateCamera(dt);
-  const p = camera.position, sig = [ps, wheelAngle.toFixed(1), v.toFixed(3), camMode, lookYaw.toFixed(4), p.x.toFixed(3), p.y.toFixed(3), p.z.toFixed(3), input.fwd, input.rev, settings.mini, settings.plan, settings.planView, settings.guides, planEl.hidden].join('|');
+  // nothing moved, nothing to redraw: skip the HUD and the map (the phone can idle instead of repainting the same picture)
+  const sig = [ps, wheelAngle.toFixed(1), v.toFixed(3), input.fwd, input.rev, settings.planView].join('|');
   if (sig === lastSig && now > wakeUntil && now - lastDrawT < 1000) return;
   lastSig = sig; lastDrawT = now;
-  // hero pose + wheels
-  hero.group.position.set(x, 0, z); hero.group.rotation.y = th;
-  const [fl, fr] = ackermann(delta);
-  hero.wheels.fl.steer.rotation.y = fl; hero.wheels.fr.steer.rotation.y = fr;
-  for (const k in hero.wheels) hero.wheels[k].spin.rotation.z = spin;
-  wheelHub.rotation.z = -wheelAngle*DEG;
-  // path guides on the floor
-  if (settings.guides === 'on') {
-    const fwd = lastMoveDir >= 0;
-    guidePaths(fwd, 41, 0.15).forEach((pts, i) => {
-      if (i < 2) { fillRibbon(ribbons[i], pts, 0.08); ribbons[i].material = fwd ? M.ribbon : M.ribbonR; ribbons[i].visible = true; return; }
-      const arr = guideGeo[i].attributes.position.array;
-      pts.forEach((p, k) => { const [wx, wz] = toWorld(p[0], p[1]); arr[k*3] = wx; arr[k*3+1] = 0.03; arr[k*3+2] = wz; });
-      guideGeo[i].attributes.position.needsUpdate = true; guideLines[i].material = M.guideC;
-    });
-    guideLines[0].visible = guideLines[1].visible = false;
-  }
   // HUD
   wheelSvg.style.transform = `rotate(${wheelAngle}deg)`;
   $('steerTurns').textContent = (Math.abs(wheelAngle)/360).toFixed(1) + (wheelAngle > 1 ? ' R' : wheelAngle < -1 ? ' L' : '');
@@ -1779,42 +849,21 @@ function frame(now) {
   const cls = d => d < 0.35 ? 'bad' : d < 0.7 ? 'warn' : 'ok';
   for (const [id, k, r] of [['sF','front',PDC.front],['sR','rear',PDC.rear],['sL','left',PDC.side],['sRt','right',PDC.side]]) { const el = $(id); el.textContent = pdc[k] < r ? pdc[k].toFixed(2) + ' m' : '–'; el.className = pdc[k] < r ? cls(pdc[k]) : ''; }
   $('lF').classList.toggle('armed', lastMoveDir >= 0); $('lR').classList.toggle('armed', lastMoveDir < 0);
-  if (settings.mini === 'on') drawMini();
-  if (!planEl.hidden) drawPlan(now/1000, dt);
-  if (camMode === 'cabin') { clusterT += dt; if (clusterT > 0.1) { clusterT = 0; drawCluster(); } }
-  // render
-  cabin.visible = camMode === 'cabin' || camMode === 'chase';
-  const useMirrors = camMode === 'cabin' && settings.mirrors === 'on';
-  if (useMirrors && (mirrorTick++ % 2 === 0)) {   // mirror pictures at 15 fps
-    hero.group.updateMatrixWorld(true);
-    for (const m of mirrors) {
-      const wp = m.pos.clone().applyMatrix4(hero.group.matrixWorld);
-      const wd = m.dir.clone().transformDirection(hero.group.matrixWorld);
-      m.cam.position.copy(wp); m.cam.lookAt(wp.clone().add(wd));
-      renderer.setRenderTarget(m.rt); renderer.render(scene, m.cam);
-    }
-    renderer.setRenderTarget(null);
-  }
-  renderer.render(scene, camera);
-  if (useMirrors) { renderer.autoClear = false; renderer.clearDepth(); renderer.render(overlay, overlayCam); renderer.autoClear = true; }
-  renderMini();
+  drawPlan(now/1000, dt);
 }
 function resize() {
-  const w = canvas.clientWidth, h = canvas.clientHeight; if (!w || !h) return;
-  dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
-  renderer.setPixelRatio(dpr); renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix(); layoutOverlay(); layoutMini();
+  dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR); layoutPdc(); PV.init = false;
 }
 window.addEventListener('resize', resize); window.addEventListener('orientationchange', () => setTimeout(resize, 200));
 
 /* ---------- boot (hot-reload aware) ---------- */
 function start(saved) {
   resetCar();
-  if (saved && typeof saved.x === 'number' && saved.layout === LAYOUT_V && !collides(saved.x, saved.z, saved.th)) { x = saved.x; z = saved.z; th = saved.th; wheelAngle = saved.wheelAngle || 0; hits = saved.hits || 0; elapsed = saved.elapsed || 0; if (saved.camMode) setView(saved.camMode); }
-  resize(); setView(camMode); drawCluster(); setMini(settings.mini !== 'off'); setTimeout(() => { layoutMini(); layoutOverlay(); }, 300); setTimeout(() => { layoutMini(); layoutOverlay(); }, 1500);
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { const c = document.createElement('canvas'); c.width = floorTex.image.width; c.height = floorTex.image.height; drawFloor(c.getContext('2d'), c.width, c.height); floorTex.image = c; floorTex.needsUpdate = true; });
+  if (saved && typeof saved.x === 'number' && saved.layout === LAYOUT_V && !collides(saved.x, saved.z, saved.th)) { x = saved.x; z = saved.z; th = saved.th; wheelAngle = saved.wheelAngle || 0; hits = saved.hits || 0; elapsed = saved.elapsed || 0; }
+  resize(); setTimeout(layoutPdc, 300); setTimeout(layoutPdc, 1500);
   requestAnimationFrame(t => { last = t; frame(t); });
 }
-try { window.claude?.hot?.snapshot?.(() => ({ x, z, th, wheelAngle, hits, elapsed, camMode, layout: LAYOUT_V })); } catch (e) {}
+try { window.claude?.hot?.snapshot?.(() => ({ x, z, th, wheelAngle, hits, elapsed, layout: LAYOUT_V })); } catch (e) {}
 if (window.claude?.hot?.ready) window.claude.hot.ready(start); else start(window.claude?.hot?.data ?? {});
 })();
 </script>
