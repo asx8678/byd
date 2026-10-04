@@ -1,0 +1,1631 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Parking Trainer Blueprint</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: one left-aligned reading column (720px) inside a 1080px sheet; the map sketch, roster and tables use the full sheet. */
+:root{
+  --bg:#121317; --sheet:#16181d; --raise:#1c1e24; --rule:#2c2f35; --rule-2:#3a3f48;
+  --ink:#ebe8df; --mute:#a7afb9; --faint:#7c838c;
+  --yellow:#f2c230; --ochre:#d9ab2b; --cyan:#5ed0d8; --green:#5ed08a; --red:#ec5b4f; --amber:#ff8a3d; --steel:#8fb8ff;
+  --display:"Barlow Condensed","Arial Narrow",sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{background:var(--bg);color:var(--ink);font:400 16.5px/1.6 var(--body);padding-inline:clamp(16px,4vw,44px);-webkit-text-size-adjust:100%}
+.page{max-width:1080px;margin:0 auto;padding-block:30px 72px;display:flex;flex-direction:column;gap:56px}
+.col{max-width:720px}
+a{color:var(--yellow);text-underline-offset:2px}
+a:focus-visible,button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--yellow);outline-offset:2px}
+h1,h2,h3{font-family:var(--display);font-weight:600;letter-spacing:.01em;text-wrap:balance;margin:0;line-height:1.08}
+h1{font-size:clamp(40px,7vw,64px);font-weight:700;text-transform:uppercase;letter-spacing:.02em}
+h2{font-size:clamp(26px,4vw,34px);text-transform:uppercase;letter-spacing:.03em}
+h3{font-size:21px;letter-spacing:.02em}
+p{margin:0}
+.stack{display:flex;flex-direction:column;gap:14px}
+.stack-l{display:flex;flex-direction:column;gap:22px}
+.eyebrow{font:500 12px/1.3 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--yellow)}
+.meta{font:400 13px/1.5 var(--mono);color:var(--faint)}
+.lede{font-size:19px;line-height:1.55;color:var(--ink);max-width:640px}
+.note{color:var(--mute);font-size:15px}
+.mono{font-family:var(--mono);font-size:.88em}
+b,strong{font-weight:600}
+section{display:flex;flex-direction:column;gap:22px;border-top:1px solid var(--rule);padding-top:26px;scroll-margin-top:16px}
+section>header{display:flex;flex-direction:column;gap:8px}
+
+/* title block, like the corner of a drawing sheet */
+.titleblock{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--rule-2);font:400 12px/1.4 var(--mono);color:var(--mute);max-width:720px}
+.titleblock div{padding:8px 10px;border-right:1px solid var(--rule-2);min-width:0}
+.titleblock div:last-child{border-right:0}
+.titleblock span{display:block;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+.titleblock b{color:var(--ink);font-weight:500}
+@media (max-width:560px){.titleblock{grid-template-columns:repeat(2,minmax(0,1fr))}.titleblock div:nth-child(2){border-right:0}.titleblock div:nth-child(-n+2){border-bottom:1px solid var(--rule-2)}}
+nav.toc{display:flex;flex-wrap:wrap;gap:8px}
+nav.toc a{font:500 13px/1 var(--mono);letter-spacing:.04em;color:var(--ink);text-decoration:none;border:1px solid var(--rule-2);padding:8px 10px;border-radius:3px}
+nav.toc a:hover{border-color:var(--yellow);color:var(--yellow)}
+
+/* the map sketch */
+.sketch{display:flex;flex-direction:column;gap:12px}
+.canvasbox{border:1px solid var(--rule-2);background:#0d0e12;min-width:0}
+#sketch{display:block;width:100%;touch-action:pan-y}
+.ctl{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--rule-2);border-radius:4px;overflow:hidden}
+.seg button,.btn{font:600 15px/1 var(--display);letter-spacing:.06em;text-transform:uppercase;color:var(--ink);background:var(--raise);border:0;padding:11px 14px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--rule-2)}
+.seg button[aria-pressed="true"]{background:var(--yellow);color:#121317}
+.btn{border:1px solid var(--rule-2);border-radius:4px}
+.spd{display:flex;align-items:center;gap:10px;font:500 13px var(--mono);color:var(--mute);flex:1 1 220px;min-width:0}
+.spd input{flex:1;min-width:0;accent-color:var(--yellow)}
+.spd output{color:var(--ink);min-width:62px;text-align:right;font-variant-numeric:tabular-nums}
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;font:400 12.5px/1.4 var(--mono);color:var(--mute)}
+.legend i{display:inline-block;width:22px;height:0;vertical-align:middle;margin-right:7px;border-top:2px solid}
+.legend i.dash{border-top-style:dashed}
+.legend i.box{height:10px;border:1px solid;border-radius:2px}
+
+/* tables */
+.tablewrap{overflow-x:auto;border:1px solid var(--rule);min-width:0}
+table{border-collapse:collapse;width:100%;font-size:14.5px;line-height:1.45}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font:500 11px/1.3 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint);background:var(--sheet);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td.num{font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap}
+td b{font-weight:600}
+
+/* car roster */
+.roster{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.car{border:1px solid var(--rule);background:var(--sheet);padding:14px 14px 12px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.car header{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.car h3{font-size:22px}
+.car .gen{font:400 12px var(--mono);color:var(--faint)}
+.car canvas{display:block;width:100%;height:58px}
+.car dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 10px;margin:0;font-variant-numeric:tabular-nums}
+.car dt{font:500 10px/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+.car dd{margin:2px 0 0;font:500 14px/1.2 var(--mono);color:var(--ink)}
+.car p{font-size:14.5px;line-height:1.5;color:var(--mute)}
+.car p b{color:var(--ink)}
+.tier{font:600 11px/1 var(--mono);letter-spacing:.12em;padding:5px 7px;border:1px solid;border-radius:3px;white-space:nowrap}
+.tier.free{color:var(--green);border-color:rgba(94,208,138,.5)}
+.tier.pro{color:var(--yellow);border-color:rgba(242,194,48,.5)}
+.tier.ai{color:var(--steel);border-color:rgba(143,184,255,.5)}
+.src{font:400 12px/1.5 var(--mono);color:var(--faint);overflow-wrap:anywhere}
+.src a{color:var(--faint)}
+
+/* turning-circle chart */
+.grp{font:600 13px/1.2 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--mute);margin-top:4px}
+.tc{margin:0;display:flex;flex-direction:column;gap:5px;min-width:0}
+.tc-rows{display:flex;flex-direction:column;gap:3px}
+.tc .row{display:grid;grid-template-columns:minmax(0,190px) minmax(0,1fr);gap:10px;align-items:center}
+.tc .name{font:500 12.5px/1.25 var(--mono);color:var(--ink)}
+.tc .bar{position:relative;height:20px;background-image:linear-gradient(to right,var(--rule) 1px,transparent 1px);background-size:calc(100% * 5 / 26) 100%}
+.tc .b{position:absolute;left:0;top:4px;height:12px;background:var(--ochre)}
+.tc .b.wall{background:transparent;border:1.5px solid var(--ochre)}
+.tc .b.est{background:repeating-linear-gradient(135deg,var(--ochre) 0 2px,transparent 2px 6px);border:1px solid var(--ochre)}
+.tc .b.der{background:transparent;border:1.5px dashed var(--mute)}
+.tc em{position:absolute;top:2px;font:500 12px/16px var(--mono);font-style:normal;color:var(--ink);white-space:nowrap;padding-left:6px}
+.tc em.in{transform:translateX(-100%);padding:0 6px;background:var(--bg)}
+.tc .axis{position:relative;height:16px}
+.tc .axis b{position:absolute;top:0;font:400 11px var(--mono);color:var(--faint);transform:translateX(-50%)}
+.tc .axis b:first-child{transform:none}
+.tc .axis b:last-child{transform:translateX(-100%)}
+.legend i.box.est{background:repeating-linear-gradient(135deg,var(--ochre) 0 2px,transparent 2px 6px);border-color:var(--ochre)}
+.legend i.box.der{border:1.5px dashed var(--mute)}
+@media (max-width:560px){.tc .row{grid-template-columns:minmax(0,112px) minmax(0,1fr)}.tc .name{font-size:11.5px}}
+.car header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.car .gen{margin-top:3px}
+
+/* small helpers */
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:18px}
+.panel{border:1px solid var(--rule);background:var(--sheet);padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.panel h3{font-size:19px}
+.panel p,.panel li{font-size:15px;color:var(--mute)}
+.panel p b,.panel li b{color:var(--ink)}
+ul,ol{margin:0;padding-left:1.25em;display:flex;flex-direction:column;gap:6px}
+li::marker{color:var(--faint)}
+pre{margin:0;font:400 12.5px/1.55 var(--mono);color:var(--ink);background:#0d0e12;border:1px solid var(--rule);padding:14px;overflow-x:auto;min-width:0}
+pre .k{color:var(--yellow)} pre .c{color:var(--faint)}
+.steps{counter-reset:s;list-style:none;padding:0;display:flex;flex-direction:column;gap:0;border:1px solid var(--rule)}
+.steps>li{counter-increment:s;display:grid;grid-template-columns:44px minmax(0,1fr);gap:4px 12px;padding:12px 14px;border-bottom:1px solid var(--rule)}
+.steps>li:last-child{border-bottom:0}
+.steps>li::before{content:counter(s,decimal-leading-zero);font:600 15px/1.5 var(--mono);color:var(--yellow);grid-row:span 2}
+.steps>li b{font-family:var(--display);font-size:19px;letter-spacing:.02em;font-weight:600}
+.steps>li span{color:var(--mute);font-size:15px}
+.cue{display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;align-items:start}
+.cue>i{font:600 13px/26px var(--mono);font-style:normal;color:var(--yellow);border:1px solid var(--yellow);border-radius:50%;width:26px;height:26px;text-align:center}
+.decide{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:12px}
+.decide .panel{gap:6px}
+.decide .panel .eyebrow{color:var(--faint)}
+/* phone wireframes for the two modes */
+.phones{display:flex;gap:clamp(14px,4vw,28px)}
+.phone{margin:0;display:flex;flex-direction:column;gap:8px;align-items:center;flex:0 1 206px;min-width:0}
+.phone figcaption{font:500 12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}
+.screen{width:100%;aspect-ratio:9/19.5;border:1.5px solid var(--rule-2);border-radius:24px;padding:12px 10px;display:grid;gap:6px;background:#0d0e12}
+.screen.drive{grid-template-areas:"bar bar" "map map" "btns btns" "wheel pedals";grid-template-rows:auto minmax(0,1fr) auto auto;grid-template-columns:1fr 1fr}
+.screen.park{grid-template-areas:"coach coach" "map map" "kerb pdc" "tools tools" "wheel pedals";grid-template-rows:auto minmax(0,1fr) 46px auto auto;grid-template-columns:1fr 1fr}
+.z{border:1px dashed var(--rule-2);border-radius:6px;font:500 10.5px/1.3 var(--mono);color:var(--mute);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:4px;min-width:0}
+.z small{font-size:9px;color:var(--faint)}
+.z.bar{grid-area:bar;flex-direction:row;justify-content:space-between;padding:4px 8px;color:var(--ink);border-style:solid;border-color:var(--rule)}
+.z.bar .lim{border:1.5px solid var(--red);border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:9.5px}
+.z.map{grid-area:map;border-style:solid;border-color:var(--rule);background:var(--raise)}
+.z.btns,.z.tools{flex-direction:row;gap:4px;border:0;padding:0}
+.z.btns{grid-area:btns}.z.tools{grid-area:tools}
+.z.btns span,.z.tools span{border:1px solid var(--rule-2);border-radius:4px;padding:5px 2px;font-size:9.5px;flex:1;text-align:center;min-width:0}
+.z.wheel{grid-area:wheel;border-radius:50%;width:100%;max-width:86px;aspect-ratio:1;justify-self:center;border:2px solid var(--ink);color:var(--ink)}
+.z.pedals{grid-area:pedals;flex-direction:row;gap:5px;border:0;padding:0}
+.z.pedals span{flex:1;align-self:stretch;border:1px solid var(--rule-2);border-radius:6px;display:flex;align-items:center;justify-content:center;min-width:0}
+.drive .z.pedals span:first-child{border-color:var(--red);color:var(--red)}
+.drive .z.pedals span:last-child{border-color:var(--green);color:var(--green)}
+.park .z.pedals span{border-color:var(--yellow);color:var(--yellow)}
+.z.coach{grid-area:coach;align-items:flex-start;text-align:left;border-style:solid;border-color:var(--yellow);color:var(--ink);gap:2px}
+.z.coach b{font-weight:600;color:var(--yellow)}
+.z.pdc{grid-area:pdc}.z.kerb{grid-area:kerb}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
+<div class="page">
+
+<header class="stack-l">
+  <div class="stack">
+    <p class="eyebrow">Atto 2 Garage Trainer · the next versions</p>
+    <h1>Parking Trainer Blueprint</h1>
+    <p class="lede">How the garage trainer could grow into a city. Cars with their real sizes and turning circles, streets with traffic and impatient drivers, a map kit that draws clean technical plans, and lessons that start easy and get hard.</p>
+  </div>
+  <div class="titleblock" aria-label="Document details">
+    <div><span>Drawn</span><b>4 Oct 2026</b></div>
+    <div><span>Status</span><b>Design draft</b></div>
+    <div><span>Code base</span><b>web/ · 90c5a1c</b></div>
+    <div><span>Units</span><b>metres, km/h</b></div>
+  </div>
+  <nav class="toc" aria-label="Sections">
+    <a href="#sketch">Map sketch</a><a href="#modes">Two modes</a><a href="#cars">Cars</a><a href="#camera">Camera</a><a href="#traffic">Traffic</a><a href="#mapkit">Map kit</a><a href="#drawing">Drawing</a><a href="#lessons">Lessons</a><a href="#money">Free &amp; paid</a><a href="#order">Build order</a><a href="#decide">Decide</a>
+  </nav>
+</header>
+
+<section id="sketch" class="sketch">
+  <header class="col">
+    <p class="eyebrow">Style sketch · not the game</p>
+    <h2>How the city could look</h2>
+  </header>
+  <p class="col">A small district drawn the way the game would draw it: hairlines, hatched buildings, white road markings, yellow bay lines, and your Atto 2 in the same style as today. Everything on it is compiled from the short map spec in the <a href="#mapkit">Map kit</a> section, so the picture is also a test of that format.</p>
+  <div class="canvasbox"><canvas id="mapCanvas" aria-label="Animated plan of a small city district with traffic, parked cars and a car park"></canvas></div>
+  <div class="ctl">
+    <div class="seg" role="group" aria-label="View">
+      <button type="button" id="vOverview" data-mode="overview" aria-pressed="false">Overview</button>
+      <button type="button" id="vDrive" data-mode="drive" aria-pressed="true">Drive</button>
+      <button type="button" id="vPark" data-mode="park" aria-pressed="false">Park</button>
+    </div>
+    <label class="spd" for="speed">Speed <input id="speed" type="range" min="0" max="60" step="1" value="40"><output id="speedOut" for="speed">40 km/h</output></label>
+    <button type="button" class="btn" id="play" aria-pressed="false">Pause traffic</button>
+  </div>
+  <div class="legend" aria-label="Legend">
+    <span><i style="border-color:rgba(235,232,223,.7)" class="dash"></i>lane line</span>
+    <span><i style="border-color:#d9ab2b"></i>bay line</span>
+    <span><i style="border-color:#f2c230" class="dash"></i>your planned path</span>
+    <span><i style="border-color:#5ed0d8" class="dash"></i>front corner swing</span>
+    <span><i style="border-color:#5ed08a" class="dash"></i>where you finish</span>
+    <span><i class="box" style="border-color:#ec5b4f;background:repeating-linear-gradient(135deg,rgba(236,91,79,.6) 0 1px,transparent 1px 5px)"></i>no parking</span>
+    <span><i class="box" style="border-color:#ff8a3d;background:repeating-linear-gradient(135deg,rgba(255,138,61,.6) 0 1px,transparent 1px 5px)"></i>bus stop</span>
+    <span><i class="box" style="border-color:#8fb8ff"></i>truck or bus</span>
+  </div>
+  <div class="two">
+    <div class="panel">
+      <h3>Try the three views</h3>
+      <ul>
+        <li><b>Overview</b> shows the whole district, north up.</li>
+        <li><b>Drive</b> follows the car with the map turned so you always drive up. Move the speed slider and watch the zoom.</li>
+        <li><b>Park</b> makes the car look for the next gap that fits. It stops with the rear bumpers level and shows the plan: three moments to steer, the swing of the front corner, and the gap measured in metres.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>What the traffic does</h3>
+      <p>Every car follows a standard traffic model: a wanted speed, a time gap to the car ahead, its own acceleration and braking. Cars stop at red, decide at amber, and queue. Zoom in close to see each driver's type and speed. Stay in Park for a while and the car behind you starts to honk.</p>
+    </div>
+  </div>
+</section>
+
+<section id="modes">
+  <header class="col">
+    <p class="eyebrow">Two modes</p>
+    <h2>Drive mode for the streets, Park mode to learn</h2>
+  </header>
+  <p class="col">On the street the car should feel like a car at 50 km/h: it leans on its tyres, runs wide if you turn too hard, and needs distance to stop. When you slow down next to a space, a detailed Park mode takes over, with exact low-speed geometry, more controls and the coach. You never press a mode button unless you want to. The car's position, speed and wheel angle carry straight over.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th></th><th>Drive mode</th><th>Park mode</th></tr></thead>
+      <tbody>
+        <tr><td><b>Physics</b></td><td>Dynamic model: tyres slip and grip runs out, weight shifts under braking, motor power and regenerative braking, air and rolling drag</td><td>Today's exact low-speed model: wheels roll without slipping and the car turns around a point on the rear axle's line, with creep and hold-to-move as now</td></tr>
+        <tr><td><b>Controls</b></td><td>Steering wheel, accelerator and brake you slide for more or less, indicators that cancel after a turn, hazards, horn</td><td>Hold Forward / Reverse as today, a big wheel with its angle in degrees, Straighten, rewind, slow motion</td></tr>
+        <tr><td><b>View</b></td><td>Turns with the car, zoom from the speed rule</td><td>Locked to the space, close-up, Detail 2</td></tr>
+        <tr><td><b>On screen</b></td><td>Speed, speed limit, indicators, the next signal</td><td>Parking sensors, kerb close-up, predicted path, the coach's next step, distances in centimetres</td></tr>
+        <tr><td><b>Starts when</b></td><td>You pull away above walking pace, or tap Drive</td><td>You are below about 10 km/h next to a space that fits or in a car park, or you tap Park</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="phones" aria-label="Phone layouts for Drive mode and Park mode">
+    <figure class="phone">
+      <div class="screen drive">
+        <div class="z bar"><span>48 km/h</span><span class="lim">50</span><span>◀︎ ▶︎</span></div>
+        <div class="z map">Map, heading up<br><small>zoom from speed</small></div>
+        <div class="z btns"><span>◀︎</span><span>Hazard</span><span>Horn</span><span>▶︎</span></div>
+        <div class="z wheel">Wheel</div>
+        <div class="z pedals"><span>Brake</span><span>Accel.</span></div>
+      </div>
+      <figcaption>Drive mode</figcaption>
+    </figure>
+    <figure class="phone">
+      <div class="screen park">
+        <div class="z coach"><b>2 · Full lock away from kerb</b><small>in 0.40 m · mirror passing their bumper</small></div>
+        <div class="z map">Close-up locked to the space<br><small>path · ghost · pivot · cue marks</small></div>
+        <div class="z pdc">Sensors</div>
+        <div class="z kerb">Kerb<br>close-up</div>
+        <div class="z tools"><span>Path</span><span>Ghost</span><span>Pivot</span><span>Rewind</span></div>
+        <div class="z wheel">Wheel<br><small>−540°</small></div>
+        <div class="z pedals"><span>Rev.</span><span>Fwd.</span></div>
+      </div>
+      <figcaption>Park mode</figcaption>
+    </figure>
+  </div>
+  <div class="two">
+    <div class="panel">
+      <h3>How the physics hands over</h3>
+      <p>Vehicle simulations commonly use two models. The exact rolling model is right at walking pace. A tyre-slip model is right at speed but breaks down as the car comes to a stop. So the game blends them between about 7 and 18 km/h. Below that you get today's model, which the 128 replay checks protect. Above it you get the slip model. There's no visible jump.</p>
+      <p>Each car's mass, weight split, power, torque and tyre size come from its spec sheet. Tyre grip isn't published, so it's estimated and tuned until the car matches figures we can check: its 0–100 km/h time, its turning circle, and a braking distance in the normal range.</p>
+    </div>
+    <div class="panel">
+      <h3>What Park mode adds for learning</h3>
+      <ul>
+        <li><b>Coach card:</b> the next step and how far away it is, for example "full lock away from the kerb in 0.40 m".</li>
+        <li><b>Learning layers</b> you switch on: the pivot point and turning circles, swept paths of all four corners, the ideal path as a ghost, the cue marks.</li>
+        <li><b>Kerb close-up:</b> a zoomed box at the rear wheel, like a mirror tilted down.</li>
+        <li><b>Rewind 5 s</b> and try a step again; slow motion for the first tries.</li>
+        <li><b>Numbers:</b> wheel angle, angle to the space, centimetres to the kerb and to each neighbour.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+
+<section id="cars">
+  <header class="col"><p class="eyebrow">Cars</p><h2>Cars that each teach something</h2></header>
+  <p class="col">Each car is a data file: outline, wheelbase, overhangs, turning circle, width with mirrors, sensors and camera, and how fast it accelerates. The game already works out the steering lock from the turning circle, so a new car is mostly numbers from its spec sheet. The aim is a short list where every car is different, not 200 hatchbacks. Every plan view below is drawn to the same scale, with your Atto 2 dashed in yellow behind it.</p>
+  <div class="panel col"><h3>What makes cars feel different</h3><ul><li><b>Wheelbase and steering lock</b> decide the turning circle. The Ram turns its wheels about as far as the Atto 2, yet needs a third more room.</li><li><b>Overhangs</b> decide how far the corners swing. A long rear overhang (911, Octavia, bus) swings out when you pull away from a kerb.</li><li><b>Width with mirrors</b> decides whether you fit.</li><li><b>Rear-axle steering</b> (S-Class, Hummer) changes the moves you make, and the Hummer can even drive diagonally.</li><li><b>Driver aids:</b> sensors, camera, or nothing at all (W124).</li><li><b>Height:</b> low fronts scrape kerbs; tall vans meet low ceilings.</li><li><b>Power and weight</b> matter in Drive mode: the van and the truck are slow and heavy.</li></ul></div>
+  <h3 class="grp">Everyday · free</h3>
+  <div class="roster">
+      <article class="car">
+        <header><div><h3>BYD Atto 2 DM-i</h3><p class="gen">your car · 2025–</p></div><span class="tier free">FREE</span></header>
+        <canvas class="plan" data-kind="car" data-l="4.33" data-w="1.83" data-wb="2.62" data-ovr="0.827" aria-label="Plan view of the BYD Atto 2 DM-i to scale, with the Atto 2 dashed for comparison"></canvas>
+        <dl><div><dt>Length × width</dt><dd>4.33 × 1.83 m</dd></div><div><dt>With mirrors</dt><dd>2.08 m*</dd></div><div><dt>Wheelbase</dt><dd>2.62 m</dd></div><div><dt>Overhang F / R</dt><dd>0.88 / 0.83 m</dd></div><div><dt>Turning circle</dt><dd>10.6 m kerb</dd></div><div><dt>Full lock</dt><dd>34.4°†</dd></div></dl>
+        <p>The reference for everything else, with the numbers the game already uses. It has parking sensors and the outline traced in the current version.</p>
+        <p class="src">Source: the game&#x27;s car.ts, from BYD&#x27;s spec sheet</p>
+      </article>
+      <article class="car">
+        <header><div><h3>Smart fortwo</h3><p class="gen">C453 coupé · 2014–2024</p></div><span class="tier free">FREE</span></header>
+        <canvas class="plan" data-kind="car" data-l="2.695" data-w="1.663" data-wb="1.873" data-ovr="0.398" aria-label="Plan view of the Smart fortwo to scale, with the Atto 2 dashed for comparison"></canvas>
+        <dl><div><dt>Length × width</dt><dd>2.70 × 1.66 m</dd></div><div><dt>With mirrors</dt><dd>1.89 m</dd></div><div><dt>Wheelbase</dt><dd>1.87 m</dd></div><div><dt>Overhang F / R</dt><dd>0.42 / 0.40 m</dd></div><div><dt>Turning circle</dt><dd>6.95 m kerb</dd></div><div><dt>Full lock</dt><dd>40.4°†</dd></div></dl>
+        <p>Almost no overhang, so almost no tail swing, and the tightest circle in the list. It is short enough to park nose to the kerb in a parallel gap: a lesson of its own where local rules allow it. Rear sensors were an option.</p>
+        <p class="src">Source: <a href="https://www.adac.de/rund-ums-fahrzeug/autokatalog/marken-modelle/smart/fortwo/453/242476/" rel="noopener" target="_blank">adac.de</a> · <a href="https://www.globalbrandsmagazine.com/the-new-smart-fortwo-and-forfour-adding-a-new-shine-to-a-proven-concept/" rel="noopener" target="_blank">Daimler release</a> · <a href="https://www.auto-data.net/de/smart-fortwo-iii-coupe-c453-1.0-71hp-23817" rel="noopener" target="_blank">auto-data.net</a></p>
+      </article>
+      <article class="car">
+        <header><div><h3>Peugeot 208</h3><p class="gen">2nd generation · 2019–</p></div><span class="tier free">FREE</span></header>
+        <canvas class="plan" data-kind="car" data-l="4.055" data-w="1.745" data-wb="2.54" data-ovr="0.69" aria-label="Plan view of the Peugeot 208 to scale, with the Atto 2 dashed for comparison"></canvas>
+        <dl><div><dt>Length × width</dt><dd>4.06 × 1.75 m</dd></div><div><dt>With mirrors</dt><dd>1.96 m</dd></div><div><dt>Wheelbase</dt><dd>2.54 m</dd></div><div><dt>Overhang F / R</dt><dd>0.83 / 0.69 m</dd></div><div><dt>Turning circle</dt><dd>10.4 m (type?)</dd></div><div><dt>Full lock</dt><dd>—</dd></div></dl>
+        <p>The everyday baseline, and the black 208 in your garage. Its mirrors add 0.22 m to its width, which is what decides a tight squeeze.</p>
+        <p class="src">Source: <a href="https://www.adac.de/rund-ums-fahrzeug/autokatalog/marken-modelle/peugeot/208/2generation/301239/" rel="noopener" target="_blank">adac.de</a></p>
+      </article>
+      <article class="car">
+        <header><div><h3>Škoda Octavia Combi</h3><p class="gen">Mk4 estate · 2020–</p></div><span class="tier free">FREE</span></header>
+        <canvas class="plan" data-kind="car" data-l="4.689" data-w="1.829" data-wb="2.686" data-ovr="1.094" aria-label="Plan view of the Škoda Octavia Combi to scale, with the Atto 2 dashed for comparison"></canvas>
+        <dl><div><dt>Length × width</dt><dd>4.69 × 1.83 m</dd></div><div><dt>With mirrors</dt><dd>2.00 m</dd></div><div><dt>Wheelbase</dt><dd>2.69 m</dd></div><div><dt>Overhang F / R</dt><dd>0.91 / 1.09 m</dd></div><div><dt>Turning circle</dt><dd>10.4 m (type?)</dd></div><div><dt>Tows</dt><dd>1.3–1.6 t</dd></div></dl>
+        <p>A long rear overhang that swings out when you turn, and the tow car for the first trailer lessons.</p>
+        <p class="src">Source: <a href="https://cdn.skoda-storyboard.com/2020/07/TD-OCTAVIA-COMBI-petrol-en.pdf" rel="noopener" target="_blank">Škoda tech sheet</a></p>
+      </article>
+  </div>
+  <h3 class="grp">Special · Pro</h3>
+  <div class="roster">
+      <article class="car">
+        <header><div><h3>Mercedes-Benz E 220</h3><p class="gen">W124 · 1993–1995</p></div><span class="tier pro">PRO</span></header>
+        <canvas class="plan" data-kind="car" data-l="4.74" data-w="1.74" data-wb="2.8" data-ovr="1.05" aria-label="Plan view of the Mercedes-Benz E 220 to scale, with the Atto 2 dashed for comparison"></canvas>
+        <dl><div><dt>Length × width</dt><dd>4.74 × 1.74 m</dd></div><div><dt>With mirrors</dt><dd>—</dd></div><div><dt>Wheelbase</dt><dd>2.80 m</dd></div><div><dt>Overhang F + R</dt><dd>1.94 m total</dd></div><div><dt>Turning circle</dt><dd>11.2 m (db)</dd></div><div><dt>Full lock</dt><dd>not found</dd></div></dl>
+        <p>No parking sensors, no camera, thin pillars. Owners know it for a big steering lock and front wheels that lean visibly at full lock. I found no published lock or caster figures, so this car needs a measurement from a real one before it ships.</p>
+        <p class="src">Source: <a href="https://www.adac.de/rund-ums-fahrzeug/autokatalog/marken-modelle/mercedes-benz/124/1generation-facelift-2/284359/" rel="noopener" target="_blank">adac.de</a> · <a href="https://cars-data.com/en/mercedes-benz/e-class/1993-sedan/e-220-8858--8858/specs" rel="noopener" target="_blank">cars-data.com</a></p>
+      </article>
+      <article class="car">
+        <header><div><h3>Mercedes-Benz S-Class L</h3><p class="gen">W223 · 2021–</p></div><span class="tier pro">PRO</span></header>
+        <canvas class="plan" data-kind="car" data-l="5.289" data-w="1.954" data-wb="3.216" data-ovr="1.196" aria-label="Plan view of the Mercedes-Benz S-Class L to scale, with the Atto 2 dashed for comparison"></canvas>
+        <dl><div><dt>Length × width</dt><dd>5.29 × 1.95 m</dd></div><div><dt>With mirrors</dt><dd>2.11 m</dd></div><div><dt>Wheelbase</dt><dd>3.22 m</dd></div><div><dt>Overhang F / R</dt><dd>0.88 / 1.20 m</dd></div><div><dt>Turning circle</dt><dd>10.79 m wall</dd></div><div><dt>Rear steer</dt><dd>4.5° or 10°</dd></div></dl>
+        <p>Long and wide, yet with 10° rear-axle steering it turns in 10.79 m (wall to wall). With 4.5° it is 11.89 m, and without rear steering about 13 m. Try it with rear steering on and off to feel the difference.</p>
+        <p class="src">Source: <a href="https://media.mbusa.com/news/2027-mercedes-benz-s-class-quick-reference-guide" rel="noopener" target="_blank">MBUSA 2027 guide</a></p>
+      </article>
+      <article class="car">
+        <header><div><h3>BMW M3</h3><p class="gen">G80 saloon · 2021–</p></div><span class="tier pro">PRO</span></header>
+        <canvas class="plan" data-kind="car" data-l="4.794" data-w="1.903" data-wb="2.857" data-ovr="1.0" aria-label="Plan view of the BMW M3 to scale, with the Atto 2 dashed for comparison"></canvas>
+        <dl><div><dt>Length × width</dt><dd>4.79 × 1.90 m</dd></div><div><dt>With mirrors</dt><dd>—</dd></div><div><dt>Wheelbase</dt><dd>2.86 m</dd></div><div><dt>Ground clearance</dt><dd>0.12 m</dd></div><div><dt>Turning circle</dt><dd>12.2 m (type?)</dd></div><div><dt>Drive</dt><dd>rear</dd></div></dl>
+        <p>Wide, low and fast. A 12.2 m circle is large for its length, and the low front adds a kerb-scraping rule.</p>
+        <p class="src">Source: <a href="https://www.press.bmwgroup.com/middle-east/article/attachment/T0442643EN/616889" rel="noopener" target="_blank">BMW press kit</a></p>
+      </article>
+      <article class="car">
+        <header><div><h3>Porsche 911 Carrera</h3><p class="gen">992.2 · 2024–</p></div><span class="tier pro">PRO</span></header>
+        <canvas class="plan" data-kind="car" data-l="4.542" data-w="1.852" data-wb="2.45" data-ovr="1.076" aria-label="Plan view of the Porsche 911 Carrera to scale, with the Atto 2 dashed for comparison"></canvas>
+        <dl><div><dt>Length × width</dt><dd>4.54 × 1.85 m</dd></div><div><dt>With mirrors</dt><dd>2.03 m</dd></div><div><dt>Wheelbase</dt><dd>2.45 m</dd></div><div><dt>Overhang F / R</dt><dd>1.02 / 1.08 m</dd></div><div><dt>Turning circle</dt><dd>11.2 m (type?)</dd></div><div><dt>Rear steer</dt><dd>10.9 m (S, GTS)</dd></div></dl>
+        <p>Engine behind the rear axle and a 1.08 m rear overhang: the tail swings wide when you pull out of a space. Also the fast car in traffic.</p>
+        <p class="src">Source: <a href="https://www.porsche.com/international/models/911/carrera-models/911-carrera/" rel="noopener" target="_blank">porsche.com</a></p>
+      </article>
+      <article class="car">
+        <header><div><h3>Ram 1500 Crew Cab</h3><p class="gen">DT · 5′7″ box · 2019–</p></div><span class="tier pro">PRO</span></header>
+        <canvas class="plan" data-kind="pickup" data-l="5.916" data-w="2.084" data-wb="3.672" data-ovr="1.3" aria-label="Plan view of the Ram 1500 Crew Cab to scale, with the Atto 2 dashed for comparison"></canvas>
+        <dl><div><dt>Length × width</dt><dd>5.92 × 2.08 m</dd></div><div><dt>With mirrors</dt><dd>—</dd></div><div><dt>Wheelbase</dt><dd>3.67 m</dd></div><div><dt>Overhang F + R</dt><dd>2.24 m total</dd></div><div><dt>Turning circle</dt><dd>14.08 m kerb</dd></div><div><dt>Full lock</dt><dd>35.5°†</dd></div></dl>
+        <p>Its wheels turn about as far as the Atto 2&#x27;s, but the 3.67 m wheelbase makes the circle a third bigger. At 2.08 m before mirrors, a 2.4 m bay leaves 16 cm each side, and the tall bonnet hides low posts.</p>
+        <p class="src">Source: <a href="https://www.automobilrevue.cz/priloha/5bdaff866ac65/allnew2019-ram-1500-tech-spec--oct-18-5bf437059f475.pdf" rel="noopener" target="_blank">FCA tech sheet (PDF)</a></p>
+      </article>
+      <article class="car">
+        <header><div><h3>GMC Hummer EV Pickup</h3><p class="gen">Edition 1 · 2022</p></div><span class="tier pro">PRO</span></header>
+        <canvas class="plan" data-kind="pickup" data-l="5.507" data-w="2.201" data-wb="3.445" data-ovr="1.181" aria-label="Plan view of the GMC Hummer EV Pickup to scale, with the Atto 2 dashed for comparison"></canvas>
+        <dl><div><dt>Length × width</dt><dd>5.51 × 2.20 m</dd></div><div><dt>With mirrors</dt><dd>2.38 m</dd></div><div><dt>Wheelbase</dt><dd>3.45 m</dd></div><div><dt>Overhang F / R</dt><dd>0.88 / 1.18 m</dd></div><div><dt>Turning circle</dt><dd>13.5 m kerb</dd></div><div><dt>4-wheel steer</dt><dd>11.3 m kerb</dd></div></dl>
+        <p>CrabWalk turns the rear wheels the same way as the fronts, up to 10°, so it moves diagonally at low speed. A new parking move to teach.</p>
+        <p class="src">Source: <a href="https://web.archive.org/web/20201101101635/https://media.gmc.com/media/us/en/gmc/home.detail.html/content/Pages/news/us/en/2020/oct/1021-hummer-edition-1-off-road.html" rel="noopener" target="_blank">GMC media (archived)</a> · <a href="https://www.gmc.com/content/experience-fragments/gmc/na/us/en/index/vehicles/2025/electric/hummer_ev_pickup/subcontent/pickup-specs/master.html" rel="noopener" target="_blank">gmc.com specs</a></p>
+      </article>
+      <article class="car">
+        <header><div><h3>LEVC TX</h3><p class="gen">London taxi · 2018–</p></div><span class="tier pro">PRO</span></header>
+        <canvas class="plan" data-kind="car" data-l="4.855" data-w="1.945" data-wb="2.985" data-ovr="0.95" aria-label="Plan view of the LEVC TX to scale, with the Atto 2 dashed for comparison"></canvas>
+        <dl><div><dt>Length × width</dt><dd>4.86 × 1.95 m</dd></div><div><dt>With mirrors</dt><dd>—</dd></div><div><dt>Wheelbase</dt><dd>2.99 m</dd></div><div><dt>Overhang F + R</dt><dd>1.87 m total</dd></div><div><dt>Turning circle</dt><dd>8.45 m wall</dd></div><div><dt>Front wheels</dt><dd>up to 63°</dd></div></dl>
+        <p>London cabs must turn tightly by law (Transport for London&#x27;s rules). So the TX&#x27;s front wheels turn to about 63°, where a normal car manages about 38°. It is long but turns like a city car.</p>
+        <p class="src">Source: <a href="https://www.levc.com/news/levc-tx-exploring-an-icon-10-things/" rel="noopener" target="_blank">levc.com</a> · <a href="https://web.archive.org/web/20190224115819/http://content.tfl.gov.uk/taxi-conditions-of-fitness-update.pdf" rel="noopener" target="_blank">TfL rules (archived)</a> · <a href="https://www.topgear.com/car-reviews/ecity/first-drive" rel="noopener" target="_blank">Top Gear</a></p>
+      </article>
+      <article class="car">
+        <header><div><h3>Mercedes-Benz Sprinter</h3><p class="gen">W907 van · 4325 mm wheelbase, high roof</p></div><span class="tier pro">PRO</span></header>
+        <canvas class="plan" data-kind="van" data-l="6.967" data-w="2.02" data-wb="4.325" data-ovr="1.621" aria-label="Plan view of the Mercedes-Benz Sprinter to scale, with the Atto 2 dashed for comparison"></canvas>
+        <dl><div><dt>Length × width</dt><dd>6.97 × 2.02 m</dd></div><div><dt>With mirrors</dt><dd>2.35 m</dd></div><div><dt>Height</dt><dd>2.64 m</dd></div><div><dt>Wheelbase</dt><dd>4.33 m</dd></div><div><dt>Turning circle</dt><dd>14.4 m kerb</dd></div><div><dt>Wall to wall</dt><dd>15.3 m</dd></div></dl>
+        <p>A base panel van has no rear windows, so you reverse on the mirrors and, if fitted, the camera. 2.64 m tall: low car park entrances become a rule.</p>
+        <p class="src">Source: <a href="https://www.schade.de/fileadmin/docs/SCHADE/Neuwagen/Nfz/MB/Sprinter-Preisliste-0320.pdf" rel="noopener" target="_blank">Mercedes price list (PDF)</a> · <a href="https://www.mbvans.com/content/dam/mb-vans/us/upfitter/09112024_BEG_Sprinter_907.pdf" rel="noopener" target="_blank">Mercedes upfitter guide</a></p>
+      </article>
+  </div>
+  <h3 class="grp">Long, towed and heavy · Pro packs</h3>
+  <div class="roster">
+      <article class="car">
+        <header><div><h3>Stretch limousine</h3><p class="gen">Lincoln Town Car, 120 in stretch</p></div><span class="tier pro">PRO</span></header>
+        <canvas class="plan" data-kind="car" data-l="8.519" data-w="1.994" data-wb="6.038" data-ovr="1.25" aria-label="Plan view of the Stretch limousine to scale, with the Atto 2 dashed for comparison"></canvas>
+        <dl><div><dt>Length × width</dt><dd>≈8.52 × 1.99 m</dd></div><div><dt>With mirrors</dt><dd>—</dd></div><div><dt>Wheelbase</dt><dd>≈6.04 m</dd></div><div><dt>Built by</dt><dd>approved converters</dd></div><div><dt>Turning circle</dt><dd>not found</dd></div><div><dt>Seats</dt><dd>9 + driver</dd></div></dl>
+        <p>About 6 m between the axles, so on every turn the rear wheels cut far inside the front ones. No turning circle is published; it would be derived from the base car&#x27;s steering lock.</p>
+        <p class="src">Source: <a href="https://www.thechauffeur.com/qualified-vehicle-modifiers-qvm-explained/" rel="noopener" target="_blank">thechauffeur.com</a></p>
+      </article>
+      <article class="car">
+        <header><div><h3>Octavia + box trailer</h3><p class="gen">Böckmann TL-AL 2513/75, 750 kg</p></div><span class="tier pro">PRO</span></header>
+        <canvas class="plan" data-kind="trailer" data-l="4.689" data-w="1.829" data-wb="2.686" data-ovr="1.094" data-tl="2.63" data-tw="1.76" data-bar="1.0" aria-label="Plan view of the Octavia + box trailer to scale, with the Atto 2 dashed for comparison"></canvas>
+        <dl><div><dt>Trailer</dt><dd>3.63 × 1.76 m</dd></div><div><dt>Box inside</dt><dd>2.52 × 1.30 m</dd></div><div><dt>Drawbar</dt><dd>≈1.0 m</dd></div><div><dt>Hitch to axle</dt><dd>not published</dd></div><div><dt>Car + trailer</dt><dd>≈8.3 m</dd></div><div><dt>Max weight</dt><dd>750 kg</dd></div></dl>
+        <p>A short trailer reacts fast when you reverse and folds quickly. This is the jackknife lesson. The hitch-to-axle length isn&#x27;t published, so it has to be measured.</p>
+        <p class="src">Source: <a href="https://www.boeckmann.com/de/anhaenger/pkw-anhaenger/p/tieflader/tieflader-alu-einachsig-200/tl-al-2513-75-21--90577" rel="noopener" target="_blank">boeckmann.com</a></p>
+      </article>
+      <article class="car">
+        <header><div><h3>Articulated truck</h3><p class="gen">4×2 tractor + 13.6 m tri-axle semi-trailer</p></div><span class="tier pro">PRO</span></header>
+        <canvas class="plan" data-kind="truck" data-l="16.5" data-w="2.55" data-wb="3.6" data-ovr="0" data-tl="13.62" data-kp="11.95" data-ka="7.63" aria-label="Plan view of the Articulated truck to scale, with the Atto 2 dashed for comparison"></canvas>
+        <dl><div><dt>Length × width</dt><dd>16.50 × 2.55 m</dd></div><div><dt>Height</dt><dd>4.00 m max</dd></div><div><dt>Kingpin to axles</dt><dd>7.63 m</dd></div><div><dt>Kingpin to rear</dt><dd>≤ 12.0 m</dd></div><div><dt>Must turn inside</dt><dd>ring 12.5 / 5.3 m</dd></div><div><dt>Trailer</dt><dd>13.62 m</dd></div></dl>
+        <p>The trailer axles sit 7.6 m behind the kingpin, so the trailer cuts corners hard. EU rules say it must turn inside a ring of 12.5 m outer and 5.3 m inner radius. The tractor&#x27;s own dimensions still have to come from a spec sheet; its drawing here is schematic.</p>
+        <p class="src">Source: <a href="https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:01996L0053-20190814" rel="noopener" target="_blank">EU Directive 96/53/EC</a> · <a href="https://www.krone-trailer.com/fileadmin/media/downloads/EN/Pritschensattelauflieger/Datenblaetter/Profi_Liner/Profi_Liner_4-BW_GB.pdf" rel="noopener" target="_blank">Krone trailer sheet (PDF)</a></p>
+      </article>
+  </div>
+  <h3 class="grp">Traffic only</h3>
+  <div class="roster">
+      <article class="car">
+        <header><div><h3>Mercedes-Benz Citaro G</h3><p class="gen">18 m articulated bus</p></div><span class="tier ai">TRAFFIC</span></header>
+        <canvas class="plan" data-kind="bus" data-l="18.125" data-w="2.55" data-wb="5.9" data-ovr="3.43" aria-label="Plan view of the Mercedes-Benz Citaro G to scale, with the Atto 2 dashed for comparison"></canvas>
+        <dl><div><dt>Length × width</dt><dd>18.13 × 2.55 m</dd></div><div><dt>With mirrors</dt><dd>2.95 m</dd></div><div><dt>Rear overhang</dt><dd>3.43 m</dd></div><div><dt>Axles</dt><dd>5.90 + 5.99 m</dd></div><div><dt>Turning circle</dt><dd>22.97 m (type?)</dd></div><div><dt>Front lock</dt><dd>53° / 46°</dd></div></dl>
+        <p>Traffic only. A 3.4 m rear overhang that swings out when it leaves a bus stop.</p>
+        <p class="src">Source: <a href="https://www.mercedes-benz-bus.com/cy/en/models/citaro/facts-citaro.pdf" rel="noopener" target="_blank">Mercedes bus facts (PDF)</a></p>
+      </article>
+  </div>
+  <div class="stack"><h3>Turning circles side by side</h3>    <figure class="tc" aria-label="Turning circles compared, in metres">
+      <div class="tc-rows"><div class="row"><span class="name">Smart fortwo</span><span class="bar"><span class="b" style="width:26.73%"></span><em class="" style="left:26.73%">6.95 m</em></span></div><div class="row"><span class="name">LEVC TX</span><span class="bar"><span class="b wall" style="width:32.50%"></span><em class="" style="left:32.50%">8.45 m wall</em></span></div><div class="row"><span class="name">Peugeot 208</span><span class="bar"><span class="b est" style="width:40.00%"></span><em class="" style="left:40.00%">10.4 m</em></span></div><div class="row"><span class="name">Octavia Combi</span><span class="bar"><span class="b est" style="width:40.00%"></span><em class="" style="left:40.00%">10.4 m</em></span></div><div class="row"><span class="name">BYD Atto 2</span><span class="bar"><span class="b" style="width:40.77%"></span><em class="" style="left:40.77%">10.6 m</em></span></div><div class="row"><span class="name">S-Class, 10° rear steer</span><span class="bar"><span class="b wall" style="width:41.50%"></span><em class="" style="left:41.50%">10.79 m wall</em></span></div><div class="row"><span class="name">Porsche 911</span><span class="bar"><span class="b est" style="width:43.08%"></span><em class="" style="left:43.08%">11.2 m</em></span></div><div class="row"><span class="name">W124 E 220</span><span class="bar"><span class="b est" style="width:43.08%"></span><em class="" style="left:43.08%">11.2 m</em></span></div><div class="row"><span class="name">Hummer EV, 4-wheel steer</span><span class="bar"><span class="b" style="width:43.46%"></span><em class="" style="left:43.46%">11.3 m</em></span></div><div class="row"><span class="name">S-Class, 4.5° rear steer</span><span class="bar"><span class="b wall" style="width:45.73%"></span><em class="" style="left:45.73%">11.89 m wall</em></span></div><div class="row"><span class="name">BMW M3</span><span class="bar"><span class="b est" style="width:46.92%"></span><em class="" style="left:46.92%">12.2 m</em></span></div><div class="row"><span class="name">S-Class, no rear steer</span><span class="bar"><span class="b der" style="width:50.00%"></span><em class="" style="left:50.00%">≈13 m wall, derived</em></span></div><div class="row"><span class="name">Hummer EV</span><span class="bar"><span class="b" style="width:51.92%"></span><em class="" style="left:51.92%">13.5 m</em></span></div><div class="row"><span class="name">Ram 1500</span><span class="bar"><span class="b" style="width:54.15%"></span><em class="" style="left:54.15%">14.08 m</em></span></div><div class="row"><span class="name">Sprinter van</span><span class="bar"><span class="b" style="width:55.38%"></span><em class="" style="left:55.38%">14.4 m</em></span></div><div class="row"><span class="name">Citaro G bus</span><span class="bar"><span class="b est" style="width:88.35%"></span><em class="in" style="left:88.35%">22.97 m</em></span></div><div class="row"><span class="name">EU limit for trucks</span><span class="bar"><span class="b der" style="width:96.15%"></span><em class="in" style="left:96.15%">25 m ring</em></span></div></div>
+      <div class="row"><span class="name"></span><span class="axis"><b style="left:0.00%">0</b><b style="left:19.23%">5</b><b style="left:38.46%">10</b><b style="left:57.69%">15</b><b style="left:76.92%">20</b><b style="left:96.15%">25 m</b></span></div>
+      <figcaption class="legend"><span><i class="box" style="background:var(--ochre);border-color:var(--ochre)"></i>kerb to kerb</span><span><i class="box" style="border-color:var(--ochre)"></i>wall to wall (larger for the same car)</span><span><i class="box est"></i>type not stated</span><span><i class="box der"></i>derived or a legal limit</span></figcaption>
+    </figure></div>
+  <p class="note col">* the Atto 2 mirror width is the game's model, not a published figure. † full lock is the simulation's single-track angle worked out from a kerb-to-kerb circle. "—" or "not found" means no source gave the figure, so it must be measured or found before that car ships. "(db)" means it came only from a spec database. Figures were collected on 4 October 2026; a car's sheet varies by year and trim.</p>
+</section>
+
+<section id="camera">
+  <header class="col">
+    <p class="eyebrow">Camera</p>
+    <h2>Zoom that follows what you are doing</h2>
+  </header>
+  <p class="col">Three views, chosen by the situation, not by a button you have to remember. Drive mode and Park mode each bring their own view, and the map button still jumps to the overview at any time.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>View</th><th>When</th><th>Map turns?</th><th>What you see</th></tr></thead>
+      <tbody>
+        <tr><td><b>Overview</b></td><td>Start of a level, or the map button</td><td>No, north up</td><td>The whole district: roads, blocks, signals, where parking is allowed. Free spaces stay hidden, so you have to drive and look. Easy levels can show them.</td></tr>
+        <tr><td><b>Drive mode</b></td><td>Moving on the road</td><td>Yes, your direction is up, like a sat-nav</td><td>Enough road ahead to stop in time, the lanes, the signals and the cars around you.</td></tr>
+        <tr><td><b>Park mode</b></td><td>Below about 10 km/h next to a space that fits, or you tap <i>Park</i></td><td>No, it locks to the space</td><td>Your car, the space and its neighbours, with wheels, mirrors, gaps in metres and the planned path. The space stays still while you manoeuvre, like the garage view today.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="two">
+    <div class="panel">
+      <h3>The zoom rule</h3>
+      <p>In Drive mode the map always shows at least the distance you need to stop, plus your car:</p>
+      <p class="mono" style="color:var(--ink)">look-ahead = car length + 1.5 s of travel + v² ÷ (2 × 4 m/s²), at least 14 m</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Speed</th><th>Look-ahead (Atto 2)</th></tr></thead>
+          <tbody>
+            <tr><td class="num">0–10 km/h</td><td class="num">14 m (the minimum)</td></tr>
+            <tr><td class="num">20 km/h</td><td class="num">16.5 m</td></tr>
+            <tr><td class="num">30 km/h</td><td class="num">25.5 m</td></tr>
+            <tr><td class="num">40 km/h</td><td class="num">36.4 m</td></tr>
+            <tr><td class="num">50 km/h</td><td class="num">49.3 m</td></tr>
+            <tr><td class="num">60 km/h</td><td class="num">64.0 m</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>So it feels calm</h3>
+      <ul>
+        <li>It zooms out fast when you speed up (about 0.6 s) and zooms in slowly when you slow down (about 2.5 s), so it never pumps.</li>
+        <li>Stopping at a red light or in a queue does not zoom in. You still need to see the junction.</li>
+        <li>Park mode frames your car and the space together, then stops turning.</li>
+        <li>Pinch to zoom yourself, double-tap to give control back.</li>
+        <li>A truck uses its own length in the rule, so its view is wider.</li>
+        <li>Detail follows the zoom. <b>Detail 0</b> (below 2.6 pixels per metre) shows blocks, roads and signals. <b>Detail 1</b> adds lane lines, bays and car outlines. <b>Detail 2</b> (above 7.8) adds wheels, mirrors, labels and dimensions. Each level fades in.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="traffic">
+  <header class="col">
+    <p class="eyebrow">Traffic</p>
+    <h2>Traffic, rules and rude drivers</h2>
+  </header>
+  <p class="col">AI cars use the same physics as yours: the same bicycle model and their real turning circles. A bus swings wide at a corner and a limousine can't make a tight turn, so you have to see it coming. Speed and following distance come from the Intelligent Driver Model, a standard model from traffic research. Each personality is a set of numbers plus a few behaviours, and a seed makes the traffic repeat exactly, so a level is fair and can be replayed.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Driver</th><th>How they drive</th><th>What it means for you</th></tr></thead>
+      <tbody>
+        <tr><td><b>Calm</b></td><td>50 km/h, 1.4 s gap, signals</td><td>The baseline.</td></tr>
+        <tr><td><b>Cautious</b></td><td>35 km/h, 2 s gap, brakes early, waits long at junctions</td><td>You end up behind them. Don't tailgate.</td></tr>
+        <tr><td><b>Speedster</b></td><td>Fast car, 0.8 s gap, goes through late amber, overtakes</td><td>Don't pull out in front of one.</td></tr>
+        <tr><td><b>Courier</b></td><td>Van that stops in the lane with hazards on for 30–60 s</td><td>Your lane is blocked. Wait, or pass when the other lane is clear.</td></tr>
+        <tr><td><b>Chauffeur</b></td><td>Limousine, slow and smooth, very wide turns</td><td>Leave room at corners.</td></tr>
+        <tr><td><b>Heavy</b></td><td>Truck or bus, slow to pull away, wide turns, bus stops</td><td>Long blind side. Don't sit beside its rear wheels in a turn.</td></tr>
+        <tr><td><b>Learner</b></td><td>Hesitates, sometimes stalls at a junction</td><td>A patience test.</td></tr>
+        <tr><td><b>Leaver</b></td><td>A parked car that wakes up, signals and pulls out</td><td>The space you can wait for.</td></tr>
+        <tr><td><b>Spot thief</b></td><td>Also hunting for a space. If you are slow, it dives into yours nose-first.</td><td>Claim the space clearly and park without long pauses.</td></tr>
+        <tr><td><b>Impatient</b></td><td>Honks when you hold up the lane while you manoeuvre</td><td>Pressure. The score counts how long you blocked traffic.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="two">
+    <div class="panel">
+      <h3>Waiting for a leaver</h3>
+      <ol>
+        <li>A parked car's indicator starts blinking.</li>
+        <li>Stop a little behind it, leaving room for it to pull out, and signal towards the space.</li>
+        <li>Cars behind pass you when the other lane is clear. If it isn't, they wait, and after a while they honk.</li>
+        <li>When it has gone, the space is yours. Then park as usual.</li>
+      </ol>
+    </div>
+    <div class="panel">
+      <h3>The spot thief</h3>
+      <ol>
+        <li>Thieves cruise slowly near free spaces.</li>
+        <li>To reverse into a space you have to drive past it first. Signal, stop in position and start reversing within the thief's patience: 8 s on easy levels, 3 s on hard ones.</li>
+        <li>Hesitate and it pulls in nose-first. You lose the space, not points, and go find another.</li>
+        <li>On hard levels two thieves compete, and they also go for a leaver's space.</li>
+      </ol>
+      <p>In Germany the space belongs to whoever reached it first, even while they pull past to reverse in, so a thief there breaks the law. In the UK it is only rude. See the tips in <a href="#lessons">Lessons</a>.</p>
+    </div>
+  </div>
+  <div class="panel col">
+    <h3>What the score checks</h3>
+    <p>Red lights and stop lines. Speeding. Signalling before you pull in, pull out or turn. Blocking a junction. Parking where it isn't allowed: crossings, the zone around a junction, bus stops, loading bays, driveways, disabled bays. Touching anything. How long you held up traffic. Hazard lights used where the rules don't allow it.</p>
+    <p>Hazard lights and who gets a space depend on the country, so each map uses a country rule set. The details and sources are in the <a href="#lessons">Lessons</a> tips.</p>
+  </div>
+</section>
+
+<section id="mapkit">
+  <header class="col">
+    <p class="eyebrow">Map kit</p>
+    <h2>A map kit instead of hand-drawn maps</h2>
+  </header>
+  <p class="col">A map is a short spec of the things a city is made of. A compiler turns the spec into everything the game needs. Your garage stays hand-surveyed, in the same format: walls, pillars and bays with your measured numbers.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Piece</th><th>What it is</th><th>Settings</th></tr></thead>
+      <tbody>
+        <tr><td><b>road</b></td><td>A street with lanes, parking lanes and pavements on each side</td><td>lane width, speed limit, parallel / angled / no parking per side</td></tr>
+        <tr><td><b>junction</b></td><td>Made automatically where roads cross</td><td>traffic lights (cycle, offset) or give way</td></tr>
+        <tr><td><b>lot</b></td><td>A car park</td><td>rows, bay size, 90° / 60° / 45°, one-way aisles, entrance</td></tr>
+        <tr><td><b>garage</b></td><td>A surveyed space like yours</td><td>walls, pillars, bays, low walls, bins</td></tr>
+        <tr><td><b>dock</b></td><td>Loading doors at a distribution centre</td><td>door width, bumpers, apron depth, yard</td></tr>
+        <tr><td><b>zone</b></td><td>A rule painted on a kerb</td><td>no parking, bus stop, loading, disabled, driveway</td></tr>
+        <tr><td><b>props</b></td><td>Things you can hit</td><td>bollards, trees, lamp posts, kerbs, hydrants</td></tr>
+        <tr><td><b>fill</b></td><td>Who is parked</td><td>occupancy, vehicle mix, how sloppily, guaranteed free spaces</td></tr>
+        <tr><td><b>traffic</b></td><td>Who is driving</td><td>density, vehicle mix, driver mix</td></tr>
+        <tr><td><b>objective</b></td><td>What the level asks</td><td>park in bay 561 · any legal space on this street · dock at door 7</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="two">
+    <div class="panel">
+      <h3>What the compiler does, in order</h3>
+      <ol>
+        <li><b>Geometry:</b> kerbs, blocks, lanes, buildings.</li>
+        <li><b>Markings:</b> lane lines, crossings, stop lines, bays.</li>
+        <li><b>Slots:</b> every legal place to park, with its rule (parallel, nose-in, reverse-in).</li>
+        <li><b>Fill:</b> parked cars, from the seed.</li>
+        <li><b>Lanes:</b> the route graph for traffic, with stop lines and signals.</li>
+        <li><b>Checks:</b> every guaranteed space is reachable, and a route planner can park the chosen car in it. A map that fails is never shipped.</li>
+      </ol>
+      <p>Out come collision shapes, drawing layers, the lane graph and the targets. The game core never sees the spec, only this output, which keeps the Swift port simple.</p>
+    </div>
+    <div class="panel">
+      <h3>A generator, not a list of levels</h3>
+      <p><b>Same seed, same map.</b> A level is a spec plus a seed, so "Harbour 4821" is the same street for everyone.</p>
+      <p><b>Difficulty knobs:</b> spare length in free spaces (from 1.5 car lengths, the beginner's size, down to car length + 0.8 m on the hardest levels), how full the street is, lane width, how sloppily others parked, traffic density, driver mix, time limit.</p>
+      <p><b>The 100 free maps</b> are hand-picked seeds plus the hand-made lessons and your garage.</p>
+      <p><b>Driving on the left</b> is one switch: lanes, signals and parking sides flip for the UK, Ireland, Japan or Australia.</p>
+    </div>
+  </div>
+  <div class="stack">
+    <h3>The spec behind the sketch</h3>
+    <pre aria-label="Map spec for the sketch">{
+  <span class="k">name</span>: 'Harbour district', <span class="k">seed</span>: 4821, <span class="k">drive</span>: 'right',
+  <span class="k">bounds</span>: [-160, -95, 160, 95],
+  <span class="k">roads</span>: [
+    { <span class="k">id</span>: 'harbour', <span class="k">name</span>: 'Harbour Street', <span class="k">axis</span>: 'x', <span class="k">at</span>: 0, <span class="k">lane</span>: 3.25, <span class="k">limit</span>: 50,
+      <span class="k">right</span>: { <span class="k">park</span>: 2.1, <span class="k">walk</span>: 3.2 }, <span class="k">left</span>: { <span class="k">park</span>: 2.1, <span class="k">walk</span>: 3.2 } },
+    { <span class="k">id</span>: 'mill', <span class="k">name</span>: 'Mill Lane', <span class="k">axis</span>: 'y', <span class="k">at</span>: -70, <span class="k">lane</span>: 3.0, <span class="k">limit</span>: 30,
+      <span class="k">right</span>: { <span class="k">park</span>: 2.0, <span class="k">walk</span>: 2.6 }, <span class="k">left</span>: { <span class="k">walk</span>: 2.6 } },
+    { <span class="k">id</span>: 'dock', <span class="k">name</span>: 'Dock Road', <span class="k">axis</span>: 'y', <span class="k">at</span>: 75, <span class="k">lane</span>: 3.25, <span class="k">limit</span>: 50,
+      <span class="k">right</span>: { <span class="k">walk</span>: 2.6 }, <span class="k">left</span>: { <span class="k">walk</span>: 2.6 } }
+  ],
+  <span class="k">signals</span>: [
+    { <span class="k">roads</span>: ['harbour', 'mill'], <span class="k">cycle</span>: [16, 3, 2, 11, 3, 2], <span class="k">offset</span>: 0 },
+    { <span class="k">roads</span>: ['harbour', 'dock'], <span class="k">cycle</span>: [16, 3, 2, 11, 3, 2], <span class="k">offset</span>: 9 }
+  ],
+  <span class="k">zones</span>: [
+    { <span class="k">road</span>: 'harbour', <span class="k">side</span>: 'left', <span class="k">from</span>: 18, <span class="k">to</span>: 42, <span class="k">kind</span>: 'bus' },
+    { <span class="k">road</span>: 'harbour', <span class="k">side</span>: 'right', <span class="k">from</span>: -34, <span class="k">to</span>: -22, <span class="k">kind</span>: 'loading' }
+  ],
+  <span class="k">lots</span>: [{ <span class="k">id</span>: 'P1', <span class="k">rect</span>: [88, -50, 142, -16], <span class="k">modules</span>: 2, <span class="k">bay</span>: [2.5, 5.0], <span class="k">aisle</span>: 6.0, <span class="k">entry</span>: 'dock' }],
+  <span class="k">fill</span>: {
+    <span class="k">occupancy</span>: 0.85, <span class="k">sloppiness</span>: 0.12,
+    <span class="k">mix</span>: { <span class="k">city</span>: 1, <span class="k">compact</span>: 5, <span class="k">family</span>: 5, <span class="k">estate</span>: 2, <span class="k">exec</span>: 1.5, <span class="k">pickup</span>: 0.6, <span class="k">van</span>: 1, <span class="k">limo</span>: 0.2 },
+    <span class="k">guarantee</span>: { <span class="k">road</span>: 'harbour', <span class="k">side</span>: 'right', <span class="k">gaps</span>: 3, <span class="k">fits</span>: 'player' }
+  },
+  <span class="k">traffic</span>: {
+    <span class="k">spacing</span>: [22, 70],
+    <span class="k">mix</span>: { <span class="k">compact</span>: 5, <span class="k">family</span>: 5, <span class="k">exec</span>: 2, <span class="k">estate</span>: 1.5, <span class="k">van</span>: 1.5, <span class="k">pickup</span>: 0.7, <span class="k">truck</span>: 0.7, <span class="k">bus</span>: 0.5, <span class="k">limo</span>: 0.3 },
+    <span class="k">drivers</span>: { <span class="k">calm</span>: 6, <span class="k">cautious</span>: 2, <span class="k">speedster</span>: 1.2, <span class="k">thief</span>: 0.6 }
+  }
+}</pre>
+  </div>
+</section>
+
+<section id="drawing">
+  <header class="col">
+    <p class="eyebrow">Drawing</p>
+    <h2>Technical, with a little retro</h2>
+  </header>
+  <div class="two">
+    <div class="panel">
+      <h3>Visual language</h3>
+      <ul>
+        <li><b>Hairlines</b> stay 1 pixel at every zoom. Road markings are sized in metres, so they grow as you zoom in.</li>
+        <li><b>Hatching</b> stays fixed to the screen, like a printed plan.</li>
+        <li><b>A dot grid every 10 m</b>, like engineering paper.</li>
+        <li><b>Labels</b> in a mono typeface, always upright when the map turns.</li>
+        <li><b>Dimension lines</b> with ticks for gaps and clearances.</li>
+        <li><b>No</b> gradients, shadows or textures.</li>
+      </ul>
+      <p>The retro part is only the dot grid, the plotter-style lines and the mono labels. Everything else stays plain.</p>
+    </div>
+    <div class="panel">
+      <h3>One colour per meaning</h3>
+      <ul>
+        <li><b style="color:var(--ink)">White:</b> road markings, your car's outline.</li>
+        <li><b style="color:var(--yellow)">Yellow:</b> bay lines, your nose arrow, your path.</li>
+        <li><b style="color:var(--green)">Green:</b> the target, a good result.</li>
+        <li><b style="color:var(--red)">Red:</b> danger, no parking, brake lights.</li>
+        <li><b style="color:var(--amber)">Amber:</b> indicators, amber lights, warnings.</li>
+        <li><b style="color:var(--cyan)">Cyan:</b> swept paths.</li>
+        <li><b style="color:var(--steel)">Blue:</b> trucks and buses.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>Fast on a phone</h3>
+      <ul>
+        <li>Blocks, buildings and markings are drawn once into 64 m tiles per detail level and reused.</li>
+        <li>Only cars, lights and overlays are redrawn each frame.</li>
+        <li>30 fps cap, and no redraw when nothing moves, as now.</li>
+        <li>A spatial grid means collisions and sensors only check what's nearby, even on a big map.</li>
+        <li>Cars far from you only move along their lanes, with no physics until they get close.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="lessons">
+  <header class="col">
+    <p class="eyebrow">Lessons</p>
+    <h2>From first metres to a 16.5 m truck</h2>
+  </header>
+  <p class="col">Lessons get harder one step at a time. Each has three stars: no touches, within the time, and accurate (centred, straight, close to the kerb). It also counts shunts, the number of times you change direction. Later lessons repeat the same skills with harder cars.</p>
+  <ol class="steps col">
+    <li><b>First metres</b><span>Forward, reverse, steering, stopping, in an empty car park.</span></li>
+    <li><b>How a car turns</b><span>The rear wheels cut inside and the front swings out. The swept paths are drawn while you drive.</span></li>
+    <li><b>Into a bay, forwards</b><span>Empty car park, wide bays.</span></li>
+    <li><b>Into a bay between cars</b><span>Forwards, then the same bay in reverse.</span></li>
+    <li><b>Parallel parking, big space</b><span>About one and a half car lengths.</span></li>
+    <li><b>Parallel parking, tight space</b><span>Down to your car length plus about 1 m, California's handbook minimum.</span></li>
+    <li><b>Leaving a tight space</b><span>Out of a parallel space without touching the cars in front or behind.</span></li>
+    <li><b>Angled bays and one-way aisles</b><span>Reading arrows and choosing the right way in.</span></li>
+    <li><b>Your garage</b><span>Bay 561, nose in, arriving from the left, as today.</span></li>
+    <li><b>Street with traffic</b><span>Signal, claim the space, keep traffic moving.</span></li>
+    <li><b>Leavers and spot thieves</b><span>Waiting for a space, and losing one if you hesitate.</span></li>
+    <li><b>Other cars</b><span>The same lessons in the Smart, the Ram, the W124 and the limousine, with each car's own reference points.</span></li>
+    <li><b>Car and trailer</b><span>Reversing straight, then round a corner, then into a space. Avoiding the jackknife.</span></li>
+    <li><b>Truck at the distribution centre</b><span>Lining up, reversing to a door, stopping at the dock bumper.</span></li>
+  </ol>
+  <div class="panel col">
+    <p class="eyebrow">The best part</p>
+    <h3>Coaching worked out for your car</h3>
+    <p>Driving handbooks teach reference points that are rules of thumb for an average car, and they disagree with each other. The simulation knows the exact geometry, so it can work out the moments for the car you are actually driving, and say <i>now</i> at the right time. The sketch above does it for the Atto 2 in its gap:</p>
+    <div class="stack" style="gap:8px">
+      <div class="cue"><i>1</i><p>Full lock towards the kerb when the rear bumpers are level, about 0.8 m out (handbooks say 0.6–1 m).</p></div>
+      <div class="cue"><i>2</i><p>Full lock the other way at about 48°, when your mirror is about 0.8 m past their rear bumper.</p></div>
+      <div class="cue"><i>3</i><p>Straighten 0.25 m from the kerb (New York's test allows 30 cm), then roll forward to even the gaps.</p></div>
+    </div>
+    <p>A Smart and a Ram 1500 get very different numbers for the same gap, and the coach shows them as marks on the screen.</p>
+  </div>
+    <div class="stack-l">
+    <div class="stack col">
+      <h3>Tips the coach teaches</h3>
+      <p class="note">Taken from driving handbooks and test rules, checked on 4 October 2026. Handbooks disagree on several points. Where they do, the game says so and marks the moment for your car instead of quietly picking one rule. The UK parks on the left and the US and Germany on the right, so the coach says "towards the kerb", never "left" or "right".</p>
+    </div>
+    <div class="two">
+      <div class="panel">
+        <h3>Parallel parking</h3>
+        <ul>
+          <li><b>Gap:</b> beginners want about 1.5 car lengths (<a href="https://www.safedrivingforlife.info/blog/cars/how-parallel-park-side-road/" target="_blank" rel="noopener">DVSA</a>, <a href="https://oer.pressbooks.pub/orpcplaybookr3/chapter/__unknown__-41/" target="_blank" rel="noopener">Oregon</a>). The UK test uses about two. California's minimum is your length plus 0.9 m (3 ft).</li>
+          <li><b>Line up</b> 0.6–1 m beside the car ahead (<a href="https://dmv.ny.gov/new-york-state-drivers-manual-and-practice-tests/chapter-7-parallel-parking" target="_blank" rel="noopener">New York</a>, <a href="https://dds.georgia.gov/sessions-14-16-0" target="_blank" rel="noopener">Georgia</a>), rear bumpers level or yours slightly ahead (<a href="https://www.dmv.ca.gov/portal/handbook/california-driver-handbook/navigating-the-roads-cont1/" target="_blank" rel="noopener">California</a>, DVSA).</li>
+          <li><b>Turn in</b> when your rear wheels are level with its rear bumper. US handbooks use full lock; UK schools often teach one turn of the wheel (<a href="https://www.billplant.co.uk/blog/how-to-parallel-park/" target="_blank" rel="noopener">Bill Plant</a>, <a href="https://www.drivejohnsons.co.uk/learning-centre/how-to-drive-a-car/manoeuvres/parallel-park/" target="_blank" rel="noopener">Johnsons</a>).</li>
+          <li><b>The 45° point:</b> your centre pillar or front door reaches their rear bumper (<a href="https://opifiles.mt.gov/portals/182/Page%20Files/Driver%20Education/Curriculum/Module%203%20all%20files/3.5-Parking-Worksheets.pdf" target="_blank" rel="noopener">Montana</a>, <a href="https://www.pa.gov/agencies/dmv/driver-services/pennsylvania-drivers-manual/online-drivers-manual/everyday-driving-skills/parking.html" target="_blank" rel="noopener">Pennsylvania</a>).</li>
+          <li><b>Finish</b> close to the kerb: New York's test wants 30 cm (1 ft) or less and Georgia's allows 45 cm (18 in). The UK says "reasonably close" with no number.</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <p class="eyebrow">Your mirror tip</p>
+        <h3>It's in a real handbook</h3>
+        <p>Georgia's driver manual: stop when the side mirror is in line with the other car's rear bumper, then steer the other way. Montana uses the kerb-side mirror the same way. Most others steer back later: the DVSA once your front is clear of the parked car, New York when your front wheels are opposite its back bumper, Oregon when your front tyre reaches its corner.</p>
+        <p>In the sketch, the Atto 2 at full lock should steer back when its mirror is about 0.8 m past their bumper. The coach can show the rule of thumb and the exact moment side by side.</p>
+      </div>
+      <div class="panel">
+        <h3>Bay parking</h3>
+        <ul>
+          <li><b>Reverse in:</b> drive past the bay, apply full lock when the bay's first line is level with the back seat in the rear side window, and straighten when the lines look parallel in both mirrors (<a href="https://www.learnerdriving.com/bay-parking" target="_blank" rel="noopener">learnerdriving.com</a>, <a href="https://drivejohnsons.co.uk/learning-centre/how-to-drive-a-car/manoeuvres/reverse-bay-parking" target="_blank" rel="noopener">Johnsons</a>).</li>
+          <li><b>Forwards in:</b> from 1.5–2.4 m out, turn when your mirror reaches the bay's own near line (Georgia, Montana).</li>
+          <li><b>Why reverse in:</b> you drive out forwards and can see, instead of reversing out half-blind. The <a href="https://www.gov.uk/guidance/the-highway-code/using-the-road-159-to-203" target="_blank" rel="noopener">Highway Code</a> recommends it for driveways. Some German multi-storey car parks require forward parking (<a href="https://www.adac.de/verkehr/verkehrssicherheit/unterwegs/richtig-einparken/" target="_blank" rel="noopener">ADAC</a>).</li>
+          <li><b>Angled bays:</b> approach about 1 m out and turn sharply as your steering wheel passes the first line (Georgia).</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3>Leaving a tight space</h3>
+        <ul>
+          <li>Back up close to the car behind, turn the wheels away from the kerb, signal, and check over both shoulders (New York).</li>
+          <li>Creep out while steering. Straighten when your front seat passes the bumper of the car ahead (Georgia).</li>
+        </ul>
+        <h3>Basics at walking pace</h3>
+        <ul>
+          <li>Reverse slowly. Look all around, and mainly through the rear window (Highway Code).</li>
+          <li>The front swings out as you turn. On long vehicles the rear wheels cut in towards the kerb (<a href="https://www.nj.gov/mvc/pdf/license/CDL_Manual.pdf" target="_blank" rel="noopener">New Jersey CDL manual</a>).</li>
+          <li>Tilt the kerb-side mirror down to see the kerb (ADAC, Bill Plant).</li>
+          <li>If you can't see, get out and look, or have someone guide you (Highway Code, <a href="https://www.gesetze-im-internet.de/stvo_2013/__9.html" target="_blank" rel="noopener">StVO §9</a>).</li>
+          <li>Turning the wheel while standing still wears the tyres and steering (<a href="https://www.safedrivingforlife.info/advice/car-driving/how-drive-car/steering-manoeuvring-car/" target="_blank" rel="noopener">DVSA</a>), but the UK test doesn't mark it, so the game won't punish it.</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3>Signals, hazards and who gets the space</h3>
+        <ul>
+          <li><b>UK:</b> signalling gives you no priority for a space. Hazard lights are allowed only while stationary, to warn that you are temporarily blocking traffic. Never use them while driving or to excuse bad parking (<a href="https://www.gov.uk/guidance/the-highway-code/general-rules-techniques-and-advice-for-all-drivers-and-riders-103-to-158" target="_blank" rel="noopener">Highway Code rule 116</a>). By that rule, waiting for a space with hazards on can be fine, but reversing in with them on is not.</li>
+          <li><b>Germany:</b> the space belongs to the first driver to reach it, even while they pull past to reverse in or wait for a car to leave (<a href="https://www.gesetze-im-internet.de/stvo_2013/__12.html" target="_blank" rel="noopener">StVO §12(5)</a>). Taking it anyway costs €10. Hazards are only for danger (<a href="https://www.gesetze-im-internet.de/stvo_2013/__16.html" target="_blank" rel="noopener">§16</a>), and ADAC treats them as misuse when double-parked.</li>
+          <li><b>US:</b> it varies by state.</li>
+        </ul>
+        <p>So the spot thief breaks the law in Germany and is only rude in the UK. The game needs a rule set per country.</p>
+      </div>
+      <div class="panel">
+        <h3>Trailer</h3>
+        <ul>
+          <li>Hold the bottom of the steering wheel: the trailer goes the way your hand moves (<a href="https://www.dmv.ca.gov/portal/file/recreational-vehicles-trailers-handbook-pdf" target="_blank" rel="noopener">California trailer handbook</a>, <a href="https://www.boatus.com/expert-advice/expert-advice-archive/2017/august/back-up-your-boat-trailer-like-a-pro" target="_blank" rel="noopener">BoatUS</a>).</li>
+          <li>Use small inputs. Sharp corrections cause the jackknife, where the car and trailer fold.</li>
+          <li>Going wrong? Pull forward to straighten, then try again. Past 90°, stop and drive forward.</li>
+        </ul>
+        <h3>Truck at a dock</h3>
+        <ul>
+          <li>Back towards the driver's side, the side you can see, "even if it means going around the block" (<a href="https://www.oregon.gov/odot/DMV/Pages/Online_CDL_Manual_2/Section_2.aspx" target="_blank" rel="noopener">Oregon CDL manual</a>).</li>
+          <li>G.O.A.L.: Get Out And Look, and back slowly (<a href="https://www.osha.gov/sites/default/files/publications/OSHA3944.pdf" target="_blank" rel="noopener">OSHA</a>).</li>
+          <li>Pull past the dock, parallel to it, then angle the trailer in (<a href="https://www.ontario.ca/document/official-ministry-transportation-mto-truck-handbook/alley-dock" target="_blank" rel="noopener">Ontario truck handbook</a>).</li>
+          <li>With a spotter, agree the stop signal first, and stop whenever you lose sight of them (<a href="https://www.hse.gov.uk/workplacetransport/factsheets/reversing.htm" target="_blank" rel="noopener">HSE</a>).</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3>The Smart, nose to the kerb</h3>
+        <p>Legal in few places. Italy requires cars to park parallel to the kerb unless signs say otherwise (<a href="https://aci.gov.it/codice-della-strada/art-157/" target="_blank" rel="noopener">art. 157</a>); a draft law would allow cars up to 2.70 m, but it was not in force when checked. Most US states require parallel parking within 30–45 cm of the curb. In the UK and Germany it is unclear and depends on the markings. So it would be a special level with a "check your local rules" note.</p>
+        <h3>How the stars are judged</h3>
+        <p>Real test rules: the UK fails a car parked outside its bay and faults one left at an angle or far from the kerb (<a href="https://www.gov.uk/guidance/guidance-for-driving-examiners-carrying-out-driving-tests-dt1/1-car-driving-test" target="_blank" rel="noopener">DVSA examiner guidance</a>). Pennsylvania allows one attempt and no more than three adjustments. Texas fails a wheel over the curb. The game turns these into numbers: inside the lines, within 30 cm of the kerb, and few shunts.</p>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+
+<section id="money">
+  <header class="col">
+    <p class="eyebrow">Free &amp; paid</p>
+    <h2>Free to learn, paid for the special stuff</h2>
+  </header>
+  <div class="two">
+    <div class="panel">
+      <p class="eyebrow" style="color:var(--green)">Free</p>
+      <ul>
+        <li><b>Everyday cars:</b> Atto 2, Peugeot 208, Smart fortwo, Škoda Octavia estate.</li>
+        <li><b>100 maps:</b> the lessons, three districts, your garage, and a daily generated street.</li>
+        <li>Parallel, bay and angled parking with light traffic.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <p class="eyebrow">Pro · one purchase</p>
+      <ul>
+        <li><b>Special cars:</b> Ram 1500, S-Class, W124, BMW M3, Porsche 911, London taxi, Hummer EV, stretch limousine, Sprinter van.</li>
+        <li><b>Trailer pack</b> and <b>truck &amp; distribution centre pack.</b></li>
+        <li>Rush hour, spot thieves, the hard generator settings, unlimited seeds.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="panel col">
+    <h3>Notes before selling</h3>
+    <ul>
+      <li><b>One Pro unlock, not a subscription,</b> is easier to sell for a training game. Bigger packs, like trucks, can come later. Avoid ads while driving, because they break concentration.</li>
+      <li><b>Paid content is just more data files</b> plus a check that you own them. The engine is the same for everyone.</li>
+      <li><b>On the web:</b> a payment provider such as Stripe or Paddle, with the unlock tied to an account or a licence key.</li>
+      <li><b>In the App Store and Google Play:</b> unlocks inside the app go through their in-app purchase. Both have lower fees for small developers, so check their current terms.</li>
+      <li><b>Unlocks checked only on the phone can be cracked.</b> That's fine at the start. Later the paid files can come from a server after a purchase check.</li>
+      <li><b>Car names:</b> real brand names, logos and recognisable designs in a paid game usually need the car maker's permission. Many games use made-up names with real-world sizes instead. Each car file keeps <span class="mono">name</span> (what players see) separate from <span class="mono">basedOn</span> (the real model the numbers come from), so a store version can rename cars without touching the physics. Ask someone who knows trademark law before you sell. This is not legal advice.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="order">
+  <header class="col">
+    <p class="eyebrow">Build order</p>
+    <h2>Each step ships something playable</h2>
+  </header>
+  <ol class="steps col">
+    <li><b>Cars and maps as data</b><span>Car files and map specs; your garage becomes map 1. The 128 replay checks must still pass unchanged, which proves the garage drives exactly the same.</span></li>
+    <li><b>Map kit and drawing</b><span>Roads, car parks, markings, detail levels and the zoom rule. Free driving in a district full of parked cars, a parallel-parking objective, and the Smart and the Ram as the first new cars.</span></li>
+    <li><b>Drive mode and Park mode</b><span>Street physics with tyre slip, blended into today's parking model below about 18 km/h. Both control sets, the automatic switch, and the detailed parking view.</span></li>
+    <li><b>Coach</b><span>Reference points computed for each car, the first ten lessons, stars.</span></li>
+    <li><b>Traffic</b><span>Lanes, signals, driver models, indicators and hazards, rule scoring, leavers and spot thieves.</span></li>
+    <li><b>Trailer</b><span>Trailer physics, jackknife, trailer lessons.</span></li>
+    <li><b>Truck and distribution centre</b><span>Tractor and semi-trailer, docks, yard maps.</span></li>
+    <li><b>Store</b><span>The free and Pro split, purchases, and renamed cars if needed.</span></li>
+  </ol>
+</section>
+
+<section id="decide">
+  <header class="col">
+    <p class="eyebrow">Your call</p>
+    <h2>Five things to decide</h2>
+  </header>
+  <div class="decide">
+    <div class="panel"><p class="eyebrow">The look</p><p>Is the sketch's style right? Darker, lighter, more retro, less?</p></div>
+    <div class="panel"><p class="eyebrow">First cars</p><p>Which three or four come right after the Atto 2? My pick: Smart, Ram 1500, W124 and S-Class, because they differ the most.</p></div>
+    <div class="panel"><p class="eyebrow">Drive controls</p><p>In Drive mode, an accelerator and a brake you slide for more or less. Park mode keeps today's hold-to-move Forward and Reverse. Does that fit how you want it to feel?</p></div>
+    <div class="panel"><p class="eyebrow">Free and paid</p><p>Everyday cars and 100 maps free; special cars, trailers and trucks paid. Is that the line you want?</p></div>
+    <div class="panel"><p class="eyebrow">Start</p><p>Shall I start with step 1, cars and maps as data? Nothing changes for you in the game yet, but everything after it builds on it.</p></div>
+  </div>
+</section>
+
+</div>
+
+<script>
+(() => {
+'use strict';
+// ---------------------------------------------------------------------------
+// Map spec: the same JSON shown in the "Map kit" section. Everything on the
+// canvas is compiled from it with a seeded random generator.
+// ---------------------------------------------------------------------------
+const SPEC = {
+  name: 'Harbour district', seed: 4821, drive: 'right',
+  bounds: [-160, -95, 160, 95],
+  roads: [
+    { id: 'harbour', name: 'Harbour Street', axis: 'x', at: 0, lane: 3.25, limit: 50,
+      right: { park: 2.1, walk: 3.2 }, left: { park: 2.1, walk: 3.2 } },
+    { id: 'mill', name: 'Mill Lane', axis: 'y', at: -70, lane: 3.0, limit: 30,
+      right: { park: 2.0, walk: 2.6 }, left: { walk: 2.6 } },
+    { id: 'dock', name: 'Dock Road', axis: 'y', at: 75, lane: 3.25, limit: 50,
+      right: { walk: 2.6 }, left: { walk: 2.6 } }
+  ],
+  signals: [
+    { roads: ['harbour', 'mill'], cycle: [16, 3, 2, 11, 3, 2], offset: 0 },
+    { roads: ['harbour', 'dock'], cycle: [16, 3, 2, 11, 3, 2], offset: 9 }
+  ],
+  zones: [
+    { road: 'harbour', side: 'left', from: 18, to: 42, kind: 'bus' },
+    { road: 'harbour', side: 'right', from: -34, to: -22, kind: 'loading' }
+  ],
+  lots: [{ id: 'P1', rect: [88, -50, 142, -16], modules: 2, bay: [2.5, 5.0], aisle: 6.0, entry: 'dock' }],
+  fill: {
+    occupancy: 0.85, sloppiness: 0.12,
+    mix: { city: 1, compact: 5, family: 5, estate: 2, exec: 1.5, pickup: 0.6, van: 1, limo: 0.2 },
+    guarantee: { road: 'harbour', side: 'right', gaps: 3, fits: 'player' }
+  },
+  traffic: {
+    spacing: [22, 70],
+    mix: { compact: 5, family: 5, exec: 2, estate: 1.5, van: 1.5, pickup: 0.7, truck: 0.7, bus: 0.5, limo: 0.3 },
+    drivers: { calm: 6, cautious: 2, speedster: 1.2, thief: 0.6 }
+  }
+};
+window.BLUEPRINT_SPEC = SPEC;
+
+// Vehicle kinds for the sketch: rough class sizes, not the roster's measured cars.
+const KINDS = {
+  city:    { L: 2.70, W: 1.66, wb: 1.87, ovr: 0.42, r: 0.45, label: 'CITY CAR' },
+  compact: { L: 4.06, W: 1.75, wb: 2.54, ovr: 0.70, r: 0.45, label: 'COMPACT' },
+  family:  { L: 4.35, W: 1.83, wb: 2.65, ovr: 0.82, r: 0.42, label: 'FAMILY' },
+  estate:  { L: 4.70, W: 1.83, wb: 2.69, ovr: 1.09, r: 0.40, label: 'ESTATE' },
+  exec:    { L: 5.00, W: 1.90, wb: 2.95, ovr: 1.20, r: 0.40, label: 'EXECUTIVE' },
+  pickup:  { L: 5.90, W: 2.08, wb: 3.67, ovr: 1.28, r: 0.28, label: 'PICKUP' },
+  van:     { L: 5.93, W: 2.02, wb: 3.66, ovr: 1.37, r: 0.18, label: 'VAN' },
+  limo:    { L: 8.50, W: 2.00, wb: 5.90, ovr: 1.65, r: 0.38, label: 'LIMOUSINE' },
+  truck:   { L: 16.5, W: 2.55, wb: 3.70, ovr: 0, r: 0.10, cab: 2.3, trailer: 13.6, label: 'ARTIC TRUCK' },
+  bus:     { L: 18.0, W: 2.55, wb: 5.90, ovr: 0, r: 0.30, front: 10.6, label: 'ARTIC BUS' }
+};
+// The player: BYD Atto 2, the same numbers and outline as the game.
+const PK = { L: 4.33, W: 1.83, wb: 2.62, ovr: 0.827, r: 0.4, label: 'ATTO 2' };
+const R_MIN = Math.sqrt(5.3 * 5.3 - 2.62 * 2.62) - 1.57 / 2;          // 3.82 m rear-axle circle at full lock
+const BODY = (() => { const R = [[3.503, .52], [3.40, .76], [3.123, .878], [2.80, .912], [0, .915], [-.58, .858], [-.76, .76], [-.827, .62]]; return [...R, ...R.slice().reverse().map(([a, b]) => [a, -b])]; })();
+const MIRRORS = [-1, 1].map(sg => [[1.77, sg * .90], [1.98, sg * .90], [1.98, sg * 1.04], [1.77, sg * 1.04]]);
+const MIRROR_X = 1.875;
+
+const DRIVERS = {
+  player:    { v0: 11, T: 1.4, a: 1.6, b: 2.5, s0: 2.0, label: 'YOU' },
+  calm:      { v0: 13.9, T: 1.4, a: 1.2, b: 2.0, s0: 2.0, label: 'CALM' },
+  cautious:  { v0: 9.7, T: 2.0, a: 0.8, b: 1.6, s0: 3.0, label: 'CAUTIOUS' },
+  speedster: { v0: 16.7, T: 0.8, a: 2.6, b: 3.5, s0: 1.2, label: 'SPEEDSTER', amber: true },
+  thief:     { v0: 12.5, T: 0.9, a: 2.0, b: 3.0, s0: 1.2, label: 'SPOT THIEF' },
+  courier:   { v0: 13.9, T: 1.0, a: 1.4, b: 3.0, s0: 1.5, label: 'COURIER' },
+  chauffeur: { v0: 11.0, T: 1.8, a: 0.8, b: 1.4, s0: 2.5, label: 'CHAUFFEUR' },
+  heavy:     { v0: 12.0, T: 1.8, a: 0.6, b: 1.5, s0: 3.0, label: 'HEAVY' }
+};
+
+function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+// ---------------------------------------------------------------------------
+// Compile: spec -> roads, blocks, buildings, markings, slots, parked cars, lanes
+// ---------------------------------------------------------------------------
+function compile(spec) {
+  const rng = mulberry32(spec.seed);
+  const rnd = (a, b) => a + (b - a) * rng();
+  const pick = mix => { let t = 0; for (const k in mix) t += mix[k]; let r = rng() * t; for (const k in mix) { r -= mix[k]; if (r <= 0) return k; } return Object.keys(mix)[0]; };
+  const [bx0, by0, bx1, by1] = spec.bounds;
+  const roads = spec.roads.map(r => {
+    const R = { ...r, park: { right: r.right.park || 0, left: r.left.park || 0 }, walk: { right: r.right.walk || 0, left: r.left.walk || 0 } };
+    R.kerbR = r.lane + R.park.right; R.kerbL = r.lane + R.park.left;
+    R.u0 = r.axis === 'x' ? bx0 : by0; R.u1 = r.axis === 'x' ? bx1 : by1;
+    R.ang = r.axis === 'x' ? 0 : Math.PI / 2;   // direction of +u on screen (y points down)
+    return R;
+  });
+  const byId = Object.fromEntries(roads.map(r => [r.id, r]));
+  const xs = roads.filter(r => r.axis === 'x'), ys = roads.filter(r => r.axis === 'y');
+  const junctions = [];
+  for (const a of xs) for (const b of ys) {
+    const sig = spec.signals.find(s => s.roads.includes(a.id) && s.roads.includes(b.id));
+    junctions.push({ a, b, x: b.at, y: a.at, sig, span: new Map([[a, [b.at - b.kerbR, b.at + b.kerbL]], [b, [a.at - a.kerbL, a.at + a.kerbR]]]) });
+  }
+  const spansOn = r => junctions.filter(j => j.span.has(r)).map(j => ({ j, s: j.span.get(r) })).sort((p, q) => p.s[0] - q.s[0]);
+
+  // blocks: what is left between the carriageways, each with its pavement widths
+  const ivs = (cuts, lo, hi, nearSide, farSide) => {
+    const out = []; let a = lo, wa = null;
+    for (const r of cuts) { out.push({ a, b: r.at - r[nearSide.k], wa, wb: r.walk[nearSide.w] }); a = r.at + r[farSide.k]; wa = r.walk[farSide.w]; }
+    out.push({ a, b: hi, wa, wb: null }); return out;
+  };
+  const xIv = ivs(ys.slice().sort((p, q) => p.at - q.at), bx0, bx1, { k: 'kerbR', w: 'right' }, { k: 'kerbL', w: 'left' });
+  const yIv = ivs(xs.slice().sort((p, q) => p.at - q.at), by0, by1, { k: 'kerbL', w: 'left' }, { k: 'kerbR', w: 'right' });
+  const blocks = [];
+  for (const X of xIv) for (const Y of yIv) blocks.push({ x0: X.a, x1: X.b, y0: Y.a, y1: Y.b, w: { l: X.wa, r: X.wb, t: Y.wa, b: Y.wb } });
+
+  // buildings: rows of parcels set back from the pavement, kept clear of car parks
+  const lots = spec.lots.map(l => ({ ...l, x0: l.rect[0], y0: l.rect[1], x1: l.rect[2], y1: l.rect[3] }));
+  const buildings = [];
+  for (const B of blocks) {
+    const ix0 = B.x0 + (B.w.l || 0), ix1 = B.x1 - (B.w.r || 0), iy0 = B.y0 + (B.w.t || 0), iy1 = B.y1 - (B.w.b || 0);
+    if (ix1 - ix0 < 10 || iy1 - iy0 < 10) continue;
+    const rows = iy1 - iy0 > 40 ? [[iy0, 1], [iy1, -1]] : [[B.w.b != null ? iy1 : iy0, B.w.b != null ? -1 : 1]];
+    for (const [edge, dir] of rows) {
+      let x = ix0 + rnd(0, 2);
+      while (x < ix1 - 6) {
+        const w = Math.min(rnd(12, 26), ix1 - x), set = rnd(0.6, 2.6), dep = rnd(11, 19);
+        const ya = edge + dir * set, yb = edge + dir * (set + dep);
+        const b = { x0: x, x1: x + w, y0: Math.min(ya, yb), y1: Math.max(ya, yb) };
+        if (!lots.some(l => b.x1 > l.x0 - 5 && b.x0 < l.x1 + 5 && b.y1 > l.y0 - 5 && b.y0 < l.y1 + 5) && w > 5) buildings.push(b);
+        x += w + (rng() < 0.3 ? rnd(3, 6) : 0);
+      }
+    }
+  }
+
+  // where you may park along each kerb: minus junctions, crossings and zones
+  const need = parkingNeed();
+  const sides = [];
+  for (const r of roads) for (const side of ['right', 'left']) {
+    if (!r.park[side]) continue;
+    let segs = [[r.u0 - 30, r.u1 + 30]];
+    const cut = (a, b) => { segs = segs.flatMap(([p, q]) => (b <= p || a >= q) ? [[p, q]] : [[p, a], [b, q]].filter(([m, n]) => n - m > 3)); };
+    const noPark = [];
+    for (const { s } of spansOn(r)) { cut(s[0] - 14, s[1] + 14); noPark.push([s[0] - 14, s[0] - 4.6], [s[1] + 4.6, s[1] + 14]); }
+    const zones = spec.zones.filter(z => z.road === r.id && z.side === side);
+    for (const z of zones) cut(z.from, z.to);
+    sides.push({ r, side, segs, noPark, zones, cars: [] });
+  }
+  const parked = [];
+  const sgnOf = side => side === 'right' ? 1 : -1;
+  const kerbOf = (r, side) => side === 'right' ? r.kerbR : r.kerbL;
+  for (const S of sides) {
+    const g = spec.fill.guarantee, want = g.road === S.r.id && g.side === S.side ? g.gaps : 0;
+    for (const [a, b] of S.segs) {
+      let u = a + rnd(0.2, 1.0);
+      for (;;) {
+        if (rng() > spec.fill.occupancy) { u += rnd(need + 0.4, need + 2.6); continue; }
+        const kind = pick(spec.fill.mix), K = KINDS[kind];
+        if (u + K.L > b) break;
+        S.cars.push({ kind, K, u0: u, u1: u + K.L, seg: a, jit: rnd(-1, 1), tilt: rnd(-1, 1) });
+        u += K.L + rnd(0.45, 1.3);
+      }
+    }
+    const gapsOf = () => { const out = []; for (let i = 1; i < S.cars.length; i++) { const p = S.cars[i - 1], q = S.cars[i]; if (p.seg === q.seg && q.u0 - p.u1 >= need + 0.25) out.push({ a: p.u1, b: q.u0, rear: p, front: q }); } return out; };
+    for (let n = 0; n < 40 && want && gapsOf().filter(gp => gp.b > -120 && gp.b < 150).length < want; n++) {
+      const cand = S.cars.map((c, i) => i).filter(i => i > 0 && i < S.cars.length - 1 && S.cars[i].u0 > -110 && S.cars[i].u1 < 150);
+      if (!cand.length) break;
+      S.cars.splice(cand[Math.floor(rng() * cand.length)], 1);
+    }
+    S.gaps = gapsOf();
+    const sg = sgnOf(S.side), kerb = kerbOf(S.r, S.side), slop = spec.fill.sloppiness;
+    for (const c of S.cars) {
+      const off = sg * (kerb - 0.22 - c.K.W / 2 + c.jit * slop);
+      const um = (c.u0 + c.u1) / 2, [x, y] = P(S.r, um, off);
+      const th = S.r.ang + (sg > 0 ? 0 : Math.PI) + c.tilt * slop * 0.18;
+      c.off = off; parked.push({ x, y, th, K: c.K, kind: c.kind });
+    }
+  }
+
+  // car park P1: double-loaded aisles, bay lines, parked cars, a driveway to its road
+  const lotBays = [], lotLines = [];
+  for (const l of lots) {
+    const [bw, bd] = l.bay, ax0 = l.x0 + 6.5, n = Math.floor((l.x1 - 0.5 - ax0) / bw);
+    l.n = n * l.modules * 2; l.aisles = [];
+    for (let m = 0; m < l.modules; m++) {
+      const my = l.y0 + 1 + m * (2 * bd + l.aisle);
+      l.aisles.push([my + bd, my + bd + l.aisle]);
+      for (const [ya, yb, face] of [[my, my + bd, -1], [my + bd + l.aisle, my + 2 * bd + l.aisle, 1]]) {
+        for (let k = 0; k <= n; k++) lotLines.push([ax0 + k * bw, ya, ax0 + k * bw, yb]);
+        const back = face < 0 ? ya : yb; lotLines.push([ax0, back, ax0 + n * bw, back]);
+        for (let k = 0; k < n; k++) {
+          const cx = ax0 + (k + 0.5) * bw, cy = (ya + yb) / 2;
+          lotBays.push({ cx, cy });
+          if (rng() < 0.8) {
+            const kind = pick({ city: 1, compact: 5, family: 6, estate: 2, exec: 1.5, pickup: 0.4 }), K = KINDS[kind];
+            const nose = rng() < 0.55 ? face : -face;   // nose-in or reversed in
+            parked.push({ x: cx + rnd(-0.18, 0.18), y: cy + rnd(-0.15, 0.15), th: nose > 0 ? Math.PI / 2 + rnd(-.03, .03) : -Math.PI / 2 + rnd(-.03, .03), K, kind });
+          }
+        }
+      }
+    }
+    const road = byId[l.entry], kerbX = road.at + road.kerbL;
+    l.drive = { x0: kerbX - 0.2, x1: l.x0 + 0.3, y0: l.aisles[0][1] + 2, y1: l.aisles[0][1] + 8 };
+  }
+
+  // trees along Harbour Street
+  const trees = [];
+  const H = byId.harbour;
+  for (const side of [1, -1]) {
+    for (let u = H.u0 + 6; u < H.u1; u += rnd(13, 17)) {
+      if (spansOn(H).some(({ s }) => u > s[0] - 7 && u < s[1] + 7)) continue;
+      const [x, y] = P(H, u, side * ((side > 0 ? H.kerbR : H.kerbL) + H.walk.right * 0.62));
+      trees.push({ x, y, r: rnd(2.0, 2.7) });
+    }
+  }
+
+  // traffic lanes: one each way per road, with the stop lines on the way in
+  const lanes = [];
+  for (const r of roads) for (const sgn of [1, -1]) {
+    const L = { r, sgn, off: sgn * r.lane / 2, s0: sgn > 0 ? r.u0 - 45 : -(r.u1 + 45), s1: sgn > 0 ? r.u1 + 45 : -(r.u0 - 45), agents: [], stops: [] };
+    L.th = r.ang + (sgn > 0 ? 0 : Math.PI);
+    for (const { j, s } of spansOn(r)) L.stops.push({ s: sgn > 0 ? s[0] - 5.6 : -(s[1] + 5.6), j, axis: r.axis });
+    lanes.push(L);
+  }
+  const playerLane = lanes.find(L => L.r.id === 'harbour' && L.sgn > 0);
+  const tr = spec.traffic;
+  for (const L of lanes) {
+    let s = L.s0 + rnd(0, 20);
+    while (s < L.s1) {
+      let kind = pick(tr.mix); if (L.r.id === 'mill' && (kind === 'truck' || kind === 'bus')) kind = 'van';
+      const K = KINDS[kind];
+      const drv = kind === 'truck' || kind === 'bus' ? 'heavy' : kind === 'van' ? 'courier' : kind === 'limo' ? 'chauffeur' : pick(tr.drivers);
+      s += K.L;
+      if (s > L.s1) break;
+      if (!(L === playerLane && Math.abs(s + 110) < 30)) L.agents.push({ kind, K, drv, s, v: DRIVERS[drv].v0 * 0.7, acc: 0, wait: 0 });
+      s += rnd(tr.spacing[0], tr.spacing[1]);
+    }
+  }
+  const player = { kind: 'player', K: PK, drv: 'player', s: -110, v: 9, acc: 0, wait: 0, player: true, gap: null, state: 'drive' };
+  playerLane.agents.push(player); playerLane.agents.sort((p, q) => p.s - q.s);
+  const gapSide = sides.find(S => S.r.id === spec.fill.guarantee.road && S.side === spec.fill.guarantee.side);
+  return { roads, byId, junctions, blocks, buildings, sides, parked, lots, lotLines, lotBays, trees, lanes, player, playerLane, gaps: gapSide.gaps, gapSide, need };
+}
+
+// world point at distance u along road r and `off` metres to its right
+function P(r, u, off) { return r.axis === 'x' ? [u, r.at + off] : [r.at - off, u]; }
+
+// Two full-lock arcs from "rear bumpers level, 0.75 m out" into the kerb, for the Atto 2.
+function parkingGeometry(laneOff, kerbOff) {
+  const yEnd = kerbOff - 0.25 - PK.W / 2, d = yEnd - laneOff, R = R_MIN;
+  const phi = Math.acos(1 - d / (2 * R));
+  return { R, phi, d, run: 2 * R * Math.sin(phi), yEnd };
+}
+function parkingNeed() { const H = SPEC.roads[0]; const g = parkingGeometry(H.lane / 2, H.lane + H.right.park); return g.run + 0.3; }
+
+// ---------------------------------------------------------------------------
+// Traffic: each lane follows the Intelligent Driver Model; lights at stop lines
+// ---------------------------------------------------------------------------
+function lightState(sig, axis, t) {
+  const [gx, ax, rx, gy, ay, ry] = sig.cycle, T = gx + ax + rx + gy + ay + ry, k = (((t + sig.offset) % T) + T) % T;
+  if (axis === 'x') return k < gx ? 'G' : k < gx + ax ? 'A' : 'R';
+  const k2 = k - (gx + ax + rx);
+  return k2 >= 0 && k2 < gy ? 'G' : k2 >= gy && k2 < gy + ay ? 'A' : 'R';
+}
+
+const W = compile(SPEC);
+const state = { t: 0, mode: 'drive', speed: 40, playing: true, vZoom: 9, snap: true };
+
+function step(dt) {
+  state.t += dt;
+  const pl = W.player;
+  // the player: drive at the slider speed, or hunt for the next gap that fits
+  if (state.mode === 'park') {
+    if (pl.gap && pl.state === 'search' && pl.gap.b + PK.L - pl.s < -1.5) pl.gap = null;
+    if (!pl.gap) { pl.gap = W.gaps.find(g => g.b + PK.L - pl.s > 14) || null; pl.state = pl.gap ? 'search' : 'drive'; }
+    if (pl.gap && pl.state === 'search' && pl.v < 0.05 && Math.abs(pl.gap.b + PK.L - pl.s) < 0.9) { pl.state = 'setup'; pl.setupT = state.t; }
+  } else if (pl.gap) { pl.gap = null; pl.state = 'drive'; }
+  for (const L of W.lanes) {
+    const A = L.agents;
+    for (let i = 0; i < A.length; i++) {
+      const me = A[i];
+      const d = me.player ? { ...DRIVERS.player, v0: state.mode === 'park' ? 4.2 : Math.max(0.01, state.speed / 3.6) } : DRIVERS[me.drv];
+      let gap = Infinity, dv = 0, blocked = false;
+      const lead = A[i + 1];
+      if (lead) { gap = lead.s - lead.K.L - me.s; dv = me.v - lead.v; if (gap < 25) blocked = true; }
+      for (const st of L.stops) {
+        const ds = st.s - me.s;
+        if (ds < -0.5 || ds > 90) continue;
+        const ls = lightState(st.j.sig, st.axis, state.t);
+        let stop = ls === 'R';
+        if (ls === 'A') stop = ds > me.v * me.v / (2 * 3.2) && !(d.amber && ds < me.v * 2.4);
+        if (stop) { const gs = ds - 1 + d.s0; if (gs < gap) { gap = gs; dv = me.v; } if (ds < 25) blocked = true; }
+      }
+      if (me.player && me.gap) { const gs = me.gap.b + PK.L - me.s + d.s0; if (gs < gap) { gap = Math.max(0.05, gs); dv = me.v; } }
+      if (me.player && state.mode === 'drive' && state.speed === 0) { me.acc = me.v > 0 ? -2.5 : 0; me.blocked = true; continue; }
+      const sStar = d.s0 + Math.max(0, me.v * d.T + me.v * dv / (2 * Math.sqrt(d.a * d.b)));
+      let acc = d.a * (1 - Math.pow(me.v / d.v0, 4) - (gap < Infinity ? Math.pow(sStar / Math.max(gap, 0.05), 2) : 0));
+      me.acc = Math.max(-9, acc); me.blocked = blocked;
+    }
+    for (const me of A) { me.v = Math.max(0, me.v + me.acc * dt); me.s += me.v * dt; }
+    // the car behind you while you set up: waits, then honks
+    for (let i = 0; i < A.length; i++) {
+      const me = A[i], lead = A[i + 1];
+      me.wait = lead && lead.player && lead.state === 'setup' && me.v < 0.3 && lead.s - lead.K.L - me.s < 16 ? me.wait + dt : 0;
+    }
+    // past the far end: back to the start once there is room
+    const last = A[A.length - 1];
+    if (last && last.s > L.s1) {
+      const first = A[0];
+      if (A.length === 1 || first.s - first.K.L > L.s0 + 14) {
+        A.pop(); last.s = L.s0; last.v = Math.min(last.v, 8); A.unshift(last);
+        if (last.player) { state.snap = true; last.gap = null; }
+      } else { last.s = L.s1; last.v = 0; }
+    }
+  }
+  // zoom speed: out fast, in slowly, and not at all while queuing or at a red light
+  const v = pl.v, tau = v > state.vZoom ? 0.6 : 2.5;
+  if (!(v < state.vZoom && pl.blocked)) state.vZoom += (v - state.vZoom) * (1 - Math.exp(-dt / tau));
+}
+
+// ---------------------------------------------------------------------------
+// Camera: three views and the zoom rule
+// ---------------------------------------------------------------------------
+const cv = document.getElementById('mapCanvas'), ctx = cv.getContext('2d');
+const cam = { cx: 0, cy: 0, s: 2, rot: 0, ax: 0, ay: 0 };
+let CW = 0, CH = 0, DPR = 1;
+const HUD_TOP = 64, HUD_BOT = 34;
+
+function lookAhead(v) { return Math.max(14, PK.L + v * 1.5 + v * v / (2 * 4)); }
+function laneXY(L, s, extra = 0) { return P(L.r, L.sgn * s, L.off + L.sgn * extra); }
+function carCentre(a, L) { return laneXY(L, a.s - a.K.L / 2); }
+
+function camTarget() {
+  const [bx0, by0, bx1, by1] = SPEC.bounds;
+  if (state.mode === 'overview') {
+    const s = Math.min((CW - 24) / (bx1 - bx0), (CH - HUD_TOP - HUD_BOT) / (by1 - by0));
+    return { cx: (bx0 + bx1) / 2, cy: (by0 + by1) / 2, s, rot: 0, ax: CW / 2, ay: (HUD_TOP + CH - HUD_BOT) / 2 };
+  }
+  const L = W.playerLane, pl = W.player, [px, py] = carCentre(pl, L), rot = -Math.PI / 2 - L.th;
+  if (state.mode === 'park' && pl.gap && pl.gap.b + PK.L - pl.s < 45) {
+    const pts = [[px, py], laneXY(L, pl.s + 2), P(L.r, pl.gap.a - 1.5, L.r.kerbR + 2.6), P(L.r, pl.gap.b + 1.5, L.r.kerbR + 2.6), P(L.r, pl.gap.a - 1.5, -0.8), P(L.r, pl.gap.b + PK.L + 1.5, -0.8)];
+    const c = Math.cos(rot), sn = Math.sin(rot);
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const [x, y] of pts) { const rx = x * c - y * sn, ry = x * sn + y * c; x0 = Math.min(x0, rx); x1 = Math.max(x1, rx); y0 = Math.min(y0, ry); y1 = Math.max(y1, ry); }
+    const s = Math.min((CW - 28) / (x1 - x0), (CH - HUD_TOP - HUD_BOT - 16) / (y1 - y0));
+    const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+    return { cx: mx * c + my * sn, cy: -mx * sn + my * c, s, rot, ax: CW / 2, ay: (HUD_TOP + CH - HUD_BOT) / 2 };
+  }
+  const ay = CH * 0.74, s = (ay - HUD_TOP * 0.4) / (lookAhead(state.vZoom) + PK.L / 2);
+  return { cx: px, cy: py, s: Math.min(s, CW / 11), rot, ax: CW / 2, ay };
+}
+function moveCam(dt) {
+  const t = camTarget(), k = state.snap ? 1 : 1 - Math.exp(-dt * 3.2);
+  state.snap = false;
+  cam.cx += (t.cx - cam.cx) * k; cam.cy += (t.cy - cam.cy) * k; cam.ax += (t.ax - cam.ax) * k; cam.ay += (t.ay - cam.ay) * k;
+  cam.s = Math.exp(Math.log(cam.s) + (Math.log(t.s) - Math.log(cam.s)) * k);
+  let dr = t.rot - cam.rot; dr = Math.atan2(Math.sin(dr), Math.cos(dr)); cam.rot += dr * k;
+}
+const toS = (x, y) => { const dx = x - cam.cx, dy = y - cam.cy, c = Math.cos(cam.rot), s = Math.sin(cam.rot); return [cam.ax + (dx * c - dy * s) * cam.s, cam.ay + (dx * s + dy * c) * cam.s]; };
+const toW = (sx, sy) => { const dx = (sx - cam.ax) / cam.s, dy = (sy - cam.ay) / cam.s, c = Math.cos(-cam.rot), s = Math.sin(-cam.rot); return [cam.cx + dx * c - dy * s, cam.cy + dx * s + dy * c]; };
+
+// ---------------------------------------------------------------------------
+// Drawing
+// ---------------------------------------------------------------------------
+const COL = {
+  outside: '#0d0e12', asphalt: '#1c1e24', walk: '#25282e', yard: '#131419', bld: '#17191e', bldLine: '#59636b', hatch: 'rgba(109,116,122,.35)',
+  kerb: '#8e939c', mark: 'rgba(235,232,223,.62)', bay: '#d9ab2b', parkFill: '#23262d', parkLine: '#6d747a',
+  movFill: '#2b2f37', movLine: '#a7afb9', heavyLine: 'rgba(143,184,255,.8)', ink: '#ebe8df', mute: '#a7afb9', faint: '#6d747a',
+  yellow: '#f2c230', green: '#5ed08a', red: '#ec5b4f', amber: '#ff8a3d', cyan: 'rgba(94,208,216,.9)', tree: 'rgba(94,208,138,.28)'
+};
+const MONO = '"IBM Plex Mono", ui-monospace, Menlo, monospace', COND = '"Barlow Condensed", "Arial Narrow", sans-serif';
+const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+// Hatching is fixed to the screen, like a printed plan: same spacing at every zoom.
+const hatchCache = {};
+function hatchPat(color, gap = 6) {
+  const key = color + gap;
+  if (!hatchCache[key]) {
+    const p = document.createElement('canvas'); p.width = p.height = Math.round(gap * DPR);
+    const g = p.getContext('2d'); g.strokeStyle = color; g.lineWidth = DPR; g.beginPath();
+    for (let k = -1; k <= 1; k++) { g.moveTo(k * p.width, p.height); g.lineTo(k * p.width + p.width, 0); }
+    g.stroke(); hatchCache[key] = ctx.createPattern(p, 'repeat');
+  }
+  const pat = hatchCache[key]; pat.setTransform(ctx.getTransform().inverse()); return pat;
+}
+
+function quad(r, u0, u1, o0, o1) { const a = P(r, u0, o0), b = P(r, u1, o0), c = P(r, u1, o1), d = P(r, u0, o1); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(c[0], c[1]); ctx.lineTo(d[0], d[1]); ctx.closePath(); }
+function seg(a, b) { ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); }
+function px(n) { return n / cam.s; }
+
+function drawCar(x, y, th, K, o) {
+  const { lod, fill, line, lw = 1 } = o;
+  ctx.save(); ctx.translate(x, y); ctx.rotate(th);
+  const L = K.L, Wd = K.W;
+  if (lod === 0) { ctx.fillStyle = line; ctx.fillRect(-L / 2, -Wd / 2, L, Wd); ctx.restore(); return; }
+  ctx.fillStyle = fill; ctx.strokeStyle = line; ctx.lineWidth = px(lw);
+  const body = (x0, len, r) => { ctx.beginPath(); ctx.roundRect(x0, -Wd / 2, len, Wd, r); ctx.fill(); ctx.stroke(); };
+  if (K.trailer) { body(-L / 2, K.trailer, K.r); body(L / 2 - K.cab, K.cab, 0.25); }
+  else if (K.front) { body(-L / 2, L - K.front - 0.6, K.r); body(L / 2 - K.front, K.front, K.r); ctx.beginPath(); ctx.rect(L / 2 - K.front - 0.6, -Wd / 2 + 0.25, 0.6, Wd - 0.5); ctx.stroke(); }
+  else body(-L / 2, L, Math.min(K.r, Wd / 2));
+  if (lod >= 2 && !K.trailer && !K.front) {
+    // wheels, windscreen, mirrors
+    const ra = -L / 2 + K.ovr, fa = ra + K.wb, tw = Wd / 2 - 0.16;
+    ctx.fillStyle = 'rgba(167,175,185,.55)';
+    for (const ax of [ra, fa]) for (const sy of [-1, 1]) ctx.fillRect(ax - 0.33, sy * tw - 0.11, 0.66, 0.22);
+    ctx.beginPath(); const ws = fa - 0.35; seg([ws, -Wd / 2 + 0.22], [ws - 0.15, 0]); seg([ws - 0.15, 0], [ws, Wd / 2 - 0.22]); ctx.stroke();
+    ctx.fillStyle = line; for (const sy of [-1, 1]) ctx.fillRect(fa - 0.9, sy * (Wd / 2 + 0.08) - 0.07, 0.2, 0.14);
+  }
+  if (o.brake && lod >= 1) { ctx.fillStyle = COL.red; for (const sy of [-1, 1]) ctx.fillRect(-L / 2 - 0.05, sy * (Wd / 2 - 0.35) - 0.2, 0.18, 0.4); }
+  if (o.hazard && lod >= 1) { ctx.fillStyle = COL.amber; for (const sx of [-1, 1]) for (const sy of [-1, 1]) if (o.hazard === 'both' || sy === o.hazard) { ctx.beginPath(); ctx.arc(sx * (L / 2 - 0.2), sy * (Wd / 2 - 0.15), Math.max(0.22, px(2.4)), 0, 7); ctx.fill(); } }
+  ctx.restore();
+}
+function drawPlayer(x, y, th, lod, ind) {
+  // rear-axle frame, the game's outline: dark body, cream line, yellow arrow at the nose
+  ctx.save(); ctx.translate(x, y); ctx.rotate(th);
+  if (lod === 0) { ctx.fillStyle = COL.ink; ctx.fillRect(-0.83, -0.92, 4.33, 1.83); ctx.restore(); return; }
+  ctx.beginPath(); BODY.forEach(([a, b], i) => i ? ctx.lineTo(a, b) : ctx.moveTo(a, b)); ctx.closePath();
+  ctx.fillStyle = 'rgba(16,18,22,.95)'; ctx.strokeStyle = COL.ink; ctx.lineWidth = px(1.6); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = COL.yellow; ctx.beginPath(); ctx.moveTo(3.36, 0); ctx.lineTo(2.96, -0.27); ctx.lineTo(2.96, 0.27); ctx.closePath(); ctx.fill();
+  if (lod >= 2) {
+    ctx.fillStyle = COL.ink;
+    for (const ax of [0, 2.62]) for (const sy of [-1, 1]) ctx.fillRect(ax - 0.334, sy * 0.785 - 0.107, 0.668, 0.215);
+    ctx.fillStyle = 'rgba(16,18,22,.95)'; ctx.strokeStyle = COL.ink; ctx.lineWidth = px(1);
+    for (const m of MIRRORS) { ctx.beginPath(); m.forEach(([a, b], i) => i ? ctx.lineTo(a, b) : ctx.moveTo(a, b)); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+  }
+  if (ind) { ctx.fillStyle = COL.amber; for (const ax of [3.35, -0.72]) { ctx.beginPath(); ctx.arc(ax, 0.72, Math.max(0.22, px(2.6)), 0, 7); ctx.fill(); } }
+  ctx.restore();
+}
+
+function draw() {
+  const s = cam.s, a1 = smooth(2.0, 3.2, s), a2 = smooth(6.5, 9.0, s), lod = s < 2.6 ? 0 : s < 7.8 ? 1 : 2;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = COL.outside; ctx.fillRect(0, 0, CW, CH);
+  ctx.save();
+  ctx.translate(cam.ax, cam.ay); ctx.rotate(cam.rot); ctx.scale(s, s); ctx.translate(-cam.cx, -cam.cy);
+  const [bx0, by0, bx1, by1] = SPEC.bounds;
+  // view rectangle in world coordinates, for culling
+  const cs = [toW(0, 0), toW(CW, 0), toW(0, CH), toW(CW, CH)];
+  const vx0 = Math.min(...cs.map(p => p[0])) - 20, vx1 = Math.max(...cs.map(p => p[0])) + 20, vy0 = Math.min(...cs.map(p => p[1])) - 20, vy1 = Math.max(...cs.map(p => p[1])) + 20;
+  const vis = (x, y, m = 0) => x > vx0 - m && x < vx1 + m && y > vy0 - m && y < vy1 + m;
+  ctx.beginPath(); ctx.rect(bx0, by0, bx1 - bx0, by1 - by0); ctx.clip();
+  ctx.fillStyle = COL.asphalt; ctx.fillRect(bx0, by0, bx1 - bx0, by1 - by0);
+
+  // blocks: pavement with rounded kerbs at corners, yards, hatched buildings
+  for (const B of W.blocks) {
+    const rr = (p, q) => (p != null && q != null) ? 6 : 0;
+    ctx.beginPath(); ctx.roundRect(B.x0, B.y0, B.x1 - B.x0, B.y1 - B.y0, [rr(B.w.t, B.w.l), rr(B.w.t, B.w.r), rr(B.w.b, B.w.r), rr(B.w.b, B.w.l)]);
+    ctx.fillStyle = COL.walk; ctx.fill(); ctx.strokeStyle = COL.kerb; ctx.lineWidth = px(1); ctx.stroke();
+    const ix0 = B.x0 + (B.w.l || 0), ix1 = B.x1 - (B.w.r || 0), iy0 = B.y0 + (B.w.t || 0), iy1 = B.y1 - (B.w.b || 0);
+    ctx.fillStyle = COL.yard; ctx.fillRect(ix0, iy0, ix1 - ix0, iy1 - iy0);
+  }
+  ctx.fillStyle = COL.bld;
+  for (const b of W.buildings) { if (b.x1 < vx0 || b.x0 > vx1 || b.y1 < vy0 || b.y0 > vy1) continue; ctx.fillRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0); }
+  ctx.fillStyle = hatchPat(COL.hatch, 7); ctx.globalAlpha = 0.35 + 0.65 * a1;
+  for (const b of W.buildings) { if (b.x1 < vx0 || b.x0 > vx1 || b.y1 < vy0 || b.y0 > vy1) continue; ctx.fillRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0); }
+  ctx.globalAlpha = 1; ctx.strokeStyle = COL.bldLine; ctx.lineWidth = px(1);
+  for (const b of W.buildings) { if (b.x1 < vx0 || b.x0 > vx1 || b.y1 < vy0 || b.y0 > vy1) continue; ctx.strokeRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0); }
+
+  // car park surface and driveway
+  for (const l of W.lots) {
+    ctx.fillStyle = COL.asphalt; ctx.fillRect(l.x0, l.y0, l.x1 - l.x0, l.y1 - l.y0);
+    ctx.strokeStyle = COL.kerb; ctx.lineWidth = px(1); ctx.strokeRect(l.x0, l.y0, l.x1 - l.x0, l.y1 - l.y0);
+    const d = l.drive; ctx.fillStyle = COL.asphalt; ctx.fillRect(d.x0, d.y0, d.x1 - d.x0, d.y1 - d.y0);
+    ctx.beginPath(); seg([d.x0, d.y0], [d.x1, d.y0]); seg([d.x0, d.y1], [d.x1, d.y1]); ctx.stroke();
+  }
+
+  // dot grid every 10 m: graph paper under the map
+  if (a1 > 0.01) {
+    ctx.fillStyle = `rgba(235,232,223,${0.07 * a1})`;
+    const st = 10, r = px(0.9);
+    for (let x = Math.ceil(Math.max(vx0, bx0) / st) * st; x < Math.min(vx1, bx1); x += st) for (let y = Math.ceil(Math.max(vy0, by0) / st) * st; y < Math.min(vy1, by1); y += st) ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
+  }
+
+  // markings
+  if (a1 > 0.01) {
+    ctx.globalAlpha = a1;
+    for (const r of W.roads) {
+      const spans = W.junctions.filter(j => j.span.has(r)).map(j => j.span.get(r)).sort((p, q) => p[0] - q[0]);
+      // centre line: dashed, solid for 20 m before each crossing
+      const runs = []; let u = r.u0;
+      for (const sp of spans) { runs.push([u, sp[0] - 4.6]); u = sp[1] + 4.6; } runs.push([u, r.u1]);
+      ctx.strokeStyle = COL.mark; ctx.lineWidth = 0.13;
+      ctx.setLineDash([3, 6]); ctx.beginPath();
+      for (const [p, q] of runs) seg(P(r, p + (p > r.u0 ? 20 : 0), 0), P(r, q - (q < r.u1 ? 20 : 0), 0));
+      ctx.stroke(); ctx.setLineDash([]); ctx.beginPath();
+      for (const [p, q] of runs) { if (p > r.u0) seg(P(r, p, 0), P(r, p + 20, 0)); if (q < r.u1) seg(P(r, q - 20, 0), P(r, q, 0)); }
+      ctx.stroke();
+      // crossings, stop lines
+      ctx.fillStyle = COL.mark;
+      for (const sp of spans) {
+        for (const [c0, c1] of [[sp[0] - 4.6, sp[0] - 0.8], [sp[1] + 0.8, sp[1] + 4.6]]) {
+          for (let o = -r.kerbL + 0.4; o < r.kerbR - 0.3; o += 1.0) { quad(r, c0, c1, o, o + 0.5); ctx.fill(); }
+        }
+        ctx.lineWidth = 0.4; ctx.strokeStyle = COL.mark; ctx.beginPath();
+        seg(P(r, sp[0] - 5.4, 0.1), P(r, sp[0] - 5.4, r.lane)); seg(P(r, sp[1] + 5.4, -0.1), P(r, sp[1] + 5.4, -r.lane)); ctx.stroke();
+      }
+    }
+    // parking lanes: edge line, no-parking hatch near junctions, zones
+    for (const S of W.sides) {
+      const sg = S.side === 'right' ? 1 : -1, r = S.r, k = sg * r.lane, k2 = sg * (r.lane + r.park[S.side]);
+      ctx.strokeStyle = 'rgba(235,232,223,.32)'; ctx.lineWidth = 0.1; ctx.setLineDash([1, 1]); ctx.beginPath();
+      for (const [p, q] of S.segs) seg(P(r, Math.max(p, r.u0), k), P(r, Math.min(q, r.u1), k));
+      ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = hatchPat('rgba(236,91,79,.5)');
+      for (const [p, q] of S.noPark) { quad(r, p, q, k, k2); ctx.fill(); }
+      for (const z of S.zones) {
+        ctx.fillStyle = hatchPat(z.kind === 'bus' ? 'rgba(255,138,61,.55)' : 'rgba(235,232,223,.35)'); quad(r, z.from, z.to, k, k2); ctx.fill();
+        ctx.strokeStyle = z.kind === 'bus' ? 'rgba(255,138,61,.7)' : 'rgba(235,232,223,.5)'; ctx.lineWidth = px(1); quad(r, z.from, z.to, k, k2); ctx.stroke();
+      }
+    }
+    // bay lines in the car park
+    ctx.strokeStyle = COL.bay; ctx.lineWidth = 0.12; ctx.beginPath();
+    for (const [x0, y0, x1, y1] of W.lotLines) seg([x0, y0], [x1, y1]);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // the target gap and the plan into it
+  const pl = W.player, L = W.playerLane, park = state.mode === 'park' && pl.gap;
+  if (park) {
+    const g = pl.gap, r = L.r;
+    ctx.fillStyle = 'rgba(94,208,138,.11)'; quad(r, g.a, g.b, r.lane + 0.05, r.kerbR - 0.05); ctx.fill();
+  }
+
+  // trees, as plan symbols
+  if (a1 > 0.01) {
+    ctx.globalAlpha = a1; ctx.strokeStyle = COL.tree; ctx.lineWidth = px(1);
+    for (const t of W.trees) { if (!vis(t.x, t.y, 4)) continue; ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, 7); ctx.stroke(); ctx.fillStyle = COL.tree; ctx.fillRect(t.x - 0.15, t.y - 0.15, 0.3, 0.3); }
+    ctx.globalAlpha = 1;
+  }
+
+  // parked cars
+  for (const c of W.parked) { if (!vis(c.x, c.y, 10)) continue; drawCar(c.x, c.y, c.th, c.K, { lod, fill: COL.parkFill, line: lod ? COL.parkLine : '#4a5058' }); }
+
+  // traffic lights
+  for (const Ln of W.lanes) for (const st of Ln.stops) {
+    const ls = lightState(st.j.sig, st.axis, state.t), col = ls === 'G' ? COL.green : ls === 'A' ? COL.amber : COL.red;
+    const kerbSide = Ln.sgn > 0 ? Ln.r.kerbR : Ln.r.kerbL;
+    const [hx, hy] = P(Ln.r, Ln.sgn * st.s, Ln.sgn * (kerbSide + 0.9));
+    const [mx, my] = P(Ln.r, Ln.sgn * st.s, Ln.off);
+    if (lod === 0) { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(mx, my, px(2.6), 0, 7); ctx.fill(); continue; }
+    ctx.save(); ctx.translate(hx, hy); ctx.rotate(Ln.th + Math.PI / 2);
+    ctx.fillStyle = '#0d0e12'; ctx.strokeStyle = COL.mute; ctx.lineWidth = px(1);
+    ctx.beginPath(); ctx.roundRect(-0.75, -0.3, 1.5, 0.6, 0.15); ctx.fill(); ctx.stroke();
+    ['R', 'A', 'G'].forEach((k, i) => { ctx.fillStyle = k === ls ? (k === 'G' ? COL.green : k === 'A' ? COL.amber : COL.red) : '#2c2f35'; ctx.beginPath(); ctx.arc(-0.48 + i * 0.48, 0, 0.17, 0, 7); ctx.fill(); });
+    ctx.restore();
+  }
+
+  // moving traffic
+  const blink = (state.t % 0.7) < 0.38;
+  for (const Ln of W.lanes) for (const a of Ln.agents) {
+    if (a.player) continue;
+    const [x, y] = carCentre(a, Ln); if (!vis(x, y, 20)) continue;
+    const heavy = a.kind === 'truck' || a.kind === 'bus';
+    drawCar(x, y, Ln.th, a.K, { lod, fill: COL.movFill, line: lod ? (heavy ? COL.heavyLine : COL.movLine) : '#8e939c', brake: a.acc < -0.7 || a.v < 0.2 });
+  }
+
+  // you
+  const [rx, ry] = laneXY(L, pl.s - (PK.L - PK.ovr));
+  if (park && pl.state === 'setup') drawPlan(pl, L, lod, a2);
+  drawPlayer(rx, ry, L.th, lod, (state.mode === 'park' && pl.gap) ? blink : false);
+  ctx.restore();
+
+  // ---- screen-space layer: labels, rings, notes ----
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (lod === 0) { const [sx, sy] = toS(rx, ry); ctx.strokeStyle = COL.ink; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(sx, sy, 9, 0, 7); ctx.stroke(); ctx.font = `500 10px ${MONO}`; ctx.fillStyle = COL.ink; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText('YOU', sx + 13, sy); }
+  // street names and the car park
+  const nameA = 1 - a2;
+  if (nameA > 0.02) {
+    ctx.globalAlpha = nameA; ctx.font = `500 ${lod ? 10.5 : 9.5}px ${MONO}`; ctx.fillStyle = 'rgba(235,232,223,.6)'; ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+    for (const r of W.roads) {
+      const spots = r.axis === 'x' ? [-118, 8, 120] : [-62, 52];
+      for (const u of spots) {
+        const [x, y] = P(r, u, r.axis === 'x' ? 0 : 0), [sx, sy] = toS(x, y);
+        if (sx < -60 || sx > CW + 60 || sy < -20 || sy > CH + 20) continue;
+        let ang = r.ang + cam.rot; ang = Math.atan2(Math.sin(ang), Math.cos(ang)); if (ang > Math.PI / 2 || ang < -Math.PI / 2) ang += Math.PI;
+        ctx.save(); ctx.translate(sx, sy); ctx.rotate(ang);
+        const t = r.name.toUpperCase().split('').join(' '), w = ctx.measureText(t).width + 10;
+        ctx.fillStyle = COL.asphalt; ctx.fillRect(-w / 2, -7, w, 14); ctx.fillStyle = 'rgba(235,232,223,.62)'; ctx.fillText(t, 0, 0.5);
+        ctx.restore();
+      }
+    }
+    for (const l of W.lots) { const [sx, sy] = toS((l.x0 + l.x1) / 2, l.y0 - 3); ctx.fillText(`${l.id} · ${l.n} BAYS`, sx, sy); }
+    for (const S of W.sides) for (const z of S.zones) {
+      const sg = S.side === 'right' ? 1 : -1, [x, y] = P(S.r, (z.from + z.to) / 2, sg * (S.r.lane + S.r.park[S.side] + 1.6)), [sx, sy] = toS(x, y);
+      if (lod) { ctx.fillStyle = z.kind === 'bus' ? 'rgba(255,138,61,.85)' : 'rgba(235,232,223,.6)'; ctx.fillText(z.kind === 'bus' ? 'BUS STOP' : 'LOADING', sx, sy); }
+    }
+    ctx.globalAlpha = 1;
+  }
+  // close up: who is driving the cars around you, and the car behind honking
+  const setup = park && pl.state === 'setup';
+  if (a2 > 0.02 && !setup) {
+    ctx.globalAlpha = a2; ctx.font = `500 9.5px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const Ln of W.lanes) for (const a of Ln.agents) {
+      if (a.player) continue;
+      const [x, y] = carCentre(a, Ln), [sx, sy] = toS(x, y);
+      if (sx < 0 || sx > CW || sy < HUD_TOP || sy > CH - HUD_BOT) continue;
+      const lab = `${DRIVERS[a.drv].label} · ${Math.round(a.v * 3.6)}`;
+      const w = ctx.measureText(lab).width + 8;
+      ctx.fillStyle = 'rgba(13,14,18,.82)'; ctx.fillRect(sx - w / 2, sy - 7, w, 14);
+      ctx.fillStyle = a.drv === 'thief' || a.drv === 'speedster' ? COL.amber : COL.mute; ctx.fillText(lab, sx, sy + 0.5);
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (setup && a2 > 0.02) planLabels(pl, L, a2);
+  // the car behind you, out of patience
+  if (lod >= 1 && (state.t % 2.4) < 0.8) {
+    ctx.font = `700 14px ${COND}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const a of L.agents) {
+      if (a.wait <= 3.5) continue;
+      const [x, y] = laneXY(L, a.s - a.K.L - 0.9), [sx, sy] = toS(x, y), w = ctx.measureText('HONK!').width + 10;
+      ctx.fillStyle = 'rgba(13,14,18,.9)'; ctx.fillRect(sx - w / 2, sy - 9, w, 18);
+      ctx.strokeStyle = COL.red; ctx.lineWidth = 1; ctx.strokeRect(sx - w / 2 + 0.5, sy - 8.5, w - 1, 17);
+      ctx.fillStyle = COL.red; ctx.fillText('HONK!', sx, sy + 0.5);
+    }
+  }
+  hud(lod);
+}
+
+// The plan into the gap: rear-axle path, swept front corner, cues, gap dimensions
+function planGeom(pl, L) {
+  const g = pl.gap, r = L.r, G = parkingGeometry(r.lane / 2, r.kerbR);
+  const x0 = g.b + PK.ovr, y0 = r.at + r.lane / 2, R = G.R, phi = G.phi;
+  const C1 = [x0, y0 + R], P1 = [x0 - R * Math.sin(phi), y0 + R * (1 - Math.cos(phi))], C2 = [P1[0] - R * Math.sin(phi), P1[1] - R * Math.cos(phi)];
+  const pts = [];
+  for (let i = 0; i <= 30; i++) { const th = -phi * i / 30; pts.push([C1[0] + R * Math.sin(th), C1[1] - R * Math.cos(th), th]); }
+  for (let i = 0; i <= 30; i++) { const th = -phi + phi * i / 30; pts.push([C2[0] - R * Math.sin(th), C2[1] + R * Math.cos(th), th]); }
+  const end = pts[pts.length - 1];
+  const mirrorU = P1[0] + MIRROR_X * Math.cos(phi);   // where your mirror is when you counter-steer
+  return { g, r, G, P1, pts, end, mirrorPast: g.b - mirrorU };
+}
+function drawPlan(pl, L, lod, a2) {
+  const q = planGeom(pl, L), { pts, P1, end, g, r } = q;
+  // swept path of the outer front corner: how far the nose swings into the lane
+  ctx.strokeStyle = COL.cyan; ctx.lineWidth = px(1.2); ctx.setLineDash([px(3), px(3)]); ctx.beginPath();
+  pts.forEach(([x, y, th], i) => { const fx = x + 3.40 * Math.cos(th) + 0.76 * Math.sin(th), fy = y + 3.40 * Math.sin(th) - 0.76 * Math.cos(th); i ? ctx.lineTo(fx, fy) : ctx.moveTo(fx, fy); });
+  ctx.stroke();
+  // rear-axle path
+  ctx.strokeStyle = COL.yellow; ctx.lineWidth = px(2); ctx.setLineDash([px(6), px(4)]); ctx.beginPath();
+  pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
+  ctx.setLineDash([]);
+  // ghosts at the counter-steer point and where you finish
+  const ghost = (x, y, th, col, dash) => { ctx.save(); ctx.translate(x, y); ctx.rotate(th); ctx.beginPath(); BODY.forEach(([a, b], i) => i ? ctx.lineTo(a, b) : ctx.moveTo(a, b)); ctx.closePath(); ctx.strokeStyle = col; ctx.lineWidth = px(1.2); ctx.setLineDash(dash); ctx.stroke(); ctx.setLineDash([]); ctx.restore(); };
+  ghost(P1[0], P1[1], pts[30][2], 'rgba(242,194,48,.55)', [px(3), px(3)]);
+  ghost(end[0], end[1], 0, COL.green, [px(5), px(3)]);
+  // cue points
+  for (const [x, y] of [pts[0], P1, end]) { ctx.beginPath(); ctx.arc(x, y, px(7), 0, 7); ctx.fillStyle = '#0d0e12'; ctx.fill(); ctx.strokeStyle = COL.yellow; ctx.lineWidth = px(1.4); ctx.stroke(); }
+  // dimension line along the kerb: the gap, with ticks and extension lines
+  const off = r.kerbR + 1.25;
+  ctx.strokeStyle = COL.ink; ctx.lineWidth = px(1); ctx.beginPath();
+  seg(P(r, g.a, r.kerbR - 0.5), P(r, g.a, off + 0.5)); seg(P(r, g.b, r.kerbR - 0.5), P(r, g.b, off + 0.5)); seg(P(r, g.a, off), P(r, g.b, off));
+  for (const u of [g.a, g.b]) seg(P(r, u - 0.35, off + 0.35), P(r, u + 0.35, off - 0.35));
+  ctx.stroke();
+  // side clearance to the car you line up with
+  const fc = g.front, u = (fc.u0 + fc.u1) / 2 + 0.4, o1 = r.lane / 2 + PK.W / 2, o2 = fc.off - fc.K.W / 2;
+  ctx.beginPath(); seg(P(r, u, o1), P(r, u, o2)); for (const o of [o1, o2]) seg(P(r, u - 0.25, o - 0.25), P(r, u + 0.25, o + 0.25)); ctx.stroke();
+}
+function planLabels(pl, L, a2) {
+  const q = planGeom(pl, L), { r, g, P1, end, pts } = q;
+  const side = (pl.gap.front.off - pl.gap.front.K.W / 2) - (r.lane / 2 + PK.W / 2);
+  ctx.globalAlpha = a2; ctx.textBaseline = 'middle';
+  const tag = (x, y, n, lines, dx) => {
+    const [sx, sy] = toS(x, y);
+    ctx.font = `600 11px ${MONO}`; ctx.fillStyle = COL.yellow; ctx.textAlign = 'center'; ctx.fillText(String(n), sx, sy + 0.5);
+    ctx.textAlign = 'left'; let yy = sy - (lines.length - 1) * 6.5;
+    lines.forEach((t, i) => {
+      ctx.font = i ? `400 10px ${MONO}` : `600 10.5px ${MONO}`;
+      const w = ctx.measureText(t).width, x0 = Math.max(4, Math.min(CW - w - 4, dx < 0 ? sx + dx - w : sx + dx));
+      ctx.fillStyle = 'rgba(13,14,18,.86)'; ctx.fillRect(x0 - 3, yy - 6.5, w + 6, 13); ctx.fillStyle = i ? COL.mute : COL.ink; ctx.fillText(t, x0, yy + 0.5); yy += 13;
+    });
+  };
+  const leftScreen = (() => { const a = toS(...pts[0]), b = toS(...P(r, pts[0][0], r.lane / 2 - 3)); return b[0] < a[0] ? -1 : 1; })();
+  const dx = leftScreen * 16;
+  tag(pts[0][0], pts[0][1], 1, ['FULL LOCK TO KERB', 'rear bumpers level', `${side.toFixed(2)} m out`], dx);
+  tag(P1[0], P1[1], 2, ['FULL LOCK AWAY', `at ${(q.G.phi * 180 / Math.PI).toFixed(0)}° · your mirror`, `${q.mirrorPast.toFixed(2)} m past their bumper`], dx);
+  tag(end[0], end[1], 3, ['STRAIGHTEN', `0.25 m from the kerb`], dx);
+  // gap dimension text
+  const mid = toS(...P(r, (g.a + g.b) / 2, r.kerbR + 1.25));
+  ctx.font = `600 11px ${MONO}`;
+  const t1 = `GAP ${(g.b - g.a).toFixed(2)} m`, t2 = `need ${W.need.toFixed(2)} m`;
+  const w = Math.max(ctx.measureText(t1).width, ctx.measureText(t2).width) + 8;
+  const gx = Math.max(4, Math.min(CW - w - 4, -dx < 0 ? mid[0] - 10 - w : mid[0] + 10));
+  ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(13,14,18,.86)'; ctx.fillRect(gx - 4, mid[1] - 9, w, 30);
+  ctx.fillStyle = COL.ink; ctx.fillText(t1, gx, mid[1] + 0.5); ctx.font = `400 10px ${MONO}`; ctx.fillStyle = COL.green; ctx.fillText(t2, gx, mid[1] + 14);
+  ctx.globalAlpha = 1;
+}
+
+function hud(lod) {
+  const pl = W.player, kmh = Math.round(pl.v * 3.6), view = Math.round(Math.min(CW, CH) / cam.s);
+  const mode = state.mode === 'overview' ? 'OVERVIEW · NORTH UP' : state.mode === 'park' ? (pl.state === 'setup' ? 'PARK MODE · LOCKED TO THE GAP' : 'PARK MODE · LOOKING FOR A GAP') : 'DRIVE MODE · HEADING UP';
+  const det = ['DETAIL 0 · blocks, roads, signals', 'DETAIL 1 · lanes, bays, outlines', 'DETAIL 2 · wheels, mirrors, dimensions'][lod];
+  ctx.fillStyle = 'rgba(13,14,18,.82)'; ctx.fillRect(0, 0, CW, HUD_TOP - 8);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.font = `600 13px ${COND}`; ctx.fillStyle = COL.yellow; ctx.fillText(mode.split('').join(' '), 12, 18);
+  ctx.font = `400 10.5px ${MONO}`; ctx.fillStyle = COL.ink;
+  ctx.fillText(`${String(kmh).padStart(2, ' ')} km/h   view ${view} m   ${cam.s.toFixed(1)} px/m`, 12, 34);
+  ctx.fillStyle = COL.mute; ctx.fillText(det, 12, 48);
+  // scale bar
+  const nice = [1, 2, 5, 10, 20, 50, 100], m = nice.find(n => n * cam.s >= 60) || 100, wpx = m * cam.s, y = CH - 14;
+  ctx.fillStyle = 'rgba(13,14,18,.82)'; ctx.fillRect(6, CH - HUD_BOT + 4, wpx + 60, HUD_BOT - 8);
+  ctx.strokeStyle = COL.ink; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(12, y); ctx.lineTo(12 + wpx, y); ctx.moveTo(12, y - 4); ctx.lineTo(12, y + 1); ctx.moveTo(12 + wpx, y - 4); ctx.lineTo(12 + wpx, y + 1); ctx.moveTo(12 + wpx / 2, y - 2.5); ctx.lineTo(12 + wpx / 2, y + 0.5); ctx.stroke();
+  ctx.font = `500 10px ${MONO}`; ctx.fillStyle = COL.ink; ctx.fillText(`${m} m`, 18 + wpx, y + 1);
+  // north arrow
+  const nx = CW - 22, ny = CH - 20; ctx.save(); ctx.translate(nx, ny); ctx.rotate(cam.rot);
+  ctx.fillStyle = COL.ink; ctx.beginPath(); ctx.moveTo(0, -11); ctx.lineTo(4.5, 5); ctx.lineTo(0, 2); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = COL.ink; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, -11); ctx.lineTo(-4.5, 5); ctx.lineTo(0, 2); ctx.closePath(); ctx.stroke();
+  ctx.restore(); ctx.font = `600 10px ${MONO}`; ctx.textAlign = 'center'; ctx.fillText('N', nx - 16, ny - 8);
+}
+
+// ---------------------------------------------------------------------------
+// Loop, sizing, controls
+// ---------------------------------------------------------------------------
+function resize() {
+  const w = cv.parentElement.clientWidth, h = Math.round(Math.min(560, Math.max(400, w * 0.62)));
+  DPR = Math.min(window.devicePixelRatio || 1, 2); CW = w; CH = h;
+  cv.width = Math.round(w * DPR); cv.height = Math.round(h * DPR); cv.style.height = h + 'px';
+  for (const k in hatchCache) delete hatchCache[k]; state.snap = true;
+}
+let last = 0, onScreen = true;
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000 || 0.016); last = now;
+  if (state.playing && onScreen) { for (let i = 0; i < 3; i++) step(dt / 3); }
+  if (onScreen) { moveCam(dt); draw(); }
+  requestAnimationFrame(frame);
+}
+const btns = [...document.querySelectorAll('[data-mode]')];
+function setMode(m) { state.mode = m; btns.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === m))); document.getElementById('speed').disabled = m === 'park'; }
+btns.forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+const sp = document.getElementById('speed'), so = document.getElementById('speedOut');
+sp.addEventListener('input', () => { state.speed = +sp.value; so.textContent = `${sp.value} km/h`; });
+const play = document.getElementById('play');
+play.addEventListener('click', () => { state.playing = !state.playing; play.textContent = state.playing ? 'Pause traffic' : 'Play traffic'; play.setAttribute('aria-pressed', String(!state.playing)); });
+if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) { state.playing = false; play.textContent = 'Play traffic'; }
+if ('IntersectionObserver' in window) new IntersectionObserver(es => { onScreen = es[0].isIntersecting; }).observe(cv);
+window.addEventListener('resize', resize);
+resize();
+// warm the traffic up so the first frame looks lived in
+for (let i = 0; i < 600; i++) step(1 / 30);
+state.speed = +sp.value; setMode('drive');
+requestAnimationFrame(frame);
+
+})();
+
+</script>
+<script>
+(() => {
+'use strict';
+// Plan views of the roster, all at one scale, nose to the right, the Atto 2 dashed behind each for size.
+const SPAN = 18.6;   // metres across every card, so the bus fits and everything shares one scale
+const C = { line: '#ebe8df', fill: '#23262d', wheel: '#a7afb9', atto: 'rgba(242,194,48,.6)', heavy: 'rgba(143,184,255,.9)', rule: '#3a3f48', bed: '#59636b' };
+function draw(cv) {
+  const d = cv.dataset, n = k => parseFloat(d[k]);
+  const css = cv.clientWidth, h = cv.clientHeight, dpr = Math.min(window.devicePixelRatio || 1, 2);
+  if (!css) return;
+  cv.width = Math.round(css * dpr); cv.height = Math.round(h * dpr);
+  const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, css, h);
+  const s = (css - 8) / SPAN, x0 = 4, cy = (h - 10) / 2;
+  const X = m => x0 + m * s, Y = m => cy + m * s;
+  // ruler: a tick every metre, a longer one every 5 m
+  c.strokeStyle = C.rule; c.lineWidth = 1; c.beginPath();
+  for (let m = 0; m <= SPAN; m++) { const x = Math.round(X(m)) + 0.5, t = m % 5 ? 3 : 6; c.moveTo(x, h - 1); c.lineTo(x, h - 1 - t); }
+  c.moveTo(X(0), h - 0.5); c.lineTo(X(SPAN), h - 0.5); c.stroke();
+  const body = (bx, len, wid, r, line = C.line, dash) => {
+    c.beginPath(); c.roundRect(X(bx), Y(-wid / 2), len * s, wid * s, Math.min(r * s, wid * s / 2));
+    if (!dash) { c.fillStyle = C.fill; c.fill(); }
+    c.setLineDash(dash || []); c.strokeStyle = line; c.lineWidth = 1; c.stroke(); c.setLineDash([]);
+  };
+  const wheel = (ax, half, len = 0.66, wid = 0.22) => { c.fillStyle = C.wheel; for (const sg of [-1, 1]) c.fillRect(X(ax - len / 2), Y(sg * half - wid / 2), len * s, wid * s); };
+  // every vehicle starts at x = 0.3 m; the Atto 2 is dashed at the same start
+  const o = 0.3;
+  body(o, 4.33, 1.83, 0.42, C.atto, [3, 3]);
+  const kind = d.kind, L = n('l'), W = n('w'), wb = n('wb'), ovr = n('ovr');
+  if (kind === 'truck') {
+    // schematic: trailer from the rear, kingpin and axle group from the trailer maker's drawing, tractor in front
+    const tl = n('tl'), kp = n('kp'), ka = n('ka');
+    body(o, tl, 2.55, 0.12, C.heavy);
+    const g = kp - ka; for (const a of [g - 1.31, g, g + 1.31]) wheel(o + a, 1.05, 1.0, 0.3);
+    const front = o + L, cab = 2.3;
+    wheel(front - 1.45, 1.0, 1.0, 0.3); wheel(o + kp - 0.5, 1.0, 1.0, 0.3);
+    body(front - cab, cab, 2.5, 0.3, C.heavy);
+    c.fillStyle = C.heavy; c.beginPath(); c.arc(X(o + kp), Y(0), Math.max(1.5, 0.18 * s), 0, 7); c.fill();
+  } else if (kind === 'bus') {
+    body(o, 7.6, W, 0.3, C.heavy); body(o + 8.1, L - 8.1, W, 0.3, C.heavy);
+    c.strokeStyle = C.heavy; c.strokeRect(X(o + 7.6), Y(-W / 2 + 0.25), 0.5 * s, (W - 0.5) * s);
+    const fa = L - 2.805; for (const a of [fa, fa - 5.9, fa - 5.9 - 5.99]) wheel(o + a, W / 2 - 0.3, 1.0, 0.28);
+  } else if (kind === 'trailer') {
+    const tl = n('tl'), tw = n('tw'), bar = n('bar');
+    body(o, tl, tw, 0.08, C.heavy); wheel(o + tl / 2, tw / 2 - 0.12, 0.55, 0.2);
+    c.strokeStyle = C.heavy; c.beginPath(); c.moveTo(X(o + tl), Y(-0.35)); c.lineTo(X(o + tl + bar), Y(0)); c.lineTo(X(o + tl), Y(0.35)); c.stroke();
+    const cx = o + tl + bar; body(cx, L, W, 0.42); wheel(cx + ovr, W / 2 - 0.2); wheel(cx + ovr + wb, W / 2 - 0.2);
+  } else {
+    body(o, L, W, kind === 'van' ? 0.18 : kind === 'pickup' ? 0.28 : 0.42);
+    wheel(o + ovr, W / 2 - 0.2); wheel(o + ovr + wb, W / 2 - 0.2);
+    if (kind === 'pickup') { c.strokeStyle = C.bed; c.strokeRect(X(o + 0.2), Y(-W / 2 + 0.18), L * 0.33 * s, (W - 0.36) * s); }
+  }
+}
+const all = [...document.querySelectorAll('canvas.plan')];
+const redraw = () => all.forEach(draw);
+redraw();
+window.addEventListener('resize', redraw);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(redraw);
+})();
+
+</script>
+</html>
