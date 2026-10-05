@@ -367,13 +367,23 @@ describe('spot thieves', () => {
     for (let n = 0; n < 120 * 60; n++) T.step(STEP, null);
     expect(thief.state).toBe('parked'); expect(T.taken(sl.id)).toBe(true);
   });
-  it('dives in when you signal but start reversing after its patience has run out', () => {
+  it('dives in when you signal but start reversing after its patience has run out (well into its dive)', () => {
     const { T, sl, p, thief } = contest(3);
     p.ind = kerb;
     let dove = -1;
-    play(T, p, 20, w => { p.v = w > 3.5 && w < 4.5 ? -0.4 : 0; if (dove < 0 && thief.state === 'in') dove = w; });
+    play(T, p, 20, w => { p.v = w > 5 && w < 6 ? -0.4 : 0; if (dove < 0 && thief.state === 'in') dove = w; });
     expect(dove).toBeGreaterThanOrEqual(3); expect(dove).toBeLessThan(3.5);
     expect(T.thiefIn(sl.id)).toBe(thief);
+  });
+  it('carries on exactly from a snapshot taken while it dives in', () => {
+    const { net, T, p, thief } = contest(3);
+    for (let n = 0; n < 60 * 60 && !(thief.state === 'in' && thief.xs > 2); n++) T.step(STEP, p);
+    expect(thief.state).toBe('in');
+    const U = new Traffic(net);
+    U.restore(JSON.parse(JSON.stringify(T.snapshot())));
+    expect(JSON.stringify(U.cars.map(c => [c.x, c.z, c.h]))).toBe(JSON.stringify(T.cars.map(c => [c.x, c.z, c.h])));
+    for (let n = 0; n < 10 * 60; n++) { T.step(STEP, p); U.step(STEP, p); }
+    expect(JSON.stringify(U.snapshot())).toBe(JSON.stringify(T.snapshot()));
   });
   it('gives up when it comes up behind you already reversing into the space, signal on', () => {
     const { T, sl, p, thief } = contest(5);
@@ -452,6 +462,16 @@ describe('passing', () => {
     const [x, z] = poseOn(net.els[C.el], C.s); expect(Math.hypot(C.x - x, C.z - z)).toBeLessThan(1e-6);   // back on its lane's line
     expect({ met: r.met, jams: C.jams }).toEqual({ met: 0, jams: 0 });
   });
+  it('carries on exactly from a snapshot taken while a car is out passing', () => {
+    const T = courier(), C = T.cars[1];
+    for (let n = 0; n < 30 * 60 && !(C.pass >= 0 && C.s > C.pass + SWERVE_HALF); n++) T.step(STEP, null);
+    expect(C.pass).toBeGreaterThanOrEqual(0);
+    const U = new Traffic(net);
+    U.restore(JSON.parse(JSON.stringify(T.snapshot())));
+    expect(JSON.stringify(U.cars.map(c => [c.x, c.z, c.h]))).toBe(JSON.stringify(T.cars.map(c => [c.x, c.z, c.h])));
+    for (let n = 0; n < 10 * 60; n++) { T.step(STEP, null); U.step(STEP, null); }
+    expect(JSON.stringify(U.snapshot())).toBe(JSON.stringify(T.snapshot()));
+  });
   it('waits while a car comes the other way, and goes once it has gone by', () => {
     const T = courier([carOn(m, 2, other, 0, 12)]), C = T.cars[1], O = T.cars[2];
     let at = -1;
@@ -482,5 +502,6 @@ describe('passing', () => {
     expect(O.v).toBeGreaterThan(3);   // and went on once the other was back in
   });
 });
+const SWERVE_HALF = 5;   // half way out on its curve to the other lane
 /** Where a point is along a lane, from its start. */
 function laneS(e: El, p: Pt): number { const q = e.pieces[0]; return (p[0] - q.x) * Math.cos(q.h) - (p[1] - q.z) * Math.sin(q.h); }

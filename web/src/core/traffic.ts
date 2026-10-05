@@ -654,6 +654,7 @@ export class Traffic {
       if (c.state === 'parked') this.parked(c, pv);
       else if (c.drv === COURIER) this.deliver(c);
       else if (c.aim && c.state === 'drive') this.hunt(c, pv);
+      else if (c.aim && c.state === 'in' && c.xs < 0.5 && pv && pv.v < -0.05) this.balk(c);   // you began to reverse in as it began to dive
       if (c.state === 'drive' && c.pass < 0 && !c.aim && c.stopS < 0) this.overtake(c, pv);
     }
     const plans = this.cars.map(c => (c.state === 'parked' ? STILL : this.decide(c, pv)));
@@ -1029,9 +1030,16 @@ export class Traffic {
     if (c.el !== dv.el) return;
     c.stopS = dv.s0;
     if (c.aimT < 0) { if (free && Math.abs(c.s - dv.s0) < 0.15 && c.v < 0.1) c.aimT = this.t; return; }
-    if (this.t - c.aimT < this.patience) return;
+    if (this.t - c.aimT < this.patience || (pv && pv.v < -0.05)) return;   // not while you are reversing: it waits for you to stop
     if (free && this.wayClear(c, dv, pv)) { c.state = 'in'; c.place = this.places.length; this.places.push(dv); c.xs = 0; c.s = dv.s0; c.stopS = -1; c.ind = 0; }
     else if (this.t - c.aimT > this.patience + 10) off();
+  }
+  /** A thief that had only just begun to dive in (half a metre at most, 3 cm off its lane's line) as you began to reverse
+   *  into the space: it stops and is back in the lane, waiting, as it was. */
+  private balk(c: TCar): void {
+    const way = this.places[c.place], lane = this.net.els[way.el];
+    c.state = 'drive'; c.place = -1; c.s = way.s0 + c.xs; c.xs = 0; c.v = 0; c.acc = 0;
+    [c.x, c.z, c.h] = poseOn(lane, c.s); c.box = boxAt(TYPES[c.type], c.x, c.z, c.h);
   }
   /** Whether your car is waiting itself (a car in traffic just ahead of it, or a red or amber light, or a give-way line,
    *  just ahead): then whoever waits behind it is not held up by you. */

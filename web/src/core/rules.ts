@@ -1,25 +1,26 @@
 // The rules your drive on the street is held to. Everywhere: no going through a red light, no more than 3 km/h over the
-// limit for more than a second, no driving into anything, signalling before you turn at a junction, pull in to park and
-// pull out again, not stopping in a junction you are not waiting to turn in, and not parking where it is not allowed (a
-// bus stop, a loading bay, a disabled bay, a driveway, a no-parking zone, or too close to a junction). Hazard lights
-// only as the country allows (country.ts). Each fault is noted when it happens (the game shows it then) and listed on the
-// card once you have parked; how long you held up traffic is counted too.
+// limit for more than a second, no driving into anything, giving way where a line says so, signalling before you turn at
+// a junction, pull in to park and pull out again, not stopping in a junction you are not waiting to turn in, and not
+// parking where it is not allowed (a bus stop, a loading bay, a disabled bay, a driveway, a no-parking zone, or too close
+// to a junction). Hazard lights only as the country allows (country.ts). Each fault is noted when it happens (the game
+// shows it then) and listed on the card once you have parked; how long you held up traffic is counted too.
 //
 // A red light is judged where your front bumper crosses the stop line of the lane you are in: on amber you may go on
-// through. A turn is a heading change of 60° or more between your front entering a junction and your rear axle being
-// 12 m clear of it (a turn has ended by then), signalled if that indicator was on as your front entered, or in the 3 s
-// before. Pulling in is judged as you first
-// reverse into a space on the street, pulling out as you drive a metre from where you parked at the kerb: signalled if
-// the indicator towards the kerb (or away from it) was on then, or in the 10 s before. A stop of 3 s in a junction is
-// blocking it, unless the lights are with you or you are waiting to turn across the oncoming lane, signalling; a stop of
-// 10 s with the middle of your car where parking is not allowed is parking there.
+// through. At a give-way line, as your front crosses it, no car on the main road may be less than 3 s from the junction
+// (moving, at the speed it is going). A turn is a heading change of 60° or more between your front entering a junction
+// and your rear axle being 12 m clear of it (a turn has ended by then), signalled if that indicator was on as your front
+// entered, or in the 3 s before. Pulling in is judged as you first reverse into a space on the street, pulling out as you
+// drive a metre from where you parked at the kerb: signalled if the indicator towards the kerb (or away from it) was on
+// then, or in the 10 s before. A stop of 3 s in a junction is blocking it, unless the lights are with you or you are
+// waiting to turn across the oncoming lane, signalling; a stop of 10 s with the middle of your car where parking is not
+// allowed is parking there.
 import { clearOf, lotAt, streetAt, type KerbSlot } from './city';
 import { COUNTRIES, type Country, type CountryId } from './country';
 import { wrapPi, type Pt } from './math';
 import type { Rect } from './scene';
-import { lightAt, type Network, type Traffic } from './traffic';
+import { TYPES, lightAt, type Network, type Traffic } from './traffic';
 
-export type FaultKind = 'red' | 'speed' | 'crash' | 'touch' | 'signal' | 'block' | 'zone' | 'hazard';
+export type FaultKind = 'red' | 'speed' | 'crash' | 'touch' | 'giveway' | 'signal' | 'block' | 'zone' | 'hazard';
 /** A fault: what it is, when (the simulation's clock), a banner's title and line, and a few words for the card. */
 export interface Fault { kind: FaultKind; t: number; title: string; text: string; brief: string }
 /** Your way through a junction: which, your heading and the street's way as your front entered it, whether you had
@@ -146,17 +147,28 @@ export class Rules {
     // a stop line crossed on red: your front bumper's middle going over the line of the lane it is in, facing along it
     const ux = Math.cos(p.th), uz = -Math.sin(p.th), f: Pt = [p.x + (p.L - p.OVR) * ux, p.z + (p.L - p.OVR) * uz], was = this.front, back: Pt = [p.x - p.OVR * ux, p.z - p.OVR * uz];
     this.front = f;
-    if (was && traffic) for (const J of net.junctions) {
-      if (J.control !== 'lights') continue;
+    // and a give-way line crossed with a car on the main road less than 3 s from the junction
+    if (was && traffic) net.junctions.forEach((J, j) => {
+      if (J.control === 'none') return;
       for (const ap of J.approaches) {
+        if (J.control === 'giveway' && !ap.minor) continue;
         const [a, b] = ap.line, ax = Math.cos(ap.th), az = -Math.sin(ap.th);
         const d0 = (was[0] - a[0]) * ax + (was[1] - a[1]) * az, d1 = (f[0] - a[0]) * ax + (f[1] - a[1]) * az;
         if (!(d0 < 0 && d1 >= 0) || ux * ax + uz * az < 0.5) continue;
         const wx = b[0] - a[0], wz = b[1] - a[1], q = ((f[0] - a[0]) * wx + (f[1] - a[1]) * wz) / (wx * wx + wz * wz);
         if (q < -0.1 || q > 1.1) continue;
-        if (lightAt(J, net.els[ap.el].axis, clock) === 'red') add('red', 'Red light', `You went through on red at ${J.name}.`, `a red light at ${J.name}`);
+        if (J.control === 'lights' && lightAt(J, net.els[ap.el].axis, clock) === 'red') add('red', 'Red light', `You went through on red at ${J.name}.`, `a red light at ${J.name}`);
+        if (J.control === 'giveway') {
+          const near = traffic.cars.find(c => {
+            const e = net.els[c.el];
+            if (c.state !== 'drive' || c.v < 1 || e.j !== j || e.axis === J.minor || (e.kind === 'path' && c.s > e.len / 2)) return false;
+            const ty = TYPES[c.type], fx = c.x + (ty.L - ty.OVR) * Math.cos(c.h), fz = c.z - (ty.L - ty.OVR) * Math.sin(c.h), [r0, r1, r2, r3] = J.rect;
+            return Math.hypot(Math.max(r0 - fx, 0, fx - r1), Math.max(r2 - fz, 0, fz - r3)) / c.v < 3;   // its front to the junction
+          });
+          if (near) add('giveway', 'Give way', `You pulled out at ${J.name} in front of a ${TYPES[near.type].name} on ${net.map.streets.find(s => s.id === net.els[near.el].street)?.name ?? 'the main road'}.`, `did not give way at ${J.name}`);
+        }
       }
-    }
+    });
     // your indicators (your hazard lights are not a signal)
     if (p.ind) this.indT[p.ind < 0 ? 0 : 1] = t;
     // through a junction (one you could turn at): signalled before a turn, and not stopped in it for nothing
@@ -198,7 +210,7 @@ export class Rules {
     }
     // hazard lights where the country does not allow them
     const rule = this.country.hazards;
-    if (rule && p.hazard && (rule === 'danger' || Math.abs(p.v) > 0.3)) {
+    if (rule && p.hazard && (rule === 'danger' || Math.abs(p.v) > 0.05)) {
       this.hazT += dt;
       if (!this.hazOpen && this.hazT >= (rule === 'danger' ? 3 : 1)) {
         this.hazOpen = true;

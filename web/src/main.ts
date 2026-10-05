@@ -363,11 +363,14 @@ function cityFrame(): void {
       else if (c.hinted !== near.id && near.kind === 'kerb') { c.hinted = near.id; showBanner('', `A ${fmtLen(near.length)} space on your ${kerbSide()}`, 'Stop beside it, level with the car in front of it, and Park mode takes over.', null, 3500); }
     }
   } else {
-    // a thief dived into the space you were after: you lose it, not points
+    // a thief dived into the space you were after: you lose it, not points (and once you have stopped, you drive on)
     const thief = c.slot?.kind === 'kerb' ? sim.traffic?.thiefIn(c.slot.id) : null;
     if (thief) {
-      enterDrive();
-      showBanner('bad', 'A thief took the space', `The ${TYPES[thief.type].name} dived in nose first while you waited. ${theftNote(sim.rules?.country ?? COUNTRIES[settings.country])} You lose the space, not points: find another. Next time signal and start reversing sooner.`, null, 8000);
+      if (!c.told.has(`took:${c.slot!.id}`)) {
+        c.told.add(`took:${c.slot!.id}`);
+        showBanner('bad', 'A thief took the space', `The ${TYPES[thief.type].name} dived in nose first while you waited. ${theftNote(sim.rules?.country ?? COUNTRIES[settings.country])} You lose the space, not points: find another. Next time signal and start reversing sooner.`, null, 8000);
+      }
+      if (Math.abs(sim.v) < 0.05 && !pedals.fwd && !pedals.rev) enterDrive();
       return;
     }
     retarget(c);
@@ -645,7 +648,7 @@ function parkedOnStreet(r: ParkedResult, c: CityPlay, slot: Slot): void {
       drive: sim.rules ? sim.rules.faults.slice() : null, held: sim.rules ? { secs: sim.rules.heldUp, cars: sim.rules.heldCars.size } : null,
       title: `Parked ${slot.kind === 'lot' ? 'in' : 'on'} ${slotPlace(slot)}`, sub: `${c.map.spec.name} · layout ${c.map.seed} · ${slot.kind === 'lot' ? `bay ${slot.at.n}` : `${fmtLen(slot.length)} space`}${par ? ` · par ${par}` : ''}`, par: par || r.moves, limit: limit || r.elapsed, better,
       retry: resetCar, newLayout: () => playCity(true, id),
-      next: () => { hideResult(); c.declined = slot.id; c.slot = null; c.from = null; sim.rules?.clear(); applySettings(); syncStreet(); showBanner('', 'Drive on', `Signal ${kerbSide() === 'right' ? 'left' : 'right'}, then pull out with Forward and Reverse. Above 10 km/h Drive mode takes over, or tap Drive.`, null, 5000); },
+      next: () => { hideResult(); c.declined = slot.id; c.slot = null; c.from = null; sim.rules?.clear(); applySettings(); syncStreet(); beginRecording(); showBanner('', 'Drive on', `Signal ${kerbSide() === 'right' ? 'left' : 'right'}, then pull out with Forward and Reverse. Above 10 km/h Drive mode takes over, or tap Drive.`, null, 5000); },   // a new recording: no space to park in from here
       nextLabel: 'Drive on',
     });
   }, 500);
@@ -815,6 +818,8 @@ if (import.meta.env.MODE === 'harness') Object.assign(window, { __game: {
   timeCheck: (i: number) => { const c = city!, s = c.map.slots[i], t0 = performance.now(); s.parkable = undefined; checkSlot(c.map, sim.vehicle, s); return performance.now() - t0; },
   /** Time making a district's road network (ms), as entering it does (the district itself built first). */
   timeNet: (id: string, seed: number) => { const m = buildCity(mapFor(id, seed)!, chosenCar(), seed, settings.drive), t0 = performance.now(); networkOf(m); return performance.now() - t0; },
+  /** Time spawning the district's traffic again round where you are (ms), as a reset does. */
+  timeSpawn: () => { const t0 = performance.now(); spawnTraffic(city!, sim); return performance.now() - t0; },
   /** Run the frame loop for ms of game time at 30 frames a second (automation tabs get no animation frames). */
   pump: (ms: number) => { const t0 = Math.max(last, clock()); for (let k = 33.4; k <= ms + 1e-9; k += 33.4) tick(t0 + k); clockOffset += Math.max(0, t0 + ms - clock()); },
 } });

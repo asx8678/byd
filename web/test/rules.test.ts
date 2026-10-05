@@ -77,6 +77,36 @@ describe('signalling', () => {
   });
 });
 
+describe('giving way', () => {
+  const J = net.junctions.findIndex(j => j.name === 'Harbour Street and Mill Lane'), Jn = net.junctions[J], ap = Jn.approaches.find(a => a.minor)!, side = E[ap.el];
+  const main = E.find(e => e.kind === 'lane' && e.j === J && e.axis !== Jn.minor)!;
+  /** Out of the side road over its give-way line at 3 m/s, with a car on the main road going 10 m/s, its front d m from
+   *  the junction (none: no car). */
+  function pullOut(d: number | null): Fault[] {
+    const traffic = new Traffic(net), out: Fault[] = [];
+    if (d !== null) {
+      let s = main.len;
+      const front = (q: number) => { const [x, z, h] = poseOn(main, q), ty = { L: 4.33, OVR: 0.83 }, fx = x + (ty.L - ty.OVR) * Math.cos(h), fz = z - (ty.L - ty.OVR) * Math.sin(h), [r0, r1, r2, r3] = Jn.rect; return Math.hypot(Math.max(r0 - fx, 0, fx - r1), Math.max(r2 - fz, 0, fz - r3)); };
+      while (s > 0 && front(s) < d) s -= 0.1;
+      traffic.restore({ t: 0, r: 1, cars: [{ id: 0, type: 2, drv: 0, el: main.id, s, v: 10, acc: 0, route: [main.next[0], E[main.next[0]].next[0], E[E[main.next[0]].next[0]].next[0]], ind: 0, wait: false, commit: -1, inAt: 1e9, jams: 0, moved: 0 }] });
+    }
+    let t = 0;
+    for (let s = side.len - 15; s < side.len + 3 - (ATTO2.L - ATTO2.OVR) + 6; s += 3 * STEP) {
+      const [x, z, th] = s <= side.len ? poseOn(side, s) : poseOn(E[side.next.find(id => E[id].turn !== 'far')!], s - side.len);
+      out.push(...rules(x, z, th, t += STEP, traffic));
+    }
+    return out;
+    function rules(x: number, z: number, th: number, tt: number, tr: Traffic) { return R.step(car(x, z, th, 3), tr, tt, STEP, null); }
+  }
+  let R = new Rules(net);
+  it('notes pulling out over a give-way line in front of a car on the main road less than 3 s away', () => {
+    R = new Rules(net); const fs = pullOut(15);
+    expect(kinds(fs)).toEqual(['giveway']); expect(fs[0].text).toBe('You pulled out at Harbour Street and Mill Lane in front of a crossover on Mill Lane.');   // Harbour Street ends there: it gives way
+    R = new Rules(net); expect(pullOut(50)).toEqual([]);   // 5 s away
+    R = new Rules(net); expect(pullOut(null)).toEqual([]);
+  });
+});
+
 describe('blocking a junction', () => {
   /** Into a junction along a straight path until your front is 6 m into it, then stopped there for `secs`, the traffic's
    *  clock at t0. */
@@ -146,6 +176,11 @@ describe('hazard lights, by country', () => {
     expect(run(COUNTRIES.de, false, 2.5)).toEqual([]);
     const fs = run(COUNTRIES.de, false, 4);
     expect(kinds(fs)).toEqual(['hazard']); expect(fs[0].text).toContain('StVO §16');
+  });
+  it('in the UK, not even reversing slowly into a space', () => {
+    const rules = new Rules(net, COUNTRIES.gb), out: Fault[] = [], [x, z, th] = poseOn(E[0], 10);
+    for (let n = 0; n < 2 * 60; n++) out.push(...rules.step(car(x - n * 0.2 * STEP * Math.cos(th), z + n * 0.2 * STEP * Math.sin(th), th, -0.2, { hazard: true, drive: false }), null, n * STEP, STEP, null));
+    expect(kinds(out)).toEqual(['hazard']);
   });
   it('in Morocco: not scored, since the rule is not checked yet', () => {
     expect(run(COUNTRIES.ma, true, 10)).toEqual([]); expect(run(COUNTRIES.ma, false, 10)).toEqual([]);

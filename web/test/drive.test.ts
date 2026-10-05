@@ -8,7 +8,7 @@ import { clamp } from '../src/core/math';
 import { Recorder, STEP, playback, replayTo, stateOf } from '../src/core/replay';
 import { Rules, SPEED_SLACK } from '../src/core/rules';
 import { Sim, type SimEvent } from '../src/core/sim';
-import { CYCLE, DENSITY, TYPES, Traffic, exitFor, lightAt, networkOf, poseOn, type El, type Extras, type Light, type TrafficSnap } from '../src/core/traffic';
+import { CYCLE, DENSITY, DRIVERS, TYPES, Traffic, diveFor, exitFor, lightAt, networkOf, poseOn, type El, type Extras, type Light, type TrafficSnap } from '../src/core/traffic';
 
 /** Harbour with its road network, a sim in Drive mode on it, and traffic of n cars per km (0: just the lights), with the
  *  extra cars asked for. */
@@ -164,7 +164,7 @@ describe('a parked car that will pull out', () => {
 describe('a recording with traffic', () => {
   /** 40 s on the street in busy traffic: pull away, a turn of the wheel, brake, signal, go again. */
   function drive(): { sim: Sim; rec: Recorder; at: Record<number, string> } {
-    const { sim } = street(DENSITY.busy, 2, { leavers: 5, couriers: 2 }), rec = new Recorder(), at: Record<number, string> = {};
+    const { sim } = street(DENSITY.busy, 2, { leavers: 5, couriers: 2, thieves: 1, patience: 5 }), rec = new Recorder(), at: Record<number, string> = {};
     rec.begin(sim);
     for (let n = 0; n < 40 * 60; n++) {
       sim.input.acc = n < 600 || n > 1500 ? 0.35 : 0; sim.input.brk = n >= 900 && n < 1500 ? 0.6 : 0;
@@ -198,6 +198,70 @@ describe('a recording with traffic', () => {
     for (const n of [1199, 1200, 1500, 2399]) {
       const all = replayTo(rec.rec!, sim.scene, sim.vehicle, n, () => {});   // a hook: from the start
       expect(JSON.stringify(stateOf(replayTo(rec.rec!, sim.scene, sim.vehicle, n)))).toBe(JSON.stringify(stateOf(all)));
+    }
+  });
+});
+
+describe('a try at a space with a thief, and Drive on', () => {
+  const THIEF = DRIVERS.findIndex(d => d.name === 'thief');
+  /** Harbour in light traffic: Park mode beside a free space a thief can dive into, and the thief 30 m behind it. */
+  function beside() {
+    const { m, sim } = street(DENSITY.light, 1, { leavers: 3, couriers: 1, thieves: 1, patience: 5 }), net = networkOf(m), T = sim.traffic!;
+    const th = T.cars.find(c => c.drv === THIEF)!, sl = (m.slots.filter(s => s.kind === 'kerb') as KerbSlot[]).find(s => !T.taken(s.id) && (diveFor(net, s, th.type)?.s0 ?? 0) > 31)!, dv = diveFor(net, sl, th.type)!;
+    const snap = T.snapshot(), i = snap.cars.findIndex(c => c.id === th.id);
+    snap.cars[i] = { ...snap.cars[i], el: dv.el, s: dv.s0 - 30, v: 5, route: routeFrom(m, net.els[dv.el]) };
+    T.restore(snap);
+    const at = parkStart(ATTO2, sl);
+    sim.place(at.x, at.z, at.th); sim.options.bay = sl.id; sim.setMode('park');
+    return { sim, sl, thief: T.cars[i] };
+  }
+  const same = (rec: Recorder, sim: Sim) => { const p = playback(rec.rec!, sim.scene, sim.vehicle); while (p.step()); return JSON.stringify(stateOf(p.sim)) === JSON.stringify(stateOf(sim)); };
+  it('replays exactly: the thief comes and waits, you signal and start reversing, and it drives on', () => {
+    const { sim, sl, thief } = beside(), rec = new Recorder();
+    rec.begin(sim);
+    let waited = -1;
+    for (let n = 0; n < 25 * 60; n++) {
+      if (n === 30) sim.ind = 1;
+      if (waited < 0 && thief.aimT >= 0) waited = n;
+      sim.input.rev = waited >= 0 && n > waited + 60 && n < waited + 90;
+      rec.before(sim); sim.step(STEP); rec.after(sim);
+    }
+    expect(waited).toBeGreaterThan(0);
+    expect(thief.aim).toBe(''); expect(sim.traffic!.thiefIn(sl.id)).toBeNull();
+    expect(same(rec, sim)).toBe(true);
+    expect(sim.rules!.faults.map(f => f.kind)).toEqual([]);   // signalled before reversing in
+  });
+  it('a thief that has only just begun to dive in as you begin to reverse into the space waits again: no crash', () => {
+    const { sim, sl, thief } = beside(), evs: SimEvent[] = [];
+    let waited = -1, dove = -1;
+    for (let n = 0; n < 30 * 60; n++) {
+      if (waited < 0 && thief.aimT >= 0) waited = sim.traffic!.t;
+      if (dove < 0 && thief.state === 'in') dove = sim.traffic!.t;
+      sim.input.rev = dove >= 0 && sim.traffic!.t > dove + 0.2 && sim.traffic!.t < dove + 3;   // reversing 0.2 s after it began
+      evs.push(...sim.step(STEP));
+    }
+    expect(dove).toBeGreaterThan(waited);
+    expect(sim.traffic!.thiefIn(sl.id)).toBeNull();
+    expect(evs.filter(e => e.type === 'touch' && e.name.includes('in traffic'))).toEqual([]);
+    expect(sim.traffic!.cars.reduce((s, c) => s + c.jams, 0)).toBe(0);
+  });
+  it('after Drive on, a new recording: pulling out replays exactly, signalled or not', () => {
+    for (const ind of [-1, 0] as const) {
+      const { sim, sl } = beside(), goals = sl.bay.goals!, g = goals[Math.floor(goals.length / 2)];
+      sim.place(g.x, g.z, g.th);
+      for (let n = 0; n < 30 && !sim.parked; n++) sim.step(STEP);
+      expect(sim.parked).toBe(true);
+      sim.step(STEP);
+      sim.rules!.clear(); sim.options.bay = '';   // Drive on, as the game does it: and then it begins a new recording
+      const rec = new Recorder();
+      rec.begin(sim);
+      for (let n = 0; n < 4 * 60; n++) {
+        if (n === 10) sim.ind = ind;
+        sim.input.fwd = n > 30; sim.input.wheelHeld = true; sim.wheelAngle = -300;
+        rec.before(sim); sim.step(STEP); rec.after(sim);
+      }
+      expect(same(rec, sim)).toBe(true);
+      expect(sim.rules!.faults.map(f => f.kind)).toEqual(ind ? [] : ['signal']);
     }
   });
 });
