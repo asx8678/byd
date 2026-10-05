@@ -1,6 +1,6 @@
 // The plan: a north-up map of the bays that fills the screen, with the path the car takes at the current steering,
 // an outline of the car every 0.8 m along it and, in red, where it would touch something first.
-import { ackermann, footprint } from '../core/car';
+import { ackermann, footprint, rearAngles } from '../core/car';
 import { wheelsOf } from '../core/collision';
 import type { Rect } from '../core/scene';
 import { DEG, clamp, wrapPi, type Pt } from '../core/math';
@@ -54,7 +54,7 @@ export function snapView(): void { PV.init = false; }
 function follow(sim: Sim, dt: number): void {
   let tx, tz, ts;
   if (settings.planView === 'area') { const [x0, x1, z0, z1] = sim.scene.areaView; tx = (x0 + x1) / 2; tz = (z0 + z1) / 2; ts = Math.min(PV.w / (x1 - x0), PV.band / (z1 - z0)); }   // the scene's whole-area view
-  else { tx = sim.x + 1.34 * Math.cos(sim.th); tz = sim.z - 1.34 * Math.sin(sim.th); ts = Math.min(PV.w, PV.band) / 11; }
+  else { const v = sim.vehicle, mid = v.L / 2 - v.OVR; tx = sim.x + mid * Math.cos(sim.th); tz = sim.z - mid * Math.sin(sim.th); ts = Math.min(PV.w, PV.band) / Math.max(11, 2.4 * v.L); }
   const k = PV.init ? 1 - Math.exp(-8 * dt) : 1; PV.init = true;
   PV.cx += (tx - PV.cx) * k; PV.cz += (tz - PV.cz) * k; PV.s += (ts - PV.s) * k;
 }
@@ -171,24 +171,24 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
     if (p.hit) { c.strokeStyle = '#ff4f4f'; c.lineWidth = 2; c.setLineDash([5, 3]); path(c, footprint(p.end[0], p.end[1], p.end[2], v.body)); c.stroke(); c.setLineDash([]); }
   }
   // turning centre, the lines from it to the wheels (Ackermann) and the circle the outer front corner sweeps
-  const dl = -sim.steerDeg * DEG, [fl, fr] = ackermann(v, dl);
-  const wl = footprint(x, z, th, [[v.WB, -v.TRACK / 2], [v.WB, v.TRACK / 2], [0, -v.TRACK / 2], [0, v.TRACK / 2]]);
+  const dl = -sim.steerDeg * DEG, [fl, fr] = ackermann(v, dl), [rl, rr] = rearAngles(v, dl);
+  const wl = footprint(x, z, th, [[v.WB, -v.TRACK / 2], [v.WB, v.TRACK / 2], [v.RA, -v.TRACK / 2], [v.RA, v.TRACK / 2]]);
   if (Math.abs(dl) > 0.004 && settings.layerPivot !== 'off') {   // learning layer: the pivot and the turning circles
     const Rc = v.WB / Math.tan(dl);
     if (Math.abs(Rc) < 30) {
-      const icr = footprint(x, z, th, [[0, -Rc]])[0], [ix, iy] = PS(icr[0], icr[1]), oc = footprint(x, z, th, [[3.40, Rc > 0 ? 0.76 : -0.76]])[0];
+      const fc = v.planCorners[1], icr = footprint(x, z, th, [[0, -Rc]])[0], [ix, iy] = PS(icr[0], icr[1]), oc = footprint(x, z, th, [[fc[0], Rc > 0 ? fc[1] : -fc[1]]])[0];
       c.setLineDash([3, 4]); c.strokeStyle = 'rgba(200,215,225,.5)'; c.lineWidth = 1;
       for (const wp of wl) { const [sx, sy] = PS(wp[0], wp[1]); c.beginPath(); c.moveTo(ix, iy); c.lineTo(sx, sy); c.stroke(); }
       c.strokeStyle = 'rgba(255,138,61,.38)'; c.beginPath(); c.arc(ix, iy, Math.hypot(oc[0] - icr[0], oc[1] - icr[1]) * s, 0, 6.3); c.stroke();
-      c.strokeStyle = 'rgba(94,208,216,.35)'; c.beginPath(); c.arc(ix, iy, (Math.abs(Rc) - v.TRACK / 2) * s, 0, 6.3); c.stroke(); c.setLineDash([]);   // the inner rear wheel's circle
+      c.strokeStyle = 'rgba(94,208,216,.35)'; c.beginPath(); c.arc(ix, iy, Math.hypot(Math.abs(Rc) - v.TRACK / 2, v.RA) * s, 0, 6.3); c.stroke(); c.setLineDash([]);   // the inner rear wheel's circle
       c.fillStyle = '#ebe8df'; c.beginPath(); c.arc(ix, iy, 3, 0, 6.3); c.fill();
     }
   }
   // parking-sensor zones
   if (settings.pdc === 'on') {
     const Z: Record<string, Pt[]> = {
-      front: [[v.WB + v.OVF + 0.16, -0.7], [v.WB + v.OVF + 0.16, 0.7]], rear: [[-v.OVR - 0.16, -0.7], [-v.OVR - 0.16, 0.7]],
-      left: [[0.2, -v.W / 2 - 0.2], [2.6, -v.W / 2 - 0.2]], right: [[0.2, v.W / 2 + 0.2], [2.6, v.W / 2 + 0.2]],
+      front: [[v.WB + v.OVF + 0.16, -(v.W / 2 - 0.215)], [v.WB + v.OVF + 0.16, v.W / 2 - 0.215]], rear: [[-v.OVR - 0.16, -(v.W / 2 - 0.215)], [-v.OVR - 0.16, v.W / 2 - 0.215]],
+      left: [[v.RA + 0.2, -v.W / 2 - 0.2], [v.WB - 0.02, -v.W / 2 - 0.2]], right: [[v.RA + 0.2, v.W / 2 + 0.2], [v.WB - 0.02, v.W / 2 + 0.2]],
     };
     c.lineCap = 'round';
     for (const k of SIDES) { const d = sim.pdc[k]; if (!(d < rangeOf(v, k) - 1e-6)) continue; c.strokeStyle = zoneCol(d); c.lineWidth = Math.max(3, 0.12 * s); path(c, footprint(x, z, th, Z[k]), false); c.stroke(); }
@@ -196,12 +196,12 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
   // the car: body, mirrors, glass, the nose mark, wheels (the fronts at their Ackermann angles)
   c.fillStyle = 'rgba(16,18,22,.95)'; c.strokeStyle = '#ebe8df'; c.lineWidth = 1.5; path(c, footprint(x, z, th, v.body)); c.fill(); c.stroke();
   c.fillStyle = '#8e939c'; for (const m of v.mirrors) { path(c, footprint(x, z, th, m)); c.fill(); }
-  const gx = v.WB - 0.32, gw = v.W / 2 - 0.195, nose = v.WB + v.OVF - 0.143;   // glass and the nose mark, scaled to this car
-  c.fillStyle = 'rgba(70,92,116,.5)'; path(c, footprint(x, z, th, [[gx, -gw], [gx, gw], [-0.45, gw - 0.04], [-0.45, -gw + 0.04]])); c.fill();
+  const [gx, gr] = v.glass, gw = v.W / 2 - 0.195, nose = v.WB + v.OVF - 0.143;   // glass and the nose mark, scaled to this car
+  c.fillStyle = 'rgba(70,92,116,.5)'; path(c, footprint(x, z, th, [[gx, -gw], [gx, gw], [gr, gw - 0.04], [gr, -gw + 0.04]])); c.fill();
   c.fillStyle = '#f2c230'; path(c, footprint(x, z, th, [[nose, 0], [nose - 0.4, -0.27], [nose - 0.4, 0.27]])); c.fill();
   const WRECT: Pt[] = [[-v.WR, -v.WW / 2], [v.WR, -v.WW / 2], [v.WR, v.WW / 2], [-v.WR, v.WW / 2]];
-  ([[wl[0], fl, true], [wl[1], fr, true], [wl[2], 0, false], [wl[3], 0, false]] as [Pt, number, boolean][]).forEach(([q, a, front]) => {
-    c.fillStyle = front && Math.abs(a) > 0.01 ? '#f2c230' : '#ebe8df'; path(c, footprint(q[0], q[1], th + a, WRECT)); c.fill();
+  ([[wl[0], fl], [wl[1], fr], [wl[2], rl], [wl[3], rr]] as [Pt, number][]).forEach(([q, a]) => {
+    c.fillStyle = Math.abs(a) > 0.01 ? '#f2c230' : '#ebe8df'; path(c, footprint(q[0], q[1], th + a, WRECT)); c.fill();
   });
   if (s > 19) {   // wheel angles and the car's length, when zoomed in enough to read
     c.font = `600 ${Math.min(14, 0.42 * s).toFixed(1)}px "Barlow Condensed", sans-serif`; c.fillStyle = '#f2c230';

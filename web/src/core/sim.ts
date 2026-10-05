@@ -52,13 +52,19 @@ export class Sim {
   lastDriveT = -9;     // when the car last moved or a pedal was held
   readonly gaps: SideValues = { front: 9, rear: 9, left: 9, right: 9 };                          // body outline to the nearest obstacle
   readonly pdc: SideValues = { front: Infinity, rear: Infinity, left: Infinity, right: Infinity };   // closest parking-sensor reading per group
-  readonly sensorReadings: number[];
+  sensorReadings: number[];
   private poseSig = '';
 
-  constructor(scene: Scene = GARAGE_561, readonly vehicle: Vehicle = ATTO2) {
+  constructor(scene: Scene = GARAGE_561, public vehicle: Vehicle = ATTO2) {
     this.scene = scene; this.obstacles = scene.obstacles;
     this.options = { lockDeg: 2.7 * 180, selfCentre: true, bay: scene.defaultBay };
     this.sensorReadings = vehicle.sensors.map(() => Infinity);
+  }
+
+  /** Another car in the same scene. Call reset or resetAt next. */
+  setVehicle(v: Vehicle): void {
+    if (v === this.vehicle) return;
+    this.vehicle = v; this.sensorReadings = v.sensors.map(() => Infinity); this.poseSig = '';
   }
 
   /** Single-track angle in degrees, right positive. */

@@ -3,6 +3,8 @@ import { GARAGE_561 } from '../core/content';
 import type { StartName } from '../core/garage';
 
 export interface Settings {
+  car: string;            // the car you drive in the garage and the levels (its file id); lessons use the Atto 2 for now
+  ras: string;            // rear-axle steering at full lock, degrees ('0' = off), for a car that has it
   start: StartName;
   bay: string;
   steer: string;          // steering-wheel turns lock to lock
@@ -21,7 +23,7 @@ export interface Settings {
 
 const KEY = 'atto2-garage';
 export const settings: Settings = {
-  start: 'left', bay: '561', steer: '2.7', pdc: 'on', center: 'on', planView: 'car', layout: 0,
+  car: 'byd-atto2', ras: '10', start: 'left', bay: '561', steer: '2.7', pdc: 'on', center: 'on', planView: 'car', layout: 0,
   layerPath: 'on', layerPivot: 'on', layerSwept: 'off', layerGhost: 'off', layerKerb: 'on', layerNums: 'on',
 };
 try { Object.assign(settings, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch { /* private mode or blocked storage: defaults */ }

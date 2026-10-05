@@ -39,14 +39,14 @@ export const curvature = (v: Vehicle, lvl: number): number => Math.tan(-lvl * v.
 function parts(v: Vehicle, side: 1 | -1): { name: string; x: number; z: number; asked?: boolean }[] {
   const m = v.mirrors[1], mx = m ? (m[0][0] + m[1][0]) / 2 : 0.7 * v.WB, mz = m ? (m[0][1] + m[2][1]) / 2 : v.W / 2;
   return [
-    { name: 'your front seat', x: 0.47 * v.WB, z: side * 0.37, asked: true },
-    { name: 'your steering wheel', x: 0.6 * v.WB, z: 0, asked: true },
+    { name: 'your front seat', x: v.RA + 0.47 * (v.WB - v.RA), z: side * 0.37, asked: true },
+    { name: 'your steering wheel', x: v.RA + 0.6 * (v.WB - v.RA), z: 0, asked: true },
     { name: 'your front bumper', x: v.WB + v.OVF, z: 0 },
     { name: 'your front wheel', x: v.WB, z: side * v.TRACK / 2 },
     { name: 'your mirror', x: mx, z: side * mz },
-    { name: 'your door pillar', x: 0.5 * v.WB, z: side * v.W / 2 },   // the centre pillar between the doors
-    { name: 'your back seat', x: 0.45, z: side * v.W / 2 },
-    { name: 'your rear wheel', x: 0, z: side * v.TRACK / 2 },
+    { name: 'your door pillar', x: v.RA + 0.5 * (v.WB - v.RA), z: side * v.W / 2 },   // the centre pillar between the doors
+    { name: 'your back seat', x: v.RA + 0.45, z: side * v.W / 2 },
+    { name: 'your rear wheel', x: v.RA, z: side * v.TRACK / 2 },
     { name: 'your rear bumper', x: -v.OVR, z: 0 },
   ];
 }

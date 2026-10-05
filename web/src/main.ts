@@ -2,16 +2,18 @@
 // You play your garage, a generated level or a lesson; all run on the same simulation, which loads the scene.
 import './style.css';
 import { CoachRun, Tracker, feedback, stepsFor, timingCause, type CoachEvent, type CoachSnap, type Feedback, type Step } from './core/coach';
-import { GARAGE_561 } from './core/content';
+import { ATTO2, GARAGE_561, VEHICLES, vehicleFor } from './core/content';
 import { generate, parseKey, timeLimit, type Level } from './core/generator/level';
 import type { TemplateId } from './core/generator/templates';
+import type { Vehicle } from './core/vehicle';
 import { COURSE, HELP, afterTry, checkPass, endHint, lessonById, loadLesson, type Lesson, type LessonDef, type LessonState } from './core/lesson';
 import { DEG, clamp, wrapPi, type Pt } from './core/math';
-import { moves, planBack, planToBay, sample, type Piece, type Plan, type Pose, type RoutePoint } from './core/planner';
+import { clearStart, fitsBay, moves, planBack, planToBay, sample, type Piece, type Plan, type Pose, type RoutePoint } from './core/planner';
 import { Recorder, STEP, playback, replayTo, restoreState, stateOf as simState } from './core/replay';
 import { starsFor } from './core/score';
 import { Sim, type ParkedResult, type SimEvent } from './core/sim';
 import { beep, updateBeeper } from './ui/audio';
+import { renderCarFacts, renderCarPicker, syncCarPicker } from './ui/cars';
 import { bindCard, renderCard } from './ui/coachCard';
 import { bindControls, pedals } from './ui/controls';
 import { bindCourse, courseTab, renderCourse, setState, showLesson, showLessonResult, stateOf } from './ui/course';
@@ -21,7 +23,7 @@ import { setPar, showBanner, updateHud } from './ui/hud';
 import { bindLevels, hideResult, renderLevels, showResult } from './ui/levels';
 import { updatePdcDisplay, layoutPdc } from './ui/pdcDisplay';
 import { drawPlan, forgetPrediction, layoutPlan, setCoachDraw, setGuide, snapView, type Guide } from './ui/plan';
-import { TEMPLATE_NAMES, progress, recordStars, seedFor, setPlaying } from './ui/progress';
+import { TEMPLATE_NAMES, progress, recordStars, seedFor, setPlaying, setStarsCar } from './ui/progress';
 import { lockDeg, settings } from './ui/settings';
 
 if (!CanvasRenderingContext2D.prototype.roundRect) CanvasRenderingContext2D.prototype.roundRect = function (this: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) { this.rect(x, y, w, h); };
@@ -63,6 +65,16 @@ interface LessonPlay {
 }
 let lesson: LessonPlay | null = null;
 
+/** The car chosen in Setup. Lessons are taught in the Atto 2 for now; the garage and the levels use this one. */
+const chosenCar = (): Vehicle => vehicleFor(settings.car, parseFloat(settings.ras));
+/** Drive v from the next reset on, with its facts in Info. Stars are the chosen car's: only the garage and levels keep them. */
+function useCar(v: Vehicle): void {
+  setStarsCar(chosenCar().id); renderCarFacts(v); syncCarPicker(chosenCar());
+  if (sim.vehicle === v) return;
+  sim.setVehicle(v); forgetPrediction(); hideGuide();
+}
+const carNote = (v: Vehicle) => `${v.short}: ${(v.L + 1e-9).toFixed(2)} × ${(v.W + 1e-9).toFixed(2)} m, turning circle ${(2 * v.R_CC).toFixed(2)} m kerb to kerb${v.REAR_DEG ? `, ${v.REAR_DEG}° rear-axle steering` : ''}.`;
+
 const applySettings = () => {
   sim.options.lockDeg = lockDeg(); sim.options.selfCentre = settings.center === 'on';
   sim.options.bay = lesson ? lesson.L.bay : level ? sim.scene.defaultBay : settings.bay;
@@ -85,23 +97,33 @@ function beginRecording(): void {
   if (lesson) lesson.mark0 = { coach: lesson.run?.snapshot() ?? null, track: lesson.tracker.pts.length };
 }
 function setRoute(route: Piece[]): void { parRoute = route; par = route.length ? moves(route) : 0; limit = route.length ? timeLimit(route) : 0; setPar(par); }
+/** Where the garage try starts: the chosen start, moved back for a car too long to stand there. */
+const garageStart = (): Pose => clearStart(sim.vehicle, GARAGE_561, GARAGE_561.starts[settings.start] ?? GARAGE_561.starts[GARAGE_561.defaultStart]);
 function garagePar(): void {
-  const s = GARAGE_561.starts[settings.start] ?? GARAGE_561.starts[GARAGE_561.defaultStart], p = planToBay(sim.vehicle, GARAGE_561, s, settings.bay);
+  const p = planToBay(sim.vehicle, GARAGE_561, garageStart(), settings.bay);
   setRoute(p.status === 'found' ? p.pieces : []);
 }
 
 function resetCar(): void {
   if (lesson) { startTry(); return; }
   stopReplay(); hideGuide(); hideResult(); applySettings();
-  sim.reset(level ? 'start' : settings.start); forgetPrediction(); beginRecording(); clearPedals();
+  if (level) sim.reset('start'); else { const s = garageStart(); sim.resetAt(s.x, s.z, s.th); }
+  forgetPrediction(); beginRecording(); clearPedals();
   settledT = 0; tryOver = false; tryRewound = false;
   const parText = par ? ` Par: ${par} ${par === 1 ? 'move' : 'moves'}.` : '';
   if (level) { showBanner('', levelName(level), sim.scene.starts.start.label + parText, null, 7000); return; }
+  const v = sim.vehicle, bay = GARAGE_561.bays[settings.bay];
+  if (!fitsBay(v, GARAGE_561, settings.bay)) {
+    const room = bay.headZ < bay.z1 ? bay.z1 + bay.mouthTol - bay.headZ : 0, wide = bay.x1 - bay.x0;
+    const why = v.L > room - 0.35 ? `it is ${v.L.toFixed(2)} m long and the bay has room for about ${(room - 0.35).toFixed(2)} m, wall gap included` : `it is ${v.W.toFixed(2)} m wide and the bay ${wide.toFixed(2)} m`;
+    showBanner('bad', `The ${v.short} won't fit bay ${settings.bay}`, `${why[0].toUpperCase() + why.slice(1)}. Drive round the garage, or play a level: the bays there grow for a bigger car.`, null, 9000);
+    return;
+  }
   const from = (sim.scene.starts[settings.start] ?? sim.scene.starts[sim.scene.defaultStart]).label;
-  showBanner('', `Park in bay ${settings.bay}`, from + (settings.bay === '561' ? ' Mind pillar 560 and the bench; the plan shows where each move ends.' : ' Pillar 560 runs along its left side.') + parText, null, 8000);
+  showBanner('', `Park in bay ${settings.bay}${v === ATTO2 ? '' : ` · ${v.short}`}`, from + (settings.bay === '561' ? ' Mind pillar 560 and the bench; the plan shows where each move ends.' : ' Pillar 560 runs along its left side.') + parText, null, 8000);
 }
 
-function leaveLesson(): void { lesson = null; setCoachDraw(null); renderCard(null); layout(); }
+function leaveLesson(): void { lesson = null; setCoachDraw(null); renderCard(null); useCar(chosenCar()); layout(); }
 function enterLevel(L: Level): void {
   leaveLesson(); level = L; sim.load(L.scene); setRoute(L.route); setPlaying(L.key, L.template, L.level, L.seed);
   snapView(); resetCar(); refreshLevels();
@@ -110,7 +132,7 @@ function playLevel(t: TemplateId, n: number, seed: number): void {
   stopReplay(); hideGuide(); closeSheets();
   showBanner('', 'Building the level…', `${TEMPLATE_NAMES[t].long}, level ${n}`, null);
   afterPaint(() => {
-    const L = generate(sim.vehicle, t, n, seed);
+    const L = generate(chosenCar(), t, n, seed);
     if (L) enterLevel(L); else showBanner('bad', 'No level from this layout', 'Try another: Play, then New layout.', null, 4000);
   });
 }
@@ -118,7 +140,12 @@ function playGarage(): void {
   leaveLesson(); level = null; sim.load(GARAGE_561); garagePar(); setPlaying('garage'); closeSheets();
   snapView(); resetCar(); refreshLevels();
 }
-const refreshLevels = () => { renderLevels(level ? level.key : lesson ? '' : 'garage', garageName(), garageSlot()); renderCourse(lesson ? lesson.L.def.id : null); };
+const refreshLevels = () => {
+  const v = chosenCar();
+  renderLevels(level ? level.key : lesson ? '' : 'garage', garageName(), garageSlot()); renderCourse(lesson ? lesson.L.def.id : null);
+  $('lvCar').textContent = v === ATTO2 ? '' : `Built for the ${v.short}: the bays grow for a car bigger than the Atto 2, the aisles and kerb spaces stay as they are.`; $('lvCar').hidden = v === ATTO2;
+  $('crsCar').textContent = `The lessons' routes and marks are worked out for the Atto 2, so they use it for now; the ${v.short} stays yours in the garage and the levels.`; $('crsCar').hidden = v === ATTO2;
+};
 const newSeed = () => 1 + Math.floor(Math.random() * 99999);
 bindLevels({ playLevel, playGarage });
 
@@ -129,6 +156,7 @@ const picksOf = (def: LessonDef) => Object.fromEntries(Object.entries(def.tips ?
 function enterLesson(id: string, then: 'card' | 'drive' = 'card'): void {
   const def = lessonById(id); if (!def) return;
   stopReplay(); hideGuide(); closeSheets();
+  useCar(ATTO2);   // the lessons' routes and marks are worked out for the Atto 2; lessons in each car come next
   const L = loadLesson(sim.vehicle, def);
   level = null;
   lesson = { L, steps: stepsFor(sim.vehicle, L.scene, L.bay, L.route, picksOf(def)), routePts: sample(sim.vehicle, L.route, 0.1), st: stateOf(id), run: null, tracker: new Tracker(), fault: '', fb: null, summoned: false, watching: false, over: false, track: null, drift: null, rewound: false, mark0: { coach: null, track: 0 } };
@@ -235,10 +263,19 @@ function finishTry(r: ParkedResult | null): void {
   }, 700);
 }
 
+renderCarPicker();   // the car buttons, before the Setup rows are bound
 bindControls(sim, {
   reset: resetCar,
   levels: refreshLevels,
   settingChanged: key => {
+    if (key === 'car' || key === 'ras') {
+      const v = chosenCar(); syncCarPicker(v);
+      if (lesson) { showBanner('', `Lessons use the Atto 2 for now`, `The ${v.short} is yours in the garage and the levels. ${carNote(v)}`, null, 5000); return; }
+      useCar(v);
+      if (level) playLevel(level.template, level.level, level.seed);
+      else { garagePar(); resetCar(); if (fitsBay(v, GARAGE_561, settings.bay)) showBanner('', `Now driving the ${v.short}`, carNote(v) + (par ? ` Par in bay ${settings.bay}: ${par} ${par === 1 ? 'move' : 'moves'}.` : ''), null, 6000); }
+      return;
+    }
     if (key === 'start' || key === 'bay') { if (level || lesson) playGarage(); else { garagePar(); resetCar(); } }
     else { applySettings(); if (!replay && (key === 'steer' || key === 'center')) beginRecording(); }   // only these change how the car steps
   },
@@ -281,7 +318,7 @@ btnShow.addEventListener('click', () => { if (guide) { if (guide.watch) endWatch
 function startReplay(): void {
   const rec = recorder.rec;
   if (!rec || rec.steps < 30) { showBanner('', 'Nothing to replay yet', 'Drive a little first. Replay shows this attempt from its start, exactly as you drove it.', null, 3500); return; }
-  hideGuide(); hideResult(); replay = playback({ ...rec, events: rec.events.slice() }, sim.scene, sim.vehicle);
+  hideGuide(); hideResult(); replay = playback({ ...rec, events: rec.events.slice() }, sim.scene, VEHICLES[rec.vehicle] ?? sim.vehicle);
   forgetPrediction(); snapView(); btnReplay.textContent = 'Stop'; btnReplay.classList.add('on');
   showBanner('', 'Replay', 'Your attempt from its start. Tap Stop to go back to your car.', null, 4000);
 }
@@ -324,7 +361,7 @@ function rewind(): void {
     if (run && ls.mark0.coach) run.restore(ls.mark0.coach);
     ls.tracker.pts.length = Math.min(ls.tracker.pts.length, ls.mark0.track);
   }
-  const p = replayTo(rec, sim.scene, sim.vehicle, n, s => run?.sync(s), s => { ls?.tracker.add(s); run?.observe(s); });
+  const p = replayTo(rec, sim.scene, VEHICLES[rec.vehicle] ?? sim.vehicle, n, s => run?.sync(s), s => { ls?.tracker.add(s); run?.observe(s); });
   restoreState(sim, simState(p)); clearPedals(); recorder.truncate(n, sim); forgetPrediction();
   if (ls) { ls.run = run; ls.rewound = true; }
   tryRewound = true; settledT = 0;
@@ -430,17 +467,18 @@ function tick(now: number): void {
 }
 
 // boot: back into what you were playing, keeping the car where it was across a hot reload in the artifact viewer
-type Saved = { x?: number; z?: number; th?: number; wheelAngle?: number; hits?: number; elapsed?: number; moves?: number; layout?: number; scene?: string; play?: string };
+type Saved = { x?: number; z?: number; th?: number; wheelAngle?: number; hits?: number; elapsed?: number; moves?: number; layout?: number; scene?: string; play?: string; car?: string };
 type Hot = { snapshot?: (f: () => Saved) => void; ready?: (f: (saved: Saved) => void) => void; data?: Saved };
 const hot = (window as unknown as { claude?: { hot?: Hot } }).claude?.hot;
 function start(saved: Saved = {}): void {
   const play = saved.play ?? progress.play;
+  useCar(chosenCar());
   if (play.startsWith('lesson:') && lessonById(play.slice(7))) enterLesson(play.slice(7), 'drive');   // a lesson starts its try over
   else {
     const key = parseKey(play), L = key ? generate(sim.vehicle, key.template, key.level, key.seed) : null;
     if (L) { level = L; sim.load(L.scene); setRoute(L.route); } else garagePar();
     resetCar(); refreshLevels();
-    if (typeof saved.x === 'number' && typeof saved.z === 'number' && typeof saved.th === 'number' && saved.scene === sim.scene.id && saved.layout === sim.scene.layoutVersion && !sim.touching(saved.x, saved.z, saved.th)) {
+    if (typeof saved.x === 'number' && typeof saved.z === 'number' && typeof saved.th === 'number' && saved.scene === sim.scene.id && saved.layout === sim.scene.layoutVersion && (saved.car ?? ATTO2.id) === sim.vehicle.id && !sim.touching(saved.x, saved.z, saved.th)) {
       sim.place(saved.x, saved.z, saved.th); sim.wheelAngle = saved.wheelAngle || 0; sim.hits = saved.hits || 0; sim.elapsed = saved.elapsed || 0; sim.moves = saved.moves || 0;
       beginRecording();
     }
@@ -448,7 +486,7 @@ function start(saved: Saved = {}): void {
   resize(); setTimeout(layout, 300); setTimeout(layout, 1500);
   requestAnimationFrame(t => { last = t; frame(t); });
 }
-try { hot?.snapshot?.(() => ({ x: sim.x, z: sim.z, th: sim.th, wheelAngle: sim.wheelAngle, hits: sim.hits, elapsed: sim.elapsed, moves: sim.moves, layout: sim.scene.layoutVersion, scene: sim.scene.id, play: lesson ? `lesson:${lesson.L.def.id}` : level ? level.key : 'garage' })); } catch { /* not in the viewer */ }
+try { hot?.snapshot?.(() => ({ x: sim.x, z: sim.z, th: sim.th, wheelAngle: sim.wheelAngle, hits: sim.hits, elapsed: sim.elapsed, moves: sim.moves, layout: sim.scene.layoutVersion, scene: sim.scene.id, play: lesson ? `lesson:${lesson.L.def.id}` : level ? level.key : 'garage', car: sim.vehicle.id })); } catch { /* not in the viewer */ }
 if (hot?.ready) hot.ready(start); else start(hot?.data ?? {});
 
 // browser checks only (`vite build --mode harness`); other builds drop this

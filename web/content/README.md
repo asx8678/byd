@@ -4,17 +4,20 @@ Everything here is data the game loads: plain JSON, so a later Swift version can
 
 ## vehicles/*.json
 
-One car per file. The local frame has the rear axle at the origin, x forward and z to the right.
+One car per file; `src/core/content.ts` lists them. The file's frame has the rear axle at the origin, x forward and z to the right.
 
-- `dims`: length, width, height, wheelbase, track, front and rear overhangs, wheel radius and width, mass.
-- `turning.kerbRadius`: the published kerb-to-kerb turning radius. The steering lock is derived from it: the rear-axle radius at full lock is `sqrt(R² − wheelbase²) − track / 2`.
+- `name`, `short` (the picker's label) and `basedOn` (the real model the numbers come from): keep what players see separate from the model.
+- `sources`: where each figure comes from, a link at the end of each. `estimates`: every figure no source gave, in words; the app lists them under the car's facts.
+- `dims`: length, width, `widthMirrors` (optional), height, wheelbase, track (the front one: it sets the kerb circle), front and rear overhangs, wheel radius and width, mass.
+- `turning`: the steering lock is worked out from the published turning circle, either `kerbRadius` (the Atto 2's file) or `circles`, a list of `{ kerbDiameter, wallDiameter, rearSteer }`. A kerb-to-kerb figure without rear steering sets the lock exactly: the rear-axle radius at full lock is `sqrt(R² − wheelbase²) − track / 2`. Otherwise the lock is the angle that best fits every figure given; wall to wall is measured round the outline. `turnsLockToLock` when published.
+- `rearSteer`: `{ options, default }`, the rear wheels' angle at full lock for each setting in degrees, `0` for off. At parking speed they turn against the front wheels with `tan(rear) = k · tan(front)`, so the car turns about a fixed point ahead of the rear axle. The game puts the car's origin there, so the planner, the coach and the simulation treat it like any other car; each setting is its own car, id `<file id>@<degrees>`.
 - `outline.half`: one side of the body seen from above, front to back. The other side is mirrored.
 - `mirrors`: the right mirror's box `[x0, z0, x1, z1]` and its height. The left mirror is mirrored. Mirrors only meet obstacles taller than that height. Use `null` for none.
-- `planCorners`: the four corners on the rounded outline (FL, FR, RL, RR), used for the drawn tracks.
+- `planCorners`: the four corners on the rounded outline (FL, FR, RL, RR), used for the drawn tracks. `glass`: where the windows run on the plan, `[front, back]` (x).
 - `drive`: the hold-to-move driveline (creep and top speeds, ramp, hold time, acceleration, braking).
-- `parkingSensors`: ranges, cone angle and zone edges. Use `null` for a car without sensors.
+- `parkingSensors`: `layout` (`4-front-4-rear-2-each-side`, `4-front-4-rear` or `4-rear`), ranges, cone angle, zone edges, and where the corner and side sensors sit across the car (`cornerZ`, `sideZ`). Use `null` for a car without sensors.
 
-Keep `name` (what players see) and `basedOn` (the real model the numbers come from) separate, and list your `sources`. Figures nobody published must be measured before a car ships.
+A car goes in when its turning circle in the simulation matches the sheet (`test/cars.test.ts`). Figures nobody published are estimates until measured, and the file says which. The W124 waits for its steering lock.
 
 ## scenes/*.json
 

@@ -95,6 +95,8 @@
 
   <div class="sheet" id="sheetSettings" hidden>
     <h3>Settings <button type="button" data-close="sheetSettings">Close</button></h3>
+    <div class="opt wide"><label>Car</label><div class="seg" data-opt="car" id="segCar"></div></div>
+    <div class="opt" id="optRas" hidden><label>Rear-axle steering</label><div class="seg" data-opt="ras" id="segRas"></div></div>
     <div class="opt"><label>Start, as you face the bays</label><div class="seg" data-opt="start"><button data-v="left" type="button">Left</button><button data-v="right" type="button">Right</button><button data-v="across" type="button">Across</button></div></div>
     <div class="opt"><label>Target bay</label><div class="seg" data-opt="bay"><button data-v="561" type="button">561</button><button data-v="560" type="button">560</button></div></div>
     <div class="opt"><label>Steering lock-to-lock</label><div class="seg" data-opt="steer"><button data-v="2.5" type="button">2.5</button><button data-v="2.7" type="button">2.7</button><button data-v="3.0" type="button">3.0</button><button data-v="1" type="button">1 (quick)</button></div></div>
@@ -116,9 +118,11 @@
     <div class="seg tabs" id="playTabs"><button data-tab="course" type="button">Course</button><button data-tab="levels" type="button">Levels</button></div>
     <div id="tabCourse">
       <div id="crsList"></div>
+      <p class="lvNote" id="crsCar" hidden></p>
       <p class="lvNote">Each lesson teaches one manoeuvre with your car's own numbers: watch it, then drive it with the coach, and the help steps back as you pass: guided, then cue marks only, then practice, then a test where the stars count. ⟲ 5 s takes you back to try a bit again (that try is then practice).</p>
     </div>
     <div id="tabLevels">
+    <p class="lvNote" id="lvCar" hidden></p>
     <div class="lvDaily"><div><span>Today's level</span><b id="lvDailyName"></b></div><button id="lvDailyGo" type="button">Play</button></div>
     <h4>Your garage</h4>
     <button id="lvGarage" class="lvGarage" type="button"><span id="lvGarageName">Bay 561</span><small id="lvGarageStars"></small></button>
@@ -152,20 +156,9 @@
   <div class="sheet" id="sheetInfo" hidden>
     <h3>Garage layout <button type="button" data-close="sheetInfo">Close</button></h3>
     <p>The bays, pillars and walls come from the photo survey made in your other session, scaled from your Atto 2's rear track and wheelbase, the grey Clio's track and the drain cover in the aisle: about ±20 cm near 561, more further out. Your new photos of the empty bays agree on the bay widths and on where pillar 560 and 562 sit; they could not pin the depth closer than about ±0.4 m, so it keeps the survey's 4.72 m. The car's outline is traced from BYD's three-view drawing.</p>
-    <h4>BYD Atto 2</h4>
-    <table class="dim">
-      <tr><td>Length / width / height</td><td>4.33 / 1.83 / 1.675 m</td><td>DM-i; the EV is 4.31 m long</td></tr>
-      <tr><td>Wheelbase, track</td><td>2.62 m, 1.57 m</td><td>same track front and rear</td></tr>
-      <tr><td>Overhangs front / rear</td><td>0.883 / 0.827 m</td><td>BYD spec sheet</td></tr>
-      <tr><td>Tyres, kerb weight</td><td>215/55 R17, 1,510–1,620 kg</td><td>wheel Ø 0.67 m, 150 mm clearance</td></tr>
-      <tr><td>Turning radius, kerb to kerb</td><td>5.3 m</td><td>outer front wheel; 10.6 m circle</td></tr>
-      <tr><td>Turning radius, wall to wall</td><td>5.9 m</td><td>what the outer front corner sweeps</td></tr>
-      <tr><td>Rear-axle circle at full lock</td><td>3.82 m</td><td>the inner rear wheel runs 0.8 m inside it</td></tr>
-      <tr><td>Road-wheel angle at full lock</td><td>34.4°</td><td>inner wheel 40.8°, outer 29.6° (Ackermann)</td></tr>
-      <tr><td>Steering ratio, lock to lock</td><td>≈14:1, 2.7 turns</td><td>not published by BYD; typical for its electric rack, adjustable in Setup</td></tr>
-    </table>
+    <div id="carFacts"></div>
     <h4>Driving model</h4>
-    <p>Kinematic single-track model about the rear axle, which is accurate at parking speed: the car pivots around a point on the rear-axle line, the inner rear wheel cuts inside the front wheels, and the front corner swings wide when reversing. The front wheels follow Ackermann angles. A short press of Forward creeps at 4 km/h; after one second of holding the target speed climbs by 4 km/h every second up to 20 km/h (reverse 3 to 10 km/h), acceleration is limited to 2 m/s² and releasing brakes at 3.5 m/s², and the steering self-centres as the car rolls (switchable). On the map the yellow lines show both leading corners; the thin cyan line is the end that swings: the inner rear wheel going forward, the outer front corner reversing.</p>
+    <p>Kinematic single-track model about the rear axle, which is accurate at parking speed: the car pivots around a point on the rear-axle line, the inner rear wheel cuts inside the front wheels, and the front corner swings wide when reversing. The front wheels follow Ackermann angles. A short press of Forward creeps at 4 km/h; after one second of holding the target speed climbs by 4 km/h every second up to 20 km/h (reverse 3 to 10 km/h), acceleration is limited to 2 m/s² and releasing brakes at 3.5 m/s², and the steering self-centres as the car rolls (switchable). On the map the yellow lines show both leading corners; the thin cyan line is the end that swings: the inner rear wheel going forward, the outer front corner reversing. Each car's steering lock is worked out from its published turning circle, so the Smart, the Ram and the S-Class turn as their makers say. With rear-axle steering (the S-Class) the rear wheels turn against the front ones at parking speed, in proportion to them: the car then turns about a point ahead of the rear axle, the circle shrinks and the tail swings out a little further.</p>
     <h4>Bays 559–562</h4>
     <table class="dim">
       <tr><td>Bay 561</td><td>2.41 × 4.72 m</td><td>line centre to line centre; 0.43 m more to the room wall past the head line</td></tr>
@@ -193,7 +186,7 @@
     <h4>Learning layers</h4>
     <p>Switch them in Setup. The path ahead shows where the car goes at the current steering and where it would touch first; the turning centre and circles show the point the car turns about, the circle the outer front corner sweeps and the circle the inner rear wheel runs on; the swept path draws all four corners' tracks; the ideal path draws the route that set par and where each move ends (in lessons the help level decides); the kerb close-up is a box at the bottom left, like a mirror tilted down, with the wheel nearest the kerb and its gap; the numbers give the car's angle to the space, the gap to the kerb and the gaps either side.</p>
     <h4>Levels</h4>
-    <p>Three kinds so far: a row of bays entered nose first, the same reversing in, and parallel parking between two cars at a kerb on your right. Level 1 is roomy; by level 10 the bays are 2.3 m wide with a 5 m aisle, and the parallel space is the car's length plus 80 cm. Neighbours park off-centre, cars appear opposite, a pillar or a lamp post joins in. Kerbs only stop the tyres: the bumpers hang over them, as on a real street. Show me drives the planner's route; part way in, it plans from where you are.</p>
+    <p>Three kinds so far: a row of bays entered nose first, the same reversing in, and parallel parking between two cars at a kerb on your right. Level 1 is roomy; by level 10 the bays are 2.3 m wide with a 5 m aisle, and the parallel space is the car's length plus 80 cm. The levels are built for the car chosen in Setup: a bay is wider and deeper by as much as the car is bigger than the Atto 2, while the aisles and the kerb space's room to spare stay the same, so a big car finds them harder; a layout it cannot get into at all is eased a step until it can. Neighbours park off-centre, cars appear opposite, a pillar or a lamp post joins in. Kerbs only stop the tyres: the bumpers hang over them, as on a real street. Show me drives the planner's route; part way in, it plans from where you are.</p>
   </div>
 </div>
 <script type="module" src="/src/main.ts"></script>

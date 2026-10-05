@@ -2,6 +2,7 @@
   "format": 1,
   "id": "byd-atto2",
   "name": "BYD Atto 2",
+  "short": "Atto 2",
   "basedOn": "BYD Atto 2 DM-i (2025-)",
   "sources": [
     "BYD spec sheet: length, width, height, wheelbase, overhangs, 5.3 m kerb-to-kerb turning radius",

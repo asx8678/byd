@@ -1,0 +1,35 @@
+{
+  "format": 1,
+  "id": "mercedes-s-class-w223",
+  "name": "Mercedes S-Class",
+  "short": "S-Class",
+  "basedOn": "Mercedes-Benz S-Class long wheelbase W223 (V223), S 580 4MATIC, US model year 2027",
+  "sources": [
+    "Mercedes-Benz USA, 2027 S-Class quick reference guide: length 208.8 in, width 75.6 in (83.6 in with mirrors), wheelbase 126.6 in; turning circle 39.0 ft with 4.5° rear-axle steering (standard) and 35.4 ft with 10° (optional), wall to wall. https://media.mbusa.com/news/2027-mercedes-benz-s-class-quick-reference-guide",
+    "Mercedes-Benz USA, 2022 S-Class quick reference guide: height 59.2 in; the 10° rear-axle steering cuts the circle by up to 7 ft. https://web.archive.org/web/2022/https://media.mbusa.com/releases/release-7122b266eca9fbce132ea26634041549-2022-mercedes-benz-s-class-sedan-quick-reference-guide",
+    "Spec databases (auto-data.net, cars-data.com) for the 2021-2025 car: track 1.655 m front, 1.683 m rear; overhangs 0.877 m front, 1.196 m rear"
+  ],
+  "notes": "Rear-axle frame: x forward from the rear axle, z to the right, metres. Only wall-to-wall circles are published, so the front wheels' lock is the one angle that fits both (37.2°); it gives 11.85 m and 10.85 m against the published 11.89 and 10.79 m, and about 12.85 m with the rear steering off (Mercedes says up to 7 ft more than with 10°). At parking speed the rear wheels turn the other way to the front, in proportion: the car then turns about a point ahead of the rear axle. The 2022 guide gives a 5.289 m length and 1.954 m width; this file uses the 2027 guide's, the same guide as the turning circles. One track for all four wheels: the front one.",
+  "estimates": [
+    "the front overhang: 5.304 m - 3.216 m - 1.196 m = 0.892 m (the facelift's extra 15 mm put at the front)",
+    "how the rear wheels follow the front ones (in proportion, at the tangents)",
+    "the outline between the published length and width",
+    "the mirrors' place and height, the tyres and the kerb weight"
+  ],
+  "dims": { "length": 5.304, "width": 1.920, "widthMirrors": 2.123, "height": 1.504, "wheelbase": 3.216, "track": 1.655, "overhangFront": 0.892, "overhangRear": 1.196, "wheelRadius": 0.356, "wheelWidth": 0.255, "mass": 2250 },
+  "turning": { "circles": [{ "rearSteer": 4.5, "wallDiameter": 11.89 }, { "rearSteer": 10, "wallDiameter": 10.79 }] },
+  "rearSteer": { "options": [10, 4.5, 0], "default": 10 },
+  "outline": { "half": [[4.108, 0.45], [4.05, 0.70], [3.91, 0.865], [3.64, 0.945], [2.60, 0.96], [-0.70, 0.96], [-1.08, 0.88], [-1.196, 0.58]] },
+  "mirrors": { "height": 1.0, "box": [2.05, 0.90, 2.30, 1.0615] },
+  "planCorners": [[3.91, -0.865], [3.91, 0.865], [-1.08, -0.88], [-1.08, 0.88]],
+  "glass": [2.27, -0.55],
+  "drive": { "creepForward": 1.2, "maxForward": 5.5, "rampForward": 1.1, "creepReverse": 0.9, "maxReverse": 2.8, "rampReverse": 0.6, "holdTime": 1.0, "accel": 2.0, "brake": 3.5 },
+  "parkingSensors": {
+    "layout": "4-front-4-rear-2-each-side",
+    "ranges": { "front": 1.2, "rear": 1.5, "side": 0.6 },
+    "coneDeg": 60,
+    "cornerZ": 0.725,
+    "sideZ": 0.945,
+    "bands": { "front": [0.3, 0.6, 0.9, 1.2], "rear": [0.3, 0.7, 1.1, 1.5], "left": [0.3, 0.45, 0.6], "right": [0.3, 0.45, 0.6] }
+  }
+}

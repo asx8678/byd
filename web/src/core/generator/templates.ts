@@ -91,11 +91,15 @@ export function kerb(v: Vehicle, level: number, seed: number): Draft {
   };
 }
 
+/** How much wider than the Atto 2 a car is: the bays are that much wider for it. */
+export const growWidth = (v: Vehicle): number => Math.max(0, v.W - 1.83);
+
 /** A row of 90° bays on your left, entered nose first or in reverse. */
 export function bays(v: Vehicle, level: number, seed: number, back: boolean): Draft {
   const rnd = mulberry32(seed * 104729 + level * 31 + (back ? 0 : 7)), r = (a: number, b: number) => a + (b - a) * rnd(), t = (level - 1) / 9;
   const list = CARS.slice(0, 5);
-  const Wb = 2.7 - 0.4 * t, D = 5.0, A = Math.max(5.0, 7.0 - 2.0 * t + r(-0.1, 0.1));
+  // bays grow for a car wider or longer than the Atto 2, so it has the same room to spare; the aisle stays as it is
+  const Wb = 2.7 - 0.4 * t + growWidth(v), D = 5.0 + Math.max(0, v.L - 4.33), A = Math.max(5.0, 7.0 - 2.0 * t + r(-0.1, 0.1));
   const nB = 6, opposite = level >= 4, pillarSide = level >= 8 ? (rnd() < 0.5 ? -1 : 1) : 0;
   const X0 = -nB * Wb - Wb / 2 - 9, X1 = nB * Wb + Wb / 2 + 3, lot = [r3(X0), r3(X1), -D - 0.9, r3(A + D + 0.9)];
   const spec = shell(`${back ? 'bays-back' : 'bays-in'}-${level}-${seed}`, back ? 'Reverse into a bay' : 'Into a bay, nose first', lot), obs = spec.obstacles, lines = spec.lines;

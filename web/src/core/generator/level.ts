@@ -7,7 +7,7 @@ import { bayBox } from '../parking';
 import { exactCheck, moves, sample, search, type Piece, type Pose, type SearchOpts } from '../planner';
 import { makeScene, type Rect, type Scene } from '../scene';
 import type { Vehicle } from '../vehicle';
-import { draft, type Draft, type Knobs, type TemplateId } from './templates';
+import { draft, growWidth, type Draft, type Knobs, type TemplateId } from './templates';
 
 export interface Measure { moves: number; length: number; minClear: number; score: number }
 export interface Level {
@@ -55,7 +55,7 @@ export function measure(v: Vehicle, scene: Scene, field: Field, route: Piece[], 
   const length = route.reduce((s, p) => s + p.len, 0), m = moves(route);
   let tpl: number, base: number;
   if (knobs.kind === 'kerb') { tpl = 5 * clamp((2.4 - knobs.spare) / 1.6, 0, 1); base = 2; }
-  else { tpl = 2.6 * clamp((7 - knobs.aisle) / 2, 0, 1) + 2.6 * clamp((2.7 - knobs.bay) / 0.4, 0, 1); base = back ? 2 : 1; }
+  else { tpl = 2.6 * clamp((7 - knobs.aisle) / 2, 0, 1) + 2.6 * clamp((2.7 - (knobs.bay - growWidth(v))) / 0.4, 0, 1); base = back ? 2 : 1; }
   const score = clamp(1 + 1.7 * Math.max(0, m - base) + 2.0 * clamp((0.6 - minClear) / 0.5, 0, 1) + tpl, 1, 10);
   return { moves: m, length, minClear, score };
 }
@@ -79,30 +79,38 @@ export function areaOf(v: Vehicle, scene: Scene, route: Piece[], bay = scene.def
 /**
  * Deterministic: the same template, level and seed always give the same level. The search stops after a
  * number of steps, never a number of seconds, so a slow phone and a fast laptop make the same level.
- * null when no try gave a level (it has not happened in the tests).
+ * When no try finds a way in (a big car in a tight space), the settings are eased a step at a time until one does;
+ * null only if even level 1 has none.
  */
-export function generate(v: Vehicle, template: TemplateId, level: number, seed: number, o: { tries?: number; maxNodes?: number } = {}): Level | null {
-  const tries = o.tries ?? 6, maxNodes = o.maxNodes ?? 60000, back = template === 'bays-back';
+export function generate(v: Vehicle, template: TemplateId, level: number, seed: number, o: { tries?: number; maxNodes?: number; budget?: number } = {}): Level | null {
+  // a search gives up after maxNodes steps, and the tries at the level asked after budget steps in all: a big car in a
+  // tight layout can search for a long time, and a level should build in a second or two on a phone
+  const tries = o.tries ?? 6, maxNodes = o.maxNodes ?? 5000, budget = o.budget ?? 15000, back = template === 'bays-back';
   let fallback: Level | null = null, knob = level, nodes = 0;
-  for (let k = 0; k < tries; k++) {
+  const attempt = (k: number): Level | null => {
     const d = draft(v, template, knob, seed + k * 100003);
     // a placeholder start to load the scene; the real one is where the route begins
     d.spec.starts = { start: { x: d.entry.x0, z: (d.entry.z0 + d.entry.z1) / 2, th: d.entry.th } };
     let scene = makeScene(d.spec);
     const s = solve(v, d, scene, maxNodes);
     nodes += s.nodes;
-    if (s.status !== 'found' || exactCheck(v, scene, s.field, s.route)) continue;
+    if (s.status !== 'found' || exactCheck(v, scene, s.field, s.route)) return null;
     const m = measure(v, scene, s.field, s.route, d.knobs, back), st = s.route[0].from;
     d.spec.starts = { start: { x: st.x, z: st.z, th: st.th, label: INTRO[template] } };
     d.spec.areaView = areaOf(v, scene, s.route);
     scene = makeScene(d.spec);
-    const lvl: Level = { key: levelKey(template, level, seed), template, level, seed, scene, route: s.route, par: m.moves, timeLimit: timeLimit(s.route), measure: m, knobs: d.knobs, knobLevel: knob, nodes };
-    const off = m.score - level;
+    return { key: levelKey(template, level, seed), template, level, seed, scene, route: s.route, par: m.moves, timeLimit: timeLimit(s.route), measure: m, knobs: d.knobs, knobLevel: knob, nodes };
+  };
+  for (let k = 0; k < tries && nodes < budget; k++) {
+    const lvl = attempt(k);
+    if (!lvl) continue;
+    const off = lvl.measure.score - level;
     if (Math.abs(off) <= 2.5) return lvl;
     // measured far from what was asked: keep trying with the settings eased or tightened a step
-    if (!fallback || Math.abs(m.score - level) < Math.abs(fallback.measure.score - level)) fallback = lvl;
+    if (!fallback || Math.abs(lvl.measure.score - level) < Math.abs(fallback.measure.score - level)) fallback = lvl;
     knob = clamp(knob - Math.sign(off), 1, 10);
   }
+  for (let k = tries; !fallback && knob > 1; k++) { knob--; fallback = attempt(k); }
   if (fallback) fallback.nodes = nodes;
   return fallback;
 }

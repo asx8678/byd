@@ -192,6 +192,22 @@ export function bayGoals(v: Vehicle, b: Bay): Pose[] {
   return out;
 }
 
+/** Whether the car can stand in the bay at all: a parked pose in it that touches nothing. */
+export function fitsBay(v: Vehicle, scene: Scene, bayId: string): boolean {
+  const b = scene.bays[bayId], field = fieldFor(v, scene);
+  return !!b && bayGoals(v, b).some(p => field.freeExact(p.x, p.z, p.th));
+}
+
+/** A start pose this car can stand at: the scene's own, or moved back along its heading (then forward) by as little as
+ *  needed when a longer car would touch something there. */
+export function clearStart(v: Vehicle, scene: Scene, s: Pose): Pose {
+  for (let d = 0; d <= 6 + 1e-9; d += 0.1) for (const sg of d ? [-1, 1] : [1]) {
+    const p = { x: s.x + sg * d * Math.cos(s.th), z: s.z - sg * d * Math.sin(s.th), th: s.th };
+    if (!collides(v, scene.obstacles, p.x, p.z, p.th)) return p;
+  }
+  return s;
+}
+
 /** Parked the way the bay asks for, and neatly enough for the accuracy star (planned routes should earn it). */
 function parkedWell(v: Vehicle, scene: Scene, b: Bay): (p: Pose) => boolean {
   const way: Bay = b.face === 'out' ? b : { ...b, face: 'in' };   // either way round: the planner parks nose in

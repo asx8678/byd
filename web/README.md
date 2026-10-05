@@ -1,6 +1,6 @@
 # Atto 2 Garage Trainer
 
-Practise parking a BYD Atto 2 nose-first into bay 561, then in generated levels: a row of bays entered nose first, the same reversing in, and parallel parking at a kerb, each from level 1 (roomy) to level 10 (tight). A course of ten lessons teaches each manoeuvre with a coach: watch the route, drive it guided step by step, then with less and less help, then a test. Learning layers (the path, the turning circles, the swept path of all four corners, the ideal path, a kerb close-up and the numbers) switch on in Setup, and ⟲ 5 s rewinds to try a step again. The screen is a plan: it draws the path the car takes at the current steering, an outline of the car every 0.8 m along it and, in red, where it would touch something first. It also has parking sensors with beeps, touch detection, a move counter against par, and a result card with three stars when you're parked.
+Practise parking a BYD Atto 2 nose-first into bay 561, then in generated levels, in the Atto 2 or in a Smart fortwo, a Ram 1500 or a Mercedes S-Class with rear-axle steering (10°, 4.5° or off), each turning the circle its maker publishes: a row of bays entered nose first, the same reversing in, and parallel parking at a kerb, each from level 1 (roomy) to level 10 (tight). A course of ten lessons teaches each manoeuvre with a coach: watch the route, drive it guided step by step, then with less and less help, then a test. Learning layers (the path, the turning circles, the swept path of all four corners, the ideal path, a kerb close-up and the numbers) switch on in Setup, and ⟲ 5 s rewinds to try a step again. The screen is a plan: it draws the path the car takes at the current steering, an outline of the car every 0.8 m along it and, in red, where it would touch something first. It also has parking sensors with beeps, touch detection, a move counter against par, and a result card with three stars when you're parked.
 
 It runs in any modern browser on iPhone, Android and PC, and installs to the home screen as an app that works offline.
 
@@ -24,14 +24,15 @@ To install it on a phone, serve `dist/` over HTTPS (for example GitHub Pages), o
 
 ```
 content/       data the game loads; JSON, so a Swift port reads the same files (see content/README.md)
-  vehicles/      one file per car: dimensions, outline, mirrors, turning circle, driveline, sensors
+  vehicles/      one file per car: dimensions, outline, mirrors, turning circle, rear-axle steering, driveline, sensors
   scenes/        one file per place: obstacles, painted lines, bays, starts (garage-561.json is your garage)
   lessons/       course.json: the lessons, their stored routes, the handbooks' words with sources, pass rules
 src/core/      the game itself, no browser code: easy to test, and the part to port to Swift
   math.ts        DEG, clamp, wrapPi, the Pt type
-  vehicle.ts     a car from its file; the steering lock is derived from the turning circle
+  vehicle.ts     a car from its file; the steering lock is worked out from the published turning circles, and with
+                 rear-axle steering the car's origin moves to the point it turns about
   scene.ts       a scene from its file: obstacles, kerbs, lines, bays, starts
-  content.ts     the cars and scenes that ship (ATTO2, GARAGE_561)
+  content.ts     the cars and scenes that ship (ATTO2, VEHICLES, vehicleFor, GARAGE_561)
   car.ts         geometry for any car: placing outlines, rectangles, Ackermann angles
   garage.ts      old names kept for code that used them
   geometry.ts    polygon overlap (separating axes), circle vs polygon, segment distances
@@ -61,8 +62,9 @@ src/ui/        the browser side: drawing, controls, sound, settings
   controls.ts    steering wheel, hold-to-move pedals, keyboard, Setup, Levels and Info
   levels.ts      the Levels tab of the Play sheet and the result card with its stars
   course.ts      the Course tab, the lesson card and a lesson's result card (localStorage key `atto2-course`)
+  cars.ts        the car picker in Setup and the chosen car's facts, estimates and sources in Info
   coachCard.ts   the coach card at the top of the screen in a lesson
-  progress.ts    best stars, last layouts and what you were playing (localStorage key `atto2-levels`)
+  progress.ts    best stars per car, last layouts and what you were playing (localStorage key `atto2-levels`)
   audio.ts       the beeper
   settings.ts    saved choices (localStorage key `atto2-garage`)
 src/main.ts    wiring and the frame loop: the simulation steps at a fixed 60 Hz, drawing is capped at
@@ -90,7 +92,9 @@ Physics changes will legitimately change these numbers. When you make one on pur
 The other tests check that:
 - a recorded attempt replays exactly: same pose, touches and parking result, also after a round trip through JSON
 - the data files reproduce the old numbers (steering geometry, the garage's 35 obstacles and its starts)
-- the Atto 2 turns a 10.6 m kerb-to-kerb circle in the simulation, as on BYD's spec sheet
+- each car turns its published circle in the simulation: the Atto 2 10.6 m (BYD), the Smart 6.95 m (Daimler) and the Ram 14.08 m (FCA) kerb to kerb. Their steering locks are worked out from these figures, so this checks the simulation against that working-out, and the Smart's 7.30 m wall to wall matches because its front corners were placed to match it. The one independent check is the S-Class: a single front lock lands within 10 cm of both of Mercedes' wall-to-wall circles (11.89 m with 4.5° rear steering, 10.79 m with 10°)
+- with rear-axle steering the rear wheels turn against the front ones and the rear axle runs the way they point, with no scrub
+- every car builds levels 1, 5 and 10 of every template (`GEN_CAR_LEVELS=all` for 1–10) whose routes clear everything and end parked with three stars; the Smart parks in 561 from every start, the Ram and the S-Class are reported as not fitting it, and a start a long car would touch something at moves back until it is clear
 - the planner finds 561 from all three starts and 560 from the left. Each route is clear under the exact collision check and ends parked nose in, neatly; from the left it takes three moves. It also parks in an open bay in one move, reports a blocked bay at once, and finds the same route every time
 - every level the generator makes (3 templates × levels 1–10 × 3 seeds; `GEN_SEEDS=10 npm test` for 300) starts clear, its route passes the exact collision check, and the route's end counts as parked, the right way round, with three stars
 - a nose-first bay does not accept a reversed-in car, and the other way round

@@ -106,6 +106,8 @@ body{touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit
 .opt{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--panel-line)}
 .opt:last-child{border-bottom:0}
 .opt label{font-weight:500}
+.opt.wide{flex-wrap:wrap}
+.opt.wide .seg{flex-wrap:wrap;margin-left:auto}
 .seg{display:flex;background:rgba(255,255,255,.06);border:1px solid var(--panel-line);border-radius:999px;padding:3px;gap:2px}
 .seg button{font:600 12px/1 var(--font-num);letter-spacing:.05em;text-transform:uppercase;color:var(--muted);background:transparent;border:0;border-radius:999px;padding:8px 12px;cursor:pointer}
 .seg button.on{background:var(--accent);color:#1a1300}
@@ -113,6 +115,14 @@ table.dim{border-collapse:collapse;width:100%;max-width:520px;font-variant-numer
 table.dim td{padding:4px 6px 4px 0;border-bottom:1px solid var(--panel-line);vertical-align:top;color:#d6d3ca}
 table.dim td:first-child{color:var(--fg);font-weight:500;white-space:nowrap}
 table.dim td:nth-child(2){white-space:nowrap}
+#carFacts .est{font-size:13px;color:var(--muted)}
+#carFacts table.dim td:first-child{white-space:normal;width:42%}
+#carFacts table.dim td:nth-child(2){white-space:normal}
+#carFacts table.dim small{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+#carFacts ul.src{margin:6px 0 0;padding-left:18px}
+#carFacts ul.src li{font-size:12px;color:var(--muted);margin:2px 0}
+#carFacts ul.src a{color:var(--accent)}
+.seg button[hidden]{display:none}
 /* ---- moves, levels, result card ---- */
 #movesV.over{color:var(--warn)}
 .lvDaily{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;border:1px solid rgba(242,194,48,.35);border-radius:12px;background:rgba(242,194,48,.07)}

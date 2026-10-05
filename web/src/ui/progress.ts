@@ -14,11 +14,15 @@ export const progress: Progress = { best: {}, seeds: {}, play: 'garage' };
 try { Object.assign(progress, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch { /* private mode or blocked storage */ }
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(progress)); } catch { /* not saved */ } };
 
-/** Best stars so far; slot is "bays-in:4" for a level or "garage:561:left" for the garage. */
-export const bestStars = (slot: string): number => progress.best[slot] ?? -1;
+/** Stars are kept per car: the Atto 2's under the plain slot names (as before there were other cars), the others'
+ *  with the car's id in front. */
+let carSlot = '';
+export function setStarsCar(id: string): void { carSlot = id === 'byd-atto2' ? '' : id + '|'; }
+/** Best stars so far for the car being driven; slot is "bays-in:4" for a level or "garage:561:left" for the garage. */
+export const bestStars = (slot: string): number => progress.best[carSlot + slot] ?? -1;
 export function recordStars(slot: string, n: number): boolean {
-  const better = n > (progress.best[slot] ?? -1);
-  if (better) { progress.best[slot] = n; save(); }
+  const key = carSlot + slot, better = n > (progress.best[key] ?? -1);
+  if (better) { progress.best[key] = n; save(); }
   return better;
 }
 export const seedFor = (t: TemplateId, level: number): number => progress.seeds[`${t}:${level}`] ?? 1;

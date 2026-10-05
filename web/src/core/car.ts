@@ -20,8 +20,14 @@ export const heroCorners = (v: Vehicle, px: number, pz: number, h: number): Pt[]
 
 /** Front wheel angles (left-positive), [fl, fr], for a single-track angle deltaLeft (radians). */
 export function ackermann(v: Vehicle, deltaLeft: number): [number, number] {
+  return axleAngles(v, deltaLeft, v.WB);
+}
+/** Rear wheel angles (left-positive), [rl, rr]: 0 unless the rear wheels steer, then the other way to the front ones. */
+export const rearAngles = (v: Vehicle, deltaLeft: number): [number, number] => (v.RA ? axleAngles(v, deltaLeft, v.RA) : [0, 0]);
+/** Both wheels of the axle at x square to the line from the turning centre, which sits on the y axis through the origin. */
+function axleAngles(v: Vehicle, deltaLeft: number, x: number): [number, number] {
   if (Math.abs(deltaLeft) < 1e-4) return [0, 0];
   const Rc = v.WB / Math.tan(Math.abs(deltaLeft)), T = v.TRACK;
-  const inner = Math.atan(v.WB / (Rc - T / 2)), outer = Math.atan(v.WB / (Rc + T / 2));
+  const inner = Math.atan(x / (Rc - T / 2)), outer = Math.atan(x / (Rc + T / 2));
   return deltaLeft > 0 ? [inner, outer] : [-outer, -inner];
 }
