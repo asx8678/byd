@@ -9,6 +9,7 @@ import { blendOf, rates } from './dynamics';
 import { DEG, clamp } from './math';
 import { facesRight, parkedIn, placement } from './parking';
 import { predictPath, type Prediction } from './predict';
+import { COUNTRIES } from './country';
 import { Rules, type Fault, type RulesSnap } from './rules';
 import { toBay, type Bay, type Obstacle, type Scene } from './scene';
 import { edgeGaps, scanPdc, type SideValues } from './sensors';
@@ -188,7 +189,10 @@ export class Sim {
     if (Math.abs(this.v) > 0.05 && Math.sign(this.v) !== this.moveSign) { this.moveSign = Math.sign(this.v); this.moves++; }
     // the street: the traffic moves on (never into your car), and the rules judge this step
     if (this.traffic) this.traffic.step(dt, this.view());
-    if (this.rules) for (const fault of this.rules.step({ x: this.x, z: this.z, th: this.th, v: this.v, L: this.vehicle.L, OVR: this.vehicle.OVR, drive }, this.traffic, this.time, dt, touched)) events.push({ type: 'fault', fault });
+    if (this.rules) {
+      const p = { x: this.x, z: this.z, th: this.th, v: this.v, L: this.vehicle.L, W: this.vehicle.W, OVR: this.vehicle.OVR, drive, ind: this.ind, hazard: this.hazard, bay: drive ? '' : this.options.bay, parked: this.parked };
+      for (const fault of this.rules.step(p, this.traffic, this.time, dt, touched)) events.push({ type: 'fault', fault });
+    }
     // sensors only when the car (or a car in traffic near it: the sensors hear those too) has moved; in Drive mode only
     // below 10 km/h
     if (!drive || Math.abs(this.v) < PDC_MAX) {
@@ -216,7 +220,7 @@ export class Sim {
     const net = this.traffic?.net ?? this.scene.net;
     if (!net) return;
     (this.traffic ??= new Traffic(net)).restore(w.traffic);
-    if (w.rules) (this.rules ??= new Rules(net)).restore(w.rules);
+    if (w.rules) (this.rules ??= new Rules(net, COUNTRIES[w.rules.country ?? 'ma'])).restore(w.rules);
   }
 
   /** Speed the pedals ask for, m/s (0 when none is held). */

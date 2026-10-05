@@ -72,7 +72,7 @@ export interface CityMap { spec: MapSpec; seed: number; drive: Drive; scene: Sce
 
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
 /** No parking this close to a junction: 5 m from where the kerbs would meet, and clear of the corner's curve. */
-const clearOf = (corner: number) => Math.max(5, corner + 1);
+export const clearOf = (corner: number): number => Math.max(5, corner + 1);
 
 /** A point of a street at a distance s along it and t across (towards side +1). */
 export function streetPt(st: Street, s: number, t: number): Pt { return st.along === 'x' ? [s, st.c + t] : [st.c + t, s]; }

@@ -1,5 +1,6 @@
 // Setup choices, kept in this browser between visits.
 import { GARAGE_561 } from '../core/content';
+import { COUNTRIES, countryOf, type CountryId } from '../core/country';
 import type { StartName } from '../core/garage';
 
 export interface Settings {
@@ -11,7 +12,8 @@ export interface Settings {
   pdc: 'on' | 'off';      // parking sensors: beeps and display
   center: 'on' | 'off';   // steering self-centres when rolling
   planView: 'car' | 'area';
-  drive: 'right' | 'left';  // on the street, the side traffic keeps to (and you park on)
+  country: CountryId;     // on the street, the rules of the road: Morocco, Germany or the UK
+  drive: 'right' | 'left';  // the side traffic keeps to there (and you park on): the country's
   traffic: 'off' | 'light' | 'busy';   // other cars on the street (the lights work either way)
   district: '2' | '5' | '9';  // how hard the made-up districts are: roomy, average, tight
   layout: number;         // garage layout version these settings were made for
@@ -26,10 +28,12 @@ export interface Settings {
 
 const KEY = 'atto2-garage';
 export const settings: Settings = {
-  car: 'byd-atto2', ras: '10', start: 'left', bay: '561', steer: '2.7', pdc: 'on', center: 'on', planView: 'car', drive: 'right', traffic: 'light', district: '5', layout: 0,
+  car: 'byd-atto2', ras: '10', start: 'left', bay: '561', steer: '2.7', pdc: 'on', center: 'on', planView: 'car', country: 'ma', drive: 'right', traffic: 'light', district: '5', layout: 0,
   layerPath: 'on', layerPivot: 'on', layerSwept: 'off', layerGhost: 'off', layerKerb: 'on', layerNums: 'on',
 };
-try { Object.assign(settings, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch { /* private mode or blocked storage: defaults */ }
+let stored: { country?: string; drive?: string } = {};
+try { stored = JSON.parse(localStorage.getItem(KEY) || '{}'); Object.assign(settings, stored); } catch { /* private mode or blocked storage: defaults */ }
+settings.country = countryOf(stored); settings.drive = COUNTRIES[settings.country].drive;   // settings from before the countries kept their side of the road
 if ((settings.steer as string) === 'real') settings.steer = '2.7';
 if ((settings.steer as string) === 'quick') settings.steer = '1';
 

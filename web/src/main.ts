@@ -22,6 +22,7 @@ import { Recorder, STEP, playback, replayTo, restoreState, stateOf as simState }
 import { starsFor } from './core/score';
 import { Rules } from './core/rules';
 import { PDC_MAX, Sim, type Mode, type ParkedResult, type SimEvent } from './core/sim';
+import { COUNTRIES, theftNote } from './core/country';
 import { DENSITY, TYPES, Traffic, networkOf } from './core/traffic';
 import { beep, horn, updateBeeper } from './ui/audio';
 import { renderCarFacts, renderCarPicker, syncCarPicker } from './ui/cars';
@@ -35,7 +36,7 @@ import { bindLevels, hideResult, renderLevels, showResult } from './ui/levels';
 import { updatePdcDisplay, layoutPdc } from './ui/pdcDisplay';
 import { drawPlan, forgetPrediction, layoutPlan, setCoachDraw, setDriveInfo, setGuide, setStreet, snapView, upRot, viewMoving, type Guide } from './ui/plan';
 import { TEMPLATE_NAMES, bestStars, citySeed, progress, recordStars, seedFor, setCitySeed, setPlaying, setStarsCar } from './ui/progress';
-import { lockDeg, settings } from './ui/settings';
+import { lockDeg, saveSettings, settings } from './ui/settings';
 
 if (!CanvasRenderingContext2D.prototype.roundRect) CanvasRenderingContext2D.prototype.roundRect = function (this: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) { this.rect(x, y, w, h); };
 
@@ -126,7 +127,7 @@ function spawnTraffic(c: CityPlay, at: { x: number; z: number } = c.map.start): 
   c.map.scene.net = net;
   sim.traffic = settings.traffic === 'off' ? Traffic.spawn(net, c.map.seed, 0, at)
     : Traffic.spawn(net, c.map.seed, DENSITY[settings.traffic], at, { leavers: busy ? 5 : 3, couriers: busy ? 2 : 1, thieves: level >= 8 ? 2 : 1, patience: level <= 3 ? 8 : level >= 8 ? 3 : 5 });
-  sim.rules = new Rules(net);
+  sim.rules = new Rules(net, COUNTRIES[settings.country]);
 }
 /** Whether a space is free now: none parked in it for the moment. */
 const freeNow = (s: Slot): boolean => !sim.traffic?.taken(s.id);
@@ -366,7 +367,7 @@ function cityFrame(): void {
     const thief = c.slot?.kind === 'kerb' ? sim.traffic?.thiefIn(c.slot.id) : null;
     if (thief) {
       enterDrive();
-      showBanner('bad', 'A thief took the space', `The ${TYPES[thief.type].name} dived in nose first while you waited. You lose the space, not points: find another one. Next time signal and start reversing sooner.`, null, 7000);
+      showBanner('bad', 'A thief took the space', `The ${TYPES[thief.type].name} dived in nose first while you waited. ${theftNote(sim.rules?.country ?? COUNTRIES[settings.country])} You lose the space, not points: find another. Next time signal and start reversing sooner.`, null, 8000);
       return;
     }
     retarget(c);
@@ -519,7 +520,11 @@ bindControls(sim, {
       else { garagePar(); resetCar(); if (fitsBay(v, GARAGE_561, settings.bay)) showBanner('', `Now driving the ${v.short}`, carNote(v) + (par ? ` Par in bay ${settings.bay}: ${par} ${par === 1 ? 'move' : 'moves'}.` : ''), null, 6000); }
       return;
     }
-    if (key === 'drive') { if (city) playCity(false, city.map.spec.id, city.map.seed); return; }   // the same layout, the traffic on the other side
+    if (key === 'country') {   // the same layout under the other country's rules (and on its side of the road)
+      settings.drive = COUNTRIES[settings.country].drive; saveSettings();
+      if (city) playCity(false, city.map.spec.id, city.map.seed);
+      return;
+    }
     if (key === 'district') { refreshLevels(); return; }
     if (key === 'traffic') { if (city && !replay) { spawnTraffic(city, sim); beginRecording(); } return; }   // the new traffic round where you are
     if (key === 'start' || key === 'bay') { if (level || lesson || city) playGarage(); else { garagePar(); resetCar(); } }
@@ -643,7 +648,7 @@ function handle(events: SimEvent[]): void {
     } else if (e.type === 'parked') {
       beep(880, 0.12, 0.08); setTimeout(() => beep(1320, 0.18, 0.08), 140);
       if (replay) { const c = parkedCard(e.result); showBanner('good', c.title, c.text, c.stats); }
-    } else if (e.fault.kind === 'red' || e.fault.kind === 'speed') {   // a touch has its own banner already
+    } else if (e.fault.kind !== 'crash' && e.fault.kind !== 'touch') {   // a touch has its own banner already
       $('flash').classList.add('on'); setTimeout(() => $('flash').classList.remove('on'), 60); beep(320, 0.25, 0.12);
       showBanner('bad', e.fault.title, e.fault.text + ' It counts against this drive.', null, 3500);
     }
