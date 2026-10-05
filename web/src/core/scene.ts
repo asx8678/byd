@@ -2,6 +2,7 @@
 // the painted lines, the bays it can park in and where it can start. World frame in metres, x to the right,
 // z down the plan; rear-axle poses with heading th (0 = driving to the right, +90° = up the plan).
 import type { CityLayers } from './city';
+import type { Network } from './traffic';
 import { DEG, type Pt } from './math';
 
 export type Rect = [number, number, number, number];   // [x0, x1, z0, z1]
@@ -98,6 +99,8 @@ export interface Scene {
   readonly areaView: Rect; readonly lot: Rect | null;
   /** A street map's extra layers for the plan (core/city.ts); none in a car park or a level. */
   readonly city?: CityLayers;
+  /** A street map's road network, once its traffic has been made: replays and rewinds make their traffic on it again. */
+  net?: Network;
 }
 
 const rect = (a: number[] | undefined): Rect | null => (a ? [a[0], a[1], a[2], a[3]] : null);

@@ -595,7 +595,7 @@ function rewind(): void {
     if (run && ls.mark0.coach) run.restore(ls.mark0.coach);
     ls.tracker.pts.length = Math.min(ls.tracker.pts.length, ls.mark0.track);
   }
-  const p = replayTo(rec, sim.scene, VEHICLES[rec.vehicle] ?? sim.vehicle, n, s => run?.sync(s), s => { ls?.tracker.add(s); run?.observe(s); });
+  const p = ls ? replayTo(rec, sim.scene, VEHICLES[rec.vehicle] ?? sim.vehicle, n, s => run?.sync(s), s => { ls.tracker.add(s); run?.observe(s); }) : replayTo(rec, sim.scene, VEHICLES[rec.vehicle] ?? sim.vehicle, n);
   restoreState(sim, simState(p)); clearPedals(); setPedalMode(sim.mode === 'drive'); recorder.truncate(n, sim); forgetPrediction();
   if (ls) { ls.run = run; ls.rewound = true; }
   tryRewound = true; settledT = 0;
@@ -609,7 +609,7 @@ function handle(events: SimEvent[]): void {
       $('flash').classList.add('on'); setTimeout(() => $('flash').classList.remove('on'), 60); beep(160, 0.2, 0.15);
       showBanner('bad', touchTitle(e.name, e.part), 'Stop, straighten up and back away. Touches: ' + e.hits, null, 2200);
       if (lesson && !replay && !lesson.over) lesson.fault ||= 'touch';
-    } else {
+    } else if (e.type === 'parked') {
       beep(880, 0.12, 0.08); setTimeout(() => beep(1320, 0.18, 0.08), 140);
       if (replay) { const c = parkedCard(e.result); showBanner('good', c.title, c.text, c.stats); }
     }

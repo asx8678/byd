@@ -1,5 +1,6 @@
 // The simulation: one car in one scene, driven by a steering wheel and either hold-to-move pedals (Park mode, the
-// exact low-speed model) or an accelerator and a brake (Drive mode on the street, see dynamics.ts).
+// exact low-speed model) or an accelerator and a brake (Drive mode on the street, see dynamics.ts). On the street the
+// other cars and the lights (traffic.ts) step with it, and the rules of the road (rules.ts) watch your drive.
 // Pure logic with no screen code, so it can be tested and ported as it is. The car and the scene
 // come from data files or the level generator; with no arguments it is the Atto 2 in the garage around bay 561.
 import { collides, type CarPart } from './collision';
@@ -8,8 +9,10 @@ import { blendOf, rates } from './dynamics';
 import { DEG, clamp } from './math';
 import { facesRight, parkedIn, placement } from './parking';
 import { predictPath, type Prediction } from './predict';
+import { Rules, type Fault, type RulesSnap } from './rules';
 import { toBay, type Bay, type Obstacle, type Scene } from './scene';
 import { edgeGaps, scanPdc, type SideValues } from './sensors';
+import { Traffic, type PlayerView, type TrafficSnap } from './traffic';
 import type { Vehicle } from './vehicle';
 
 export interface SimInput {
@@ -36,7 +39,10 @@ export interface ParkedResult {
 
 export type SimEvent =
   | { type: 'touch'; name: string; part: CarPart; hits: number }
-  | { type: 'parked'; result: ParkedResult };
+  | { type: 'parked'; result: ParkedResult }
+  | { type: 'fault'; fault: Fault };
+/** The traffic and the rules as they were between two steps (a recording starts from it; a rewind goes back to it). */
+export interface WorldSnap { traffic: TrafficSnap; rules: RulesSnap | null }
 
 export interface SimOptions { lockDeg: number; selfCentre: boolean; bay: string }
 
@@ -64,6 +70,11 @@ export class Sim {
   readonly gaps: SideValues = { front: 9, rear: 9, left: 9, right: 9 };                          // body outline to the nearest obstacle
   readonly pdc: SideValues = { front: Infinity, rear: Infinity, left: Infinity, right: Infinity };   // closest parking-sensor reading per group
   sensorReadings: number[];
+  /** Your indicator (-1 left, 1 right, 0 off) and hazard lights. An indicator cancels itself once the wheel has been
+   *  turned its way past a quarter turn and comes back, as a real one does. */
+  ind: -1 | 0 | 1 = 0; hazard = false; indArmed = false;
+  /** On the street: the other cars and the lights, and the rules your drive is held to (null elsewhere). */
+  traffic: Traffic | null = null; rules: Rules | null = null;
   private poseSig = '';
 
   constructor(scene: Scene = GARAGE_561, public vehicle: Vehicle = ATTO2) {
@@ -100,6 +111,7 @@ export class Sim {
     this.v = 0; this.wheelAngle = 0; this.wheelTarget = null; this.hits = 0; this.elapsed = 0;
     this.started = false; this.inContact = false; this.parked = false; this.lastMoveDir = 1; this.moves = 0; this.moveSign = 0;
     this.input.fwd = this.input.rev = false; this.input.acc = this.input.brk = 0; this.vy = this.r = this.ax = 0;
+    this.ind = 0; this.hazard = false; this.indArmed = false;
   }
 
   /** Park mode or Drive mode, keeping the speed (Drive mode never reverses) and the turn the car is in. The pedals are
@@ -128,6 +140,7 @@ export class Sim {
     if (this.options.selfCentre && !inp.wheelHeld && !inp.kl && !inp.kr && this.wheelTarget === null && Math.abs(this.v) > 0.05) {   // self-aligning torque returns the wheel
       const rate = Math.min(180, 55 * Math.abs(this.v)); this.wheelAngle = Math.abs(this.wheelAngle) <= rate * dt ? 0 : this.wheelAngle - Math.sign(this.wheelAngle) * rate * dt;
     }
+    if (this.ind) { const w = this.wheelAngle * this.ind; if (w > 90) this.indArmed = true; else if (this.indArmed && w < 20) { this.ind = 0; this.indArmed = false; } }
     const delta = -this.steerDeg * DEG, dyn = this.vehicle.dyn!;
     if (drive) {
       // longitudinal, Drive mode: the accelerator and brake through the tyres; it never rolls backwards
@@ -150,6 +163,7 @@ export class Sim {
     // kinematics with a collision check per substep; in Drive mode above 7 km/h the tyres slip: the car moves by the
     // tyre model's side speed and yaw rate, blended with the low-speed model's up to 18 km/h
     const sub = 4, h = dt / sub, lam = drive ? blendOf(this.v) : 0;
+    let touched: { name: string; traffic: boolean } | null = null;
     for (let i = 0; i < sub && this.v !== 0; i++) {
       let nth: number, nx: number, nz: number;
       if (lam > 0) {
@@ -160,9 +174,10 @@ export class Sim {
       } else {
         nth = this.th + this.v / this.vehicle.WB * Math.tan(delta) * h; nx = this.x + this.v * Math.cos(this.th) * h; nz = this.z - this.v * Math.sin(this.th) * h;
       }
-      const hit = this.touching(nx, nz, nth);
-      if (hit) {
-        if (!this.inContact) { this.inContact = true; this.hits++; events.push({ type: 'touch', name: hit.obstacle.name, part: hit.part, hits: this.hits }); }
+      const hit = this.touching(nx, nz, nth), car = !hit && this.traffic ? this.traffic.touch(this.vehicle, nx, nz, nth) : null;
+      if (hit || car) {
+        const name = hit ? hit.obstacle.name : car!.name, part = hit ? hit.part : car!.part;
+        if (!this.inContact) { this.inContact = true; this.hits++; events.push({ type: 'touch', name, part, hits: this.hits }); touched = { name, traffic: !!car }; }
         this.v = 0; this.vy = 0; this.r = 0; break;
       }
       this.x = nx; this.z = nz; this.th = nth; this.inContact = false;
@@ -170,6 +185,9 @@ export class Sim {
     // below 7 km/h Drive mode is the low-speed model: no side slip, the yaw rate the steering sets
     if (drive && lam === 0) { this.vy = 0; this.r = this.v * Math.tan(delta) / this.vehicle.WB; }
     if (Math.abs(this.v) > 0.05 && Math.sign(this.v) !== this.moveSign) { this.moveSign = Math.sign(this.v); this.moves++; }
+    // the street: the traffic moves on (never into your car), and the rules judge this step
+    if (this.traffic) this.traffic.step(dt, this.view());
+    if (this.rules) for (const fault of this.rules.step({ x: this.x, z: this.z, th: this.th, v: this.v, L: this.vehicle.L, OVR: this.vehicle.OVR, drive }, this.traffic, this.time, dt, touched)) events.push({ type: 'fault', fault });
     // sensors only when the car has moved; in Drive mode only below 10 km/h
     if (!drive || Math.abs(this.v) < PDC_MAX) {
       const ps = this.x.toFixed(4) + ',' + this.z.toFixed(4) + ',' + this.th.toFixed(5);
@@ -181,6 +199,21 @@ export class Sim {
     const parked = this.checkParked(); if (parked) events.push({ type: 'parked', result: parked });
     if (inp.fwd || inp.rev || (drive && inp.acc > 0) || Math.abs(this.v) > 0.05) this.lastDriveT = this.time;
     return events;
+  }
+
+  /** Your car as the traffic sees it. */
+  view(): PlayerView {
+    const v = this.vehicle;
+    return { x: this.x, z: this.z, th: this.th, v: this.v, L: v.L, W: v.W, OVR: v.OVR, ind: this.ind, hazard: this.hazard, park: this.mode === 'park' };
+  }
+  /** The traffic and the rules as they are now (null off the street). */
+  world(): WorldSnap | null { return this.traffic ? { traffic: this.traffic.snapshot(), rules: this.rules?.snapshot() ?? null } : null; }
+  /** Put the traffic and the rules back as a snapshot had them, making them for the scene's road network if need be. */
+  restoreWorld(w: WorldSnap): void {
+    const net = this.traffic?.net ?? this.scene.net;
+    if (!net) return;
+    (this.traffic ??= new Traffic(net)).restore(w.traffic);
+    if (w.rules) (this.rules ??= new Rules(net)).restore(w.rules);
   }
 
   /** Speed the pedals ask for, m/s (0 when none is held). */

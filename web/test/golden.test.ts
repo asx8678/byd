@@ -17,7 +17,7 @@ function replay() {
   const apply = (evs: SimEvent[]) => {
     for (const e of evs) {
       if (e.type === 'touch') { title = touchTitle(e.name, e.part); stats = null; }
-      else { const c = parkedCard(e.result); title = c.title; stats = c.stats.map(([k, v]) => `${k} ${v}`).join(' '); }
+      else if (e.type === 'parked') { const c = parkedCard(e.result); title = c.title; stats = c.stats.map(([k, v]) => `${k} ${v}`).join(' '); }
     }
   };
   const keys: Record<string, (down: boolean) => void> = {
