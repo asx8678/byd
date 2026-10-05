@@ -111,6 +111,7 @@ function setMode(m: Mode): void {
   sim.setMode(m); setPedalMode(sim.mode === 'drive');
   const b = $('btnMode'); b.hidden = !city; b.textContent = sim.mode === 'drive' ? 'Park' : 'Drive'; b.classList.toggle('drive', sim.mode === 'park');
   $('driveBtns').hidden = !city;
+  layout();   // the buttons between the wheel and the pedals change the map's free band
 }
 /** Off the street: Park mode, north up, no speed limit. */
 function leaveCity(): void {
@@ -772,7 +773,7 @@ function tick(now: number): void {
   }
   updateBeeper(S, now / 1000); updatePdcDisplay(S, now / 1000, screen.dpr);
   const lsSig = replay ? '' : drawLesson();
-  const rw = $('btnRewind'), canRw = canRewind(); if (rw.hidden === canRw) rw.hidden = !canRw;
+  const rw = $('btnRewind'), canRw = canRewind(); if (rw.hidden === canRw) { rw.hidden = !canRw; layout(); }
   const layers = settings.layerPath + settings.layerPivot + settings.layerSwept + settings.layerKerb + settings.layerNums;
   const sig = [S.x.toFixed(4), S.z.toFixed(4), S.th.toFixed(5), S.wheelAngle.toFixed(1), S.v.toFixed(3), S.input.fwd, S.input.rev, S.input.acc, S.input.brk, S.mode, settings.planView, !!replay, guide ? guide.at : -1, S.scene.id, lsSig, layers, city?.slot?.id, S.traffic?.t.toFixed(2), S.ind, S.hazard].join('|');   // on the street the traffic and the lights move on
   if (sig === lastSig && now > wakeUntil && now - lastDrawT < 1000 && !viewMoving()) return;

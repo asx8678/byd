@@ -14,6 +14,7 @@ import { SIDES, rangeOf } from '../core/sensors';
 import { PDC_MAX, type Sim } from '../core/sim';
 import { DRIVERS, TYPES, type Traffic } from '../core/traffic';
 import { $, fitCanvas } from './dom';
+import { bannerCar, bannerRoom } from './hud';
 import { settings } from './settings';
 
 const planCv = $<HTMLCanvasElement>('planCv'), ctx = planCv.getContext('2d')!;
@@ -30,9 +31,13 @@ export function layoutPlan(stage: HTMLElement): { top: number; bottom: number; c
   const card = $('coach');
   if (!card.hidden) { card.style.top = hudB + 'px'; hudB = card.getBoundingClientRect().bottom - c.top + 6; }
   $('planInfo').hidden = !card.hidden;
-  const ctlT = Math.min($('wheelWrap').getBoundingClientRect().top, $('pedals').getBoundingClientRect().top) - c.top - 8;
+  const ctlT = Math.min(...['wheelWrap', 'midCol', 'pedals'].map(id => $(id).getBoundingClientRect().top)) - c.top - 8;   // the speed and moves can stand above the wheel on the street
   const fb = W > H ? H - 10 : ctlT;   // landscape: the wheel and pedals sit at the sides, so the car can use the full height
-  $('planInfo').style.top = $('planBtns').style.top = hudB + 'px'; $('planFoot').style.bottom = Math.max(6, H - ctlT + 4) + 'px';
+  $('planInfo').style.top = $('planBtns').style.top = hudB + 'px';
+  const foot = $('planFoot').style;   // what the path runs into, and the scale: above the wheel and pedals (landscape: at the bottom, between their columns)
+  if (W > H) { foot.left = $('midCol').getBoundingClientRect().right - c.left + 8 + 'px'; foot.right = c.right - $('pedals').getBoundingClientRect().left + 8 + 'px'; foot.bottom = '6px'; }
+  else { foot.left = foot.right = ''; foot.bottom = Math.max(6, H - ctlT + 4) + 'px'; }
+  bannerRoom(hudB + 4, Math.min(H - 6, ctlT - 32), H, W > H);
   PV.oyPark = clamp((hudB + 70 + fb - 30) / 2, 0, H); PV.band = Math.max(120, fb - hudB - 100); PV.foot = ctlT - 30;
   PV.top = hudB + 40; PV.oyDrive = clamp(hudB + 0.62 * (fb - hudB), 0, H);   // driving: the car low down (above the banners), the road ahead above it
   if (!PV.init) PV.oy = PV.oyPark;
@@ -226,6 +231,7 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
   const size = fitCanvas(planCv); if (!size) return;
   const { w, h } = size, { x, z, th } = sim, v = sim.vehicle, sc = sim.scene;
   PV.w = w; PV.h = h; follow(sim, dt); zoomed = false;
+  { const mid = v.L / 2 - v.OVR; bannerCar(PS(x + mid * Math.cos(th), z - mid * Math.sin(th))[1], (v.L / 2 + 0.4) * PV.s); }   // keep messages off the car
   const c = ctx, s = PV.s; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.lineJoin = 'round';
   c.fillStyle = '#0d0e12'; c.fillRect(0, 0, w, h);
   // what is on the screen, in the world: the corners of the screen turned back into the map
@@ -408,10 +414,9 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
     c.fillStyle = 'rgba(235,232,223,.6)'; for (const e of [a, b]) { c.beginPath(); c.arc(e[0], e[1], 2, 0, 6.3); c.fill(); }
     const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2; c.fillStyle = 'rgba(13,14,18,.85)'; c.fillRect(mx - 22, my - 8, 44, 16); c.fillStyle = '#d6d3ca'; c.fillText(`${v.L.toFixed(2)} m`, mx, my + 1);
   }
-  // readouts: wheel angles, turning radius, steering wheel; what the path runs into; the scale bar
-  const Rout = Math.abs(dl) > 0.004 ? Math.hypot(Math.abs(v.WB / Math.tan(dl)) + v.TRACK / 2, v.WB) : Infinity, wa = sim.wheelAngle;
-  const steer = `<div><span>Steering</span>${Math.abs(wa) < 1 ? 'centred' : Math.abs(wa).toFixed(0) + '° ' + (wa < 0 ? 'left' : 'right')}</div>`;
-  const info = drive && driveInfo !== null ? driveInfo + streetInfo(sim) + steer : `<div><span>Wheels</span>L ${(fl / DEG).toFixed(1)}° · R ${(fr / DEG).toFixed(1)}°</div><div><span>Turn radius</span>${Rout < 60 ? Rout.toFixed(2) + ' m' : 'straight'}</div>` + steer;
+  // readouts: wheel angles and turning radius (or the street in Drive mode); what the path runs into; the scale bar
+  const Rout = Math.abs(dl) > 0.004 ? Math.hypot(Math.abs(v.WB / Math.tan(dl)) + v.TRACK / 2, v.WB) : Infinity;   // the steering wheel's own turns are on its hub
+  const info = drive && driveInfo !== null ? driveInfo + streetInfo(sim) : `<div><span>Wheels</span>L ${(fl / DEG).toFixed(1)}° · R ${(fr / DEG).toFixed(1)}°</div><div><span>Turn radius</span>${Rout < 60 ? Rout.toFixed(2) + ' m' : 'straight'}</div>`;
   if (info !== infoTxt) { infoTxt = info; $('planInfo').innerHTML = info; placeNums(); }
   const what = p.dir > 0 ? 'Forward' : 'Reversing';
   const ptxt = !showPath || drive ? '' : p.hit ? `${what}: ${p.part ? p.part + ' ' : ''}hits ${p.hit.name} in ${p.dist.toFixed(1)} m` : `${what}: clear for ${p.dist.toFixed(1)} m`;

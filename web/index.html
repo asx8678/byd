@@ -28,38 +28,23 @@
   <div class="edge" id="edgeF"></div><div class="edge" id="edgeR"></div><div class="edge" id="edgeL"></div><div class="edge" id="edgeRt"></div>
 
   <div id="hud">
-    <div id="readout">
-      <div class="row">
-        <div class="tile speed"><div class="k">Speed</div><div class="v"><span id="spd">0.0</span><small>km/h</small></div></div>
-        <div class="tile gear"><div class="k">Gear</div><div class="v" id="gear">P</div></div>
-        <div class="tile"><div class="k">Steer</div><div class="v"><span id="steerV">0°</span></div></div>
-        <div class="tile" id="movesTile"><div class="k" id="movesK">Moves</div><div class="v"><span id="movesV">0</span><small id="parV"></small></div></div>
-      </div>
-      <div class="tile" style="padding:0">
-        <div id="sensors">
-          <div id="lF">Front<b id="sF">–</b></div><div id="lR">Rear<b id="sR">–</b></div><div>Left<b id="sL">–</b></div><div>Right<b id="sRt">–</b></div>
-        </div>
-      </div>
-      <div id="toolbar">
-        <button id="btnReset" type="button">Reset</button>
-        <button id="btnReplay" type="button">Replay</button>
-        <button id="btnShow" type="button">Show me</button>
-        <button id="btnLevels" type="button">Play</button>
-        <button id="btnSettings" type="button">Setup</button>
-        <button id="btnInfo" type="button">Info</button>
-      </div>
+    <div id="toolbar">
+      <button id="btnReset" type="button">Reset</button>
+      <button id="btnReplay" type="button">Replay</button>
+      <button id="btnShow" type="button">Show me</button>
+      <button id="btnLevels" type="button">Play</button>
+      <button id="btnSettings" type="button">Setup</button>
+      <button id="btnInfo" type="button">Info</button>
     </div>
   </div>
 
   <div id="coach" hidden aria-live="polite">
-    <div class="cHead"><b id="cLesson">Lesson</b><span id="cStep"></span><button id="cSlow" type="button" hidden>Slow motion · off</button></div>
+    <div class="cHead"><b id="cLesson">Lesson</b><span id="cStep"></span><button id="cSlow" type="button" hidden>Slow motion · off</button><button id="cMore" type="button" hidden aria-expanded="false" aria-controls="cExtra">More</button></div>
     <div id="cBody">
-      <p id="cSay"></p>
-      <p id="cUntil"></p>
-      <p id="cSee"></p>
+      <p id="cSay"><b id="cDo"></b> <span id="cUntil"></span></p>
+      <p id="cLine"></p>
       <div id="cBar"><i></i><span id="cLeft"></span></div>
-      <p id="cWheel"></p>
-      <p id="cTip"></p>
+      <div id="cExtra"><p id="cSee"></p><p id="cTip"></p></div>
     </div>
     <p id="cBrief" hidden></p>
     <p id="cNote" hidden></p>
@@ -80,13 +65,16 @@
         <circle cx="100" cy="100" r="85" fill="none" stroke="#3a3c45" stroke-width="18"/>
         <path d="M100 100 L26 100 M100 100 L174 100 M100 100 L100 170" stroke="#26272d" stroke-width="22" stroke-linecap="round" fill="none"/>
         <circle cx="100" cy="100" r="31" fill="#1b1c21" stroke="#4a4d58" stroke-width="3"/>
-        <text x="100" y="106" text-anchor="middle" font-size="17" font-weight="700" fill="#9aa0ad" font-family="Barlow Condensed, Barlow, sans-serif" letter-spacing="1">BYD</text>
         <path d="M100 8 l-7 13 h14 z" fill="#f2c230"/>
       </svg>
-      <div id="steerInfo"><b id="steerTurns">0.0</b> turns</div>
+      <div id="steerInfo" aria-label="Steering wheel turns from straight"><b id="steerTurns">0.0</b>turns</div>
       <button id="btnCenter" type="button">Straighten</button>
     </div>
     <div id="midCol">
+      <div id="dash">
+        <div id="dashSpd"><b id="gear" title="Gear">P</b><span id="spd">0.0</span><small>km/h</small></div>
+        <div id="movesTile"><span id="movesK">Moves</span><b id="movesV">0</b><small id="parV"></small></div>
+      </div>
       <div id="driveBtns" hidden>
         <button id="btnIndL" class="ind" type="button" aria-label="Left indicator" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12 L12 4 V9 H21 V15 H12 V20 Z"/></svg></button>
         <button id="btnIndR" class="ind" type="button" aria-label="Right indicator" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12 L12 4 V9 H3 V15 H12 V20 Z"/></svg></button>

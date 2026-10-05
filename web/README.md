@@ -95,7 +95,7 @@ src/ui/        the browser side: drawing, controls, sound, settings
                  street the pavements, blocks and their hatched buildings, car parks, kerbs, zones and names, with
                  detail that fades in as you zoom in (lane lines, bays and parked cars from 2.6 px/m, labels from 7.8)
   pdcDisplay.ts  sensor graphic, STOP card, red screen-edge glow
-  hud.ts         readouts and the banner
+  hud.ts         speed and moves (between the wheel and pedals), the wheel's turns, the banner
   controls.ts    steering wheel, pedals (hold to move; in Drive mode an accelerator and a brake pressed harder
                  higher up), keyboard, the Park/Drive button, Setup, Levels and Info
   levels.ts      the Levels tab of the Play sheet and the result card with its stars

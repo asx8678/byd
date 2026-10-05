@@ -24,12 +24,13 @@ export interface Settings {
   layerGhost: 'on' | 'off';   // the ideal path and its marks, in the garage and levels (lessons follow their help)
   layerKerb: 'on' | 'off';    // a close-up of the wheel nearest a kerb
   layerNums: 'on' | 'off';    // angle to the space, gap to the kerb and either side
+  coachMore: 'on' | 'off';    // the coach card opened up: what you see at the mark and the handbook's tip
 }
 
 const KEY = 'atto2-garage';
 export const settings: Settings = {
   car: 'byd-atto2', ras: '10', start: 'left', bay: '561', steer: '2.7', pdc: 'on', center: 'on', planView: 'car', country: 'ma', drive: 'right', traffic: 'light', district: '5', layout: 0,
-  layerPath: 'on', layerPivot: 'on', layerSwept: 'off', layerGhost: 'off', layerKerb: 'on', layerNums: 'on',
+  layerPath: 'on', layerPivot: 'on', layerSwept: 'off', layerGhost: 'off', layerKerb: 'on', layerNums: 'on', coachMore: 'off',
 };
 let stored: { country?: string; drive?: string } = {};
 try { stored = JSON.parse(localStorage.getItem(KEY) || '{}'); Object.assign(settings, stored); } catch { /* private mode or blocked storage: defaults */ }
