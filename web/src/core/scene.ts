@@ -40,7 +40,28 @@ export interface Bay {
   box?: Rect;
   /** Rear-axle poses that count as well parked, for the route planner. By default worked out from the lines. */
   goals?: { x: number; z: number; th: number }[];
+  /** A bay turned on the map (a car park's, at any angle): then all its numbers, the box and goals included, are in its
+   *  own frame, in which it opens towards +z like every other bay. The frame's origin is at (x, z) on the map and its
+   *  x axis points along heading rot, so a heading th in the bay is th + rot on the map. */
+  frame?: { x: number; z: number; rot: number };
 }
+
+/** A map pose [x, z, th] in a bay's own frame (the same numbers for a bay without one). */
+export function toBay(b: Bay, x: number, z: number, th: number): [number, number, number] {
+  const f = b.frame;
+  if (!f) return [x, z, th];
+  const c = Math.cos(f.rot), s = Math.sin(f.rot), dx = x - f.x, dz = z - f.z;
+  return [dx * c - dz * s, dx * s + dz * c, th - f.rot];
+}
+/** A pose [x, z, th] in a bay's own frame on the map (the same numbers for a bay without one). */
+export function fromBay(b: Bay, x: number, z: number, th = 0): [number, number, number] {
+  const f = b.frame;
+  if (!f) return [x, z, th];
+  const c = Math.cos(f.rot), s = Math.sin(f.rot);
+  return [f.x + x * c + z * s, f.z - x * s + z * c, th + f.rot];
+}
+/** A rectangle [x0, x1, z0, z1] in a bay's own frame as four points on the map. */
+export const bayRect = (b: Bay, [x0, x1, z0, z1]: Rect): Pt[] => ([[x0, z0], [x1, z0], [x1, z1], [x0, z1]] as Pt[]).map(([x, z]) => { const q = fromBay(b, x, z); return [q[0], q[1]] as Pt; });
 export interface Start { x: number; z: number; th: number; label: string }
 
 /** The file format. */

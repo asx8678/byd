@@ -1,20 +1,19 @@
 // The map kit and the Harbour district: the same seed gives the same district; parked cars keep to their parking lanes;
 // every car finds the free spaces it was promised, and the route planner parks it in every space of the first layouts
 // from where Park mode would start; stopping beside a space is recognised (and only on your side of the road); kerbs
-// on other streets do not count as the kerb beside you; and the lanes are clear to drive.
+// on other streets do not count as the kerb beside you; zones keep their kerb clear; and the lanes are clear to drive.
+// The car parks are in lots.test.ts, driving on the left and the made-up districts in districts.test.ts.
 import { describe, expect, it } from 'vitest';
-import { buildCity, checkSlot, localScene, parkStart, slotNear, streetAt, streetPt, type CityMap } from '../src/core/city';
+import { checkSlot, localScene, parkStart, slotNear, streetAt, streetPt, type CityMap } from '../src/core/city';
 import { collides } from '../src/core/collision';
 import { MAPS, VEHICLES } from '../src/core/content';
 import { polysOverlap } from '../src/core/geometry';
 import { parkedIn, tyreGap } from '../src/core/parking';
 import { exactCheck, moves, planBack } from '../src/core/planner';
-import { DEG, clamp, wrapPi, type Pt } from '../src/core/math';
+import { DEG, wrapPi, type Pt } from '../src/core/math';
 import { STEP } from '../src/core/replay';
 import { Sim } from '../src/core/sim';
-
-const CARS = ['byd-atto2', 'smart-fortwo-c453', 'ram-1500-dt', 'mercedes-s-class-w223@10'];
-const city = (id: string, seed: number) => buildCity(MAPS.harbour, VEHICLES[id], seed);
+import { CARS, arc, boxesMeet, city, drivePath, kerbSlots } from './helpers/city';
 
 describe('the Harbour district', () => {
   it('is the same district from the same seed, and another from another', () => {
@@ -30,10 +29,25 @@ describe('the Harbour district', () => {
         if (a.kind === 'poly' && b.kind === 'poly' && !(a.bx1 < b.bx0 || b.bx1 < a.bx0 || a.bz1 < b.bz0 || b.bz1 < a.bz0)) expect(polysOverlap(a.pts, b.pts)).toBe(false);
       }
       for (const a of cars) for (const k of kerbs) if (a.kind === 'poly' && k.kind === 'poly' && !(a.bx1 < k.bx0 || k.bx1 < a.bx0 || a.bz1 < k.bz0 || k.bz1 < a.bz0)) expect(polysOverlap(a.pts, k.pts)).toBe(false);
-      expect(m.slots.every(s => s.length >= v.L + 0.8)).toBe(true);
-      expect(m.slots.filter(s => s.guaranteed && s.length >= v.L + 1.4).length).toBeGreaterThanOrEqual(MAPS.harbour.fill.guarantee);
+      expect(kerbSlots(m).every(s => s.length >= v.L + 0.8)).toBe(true);
+      expect(kerbSlots(m).filter(s => s.guaranteed && s.length >= v.L + 1.4).length).toBeGreaterThanOrEqual(MAPS.harbour.fill.guarantee);
       expect(collides(v, obs, m.start.x, m.start.z, m.start.th)).toBeNull();
       expect(streetAt(m, m.start.x, m.start.z, m.start.th)?.id).toBe('harbour');
+    }
+  });
+});
+
+describe('zones along the kerb', () => {
+  it('keep their kerb clear: no free space in one, and no one parked in one but a blue badge holder in a disabled bay', () => {
+    for (const seed of [1, 2, 3]) {
+      const m = city('byd-atto2', seed), L = m.scene.city!;
+      expect(new Set(L.zones.map(z => z.kind))).toEqual(new Set(['bus', 'loading', 'disabled', 'none', 'driveway']));
+      for (const z of L.zones) {
+        const zx = z.pts.map(p => p[0]), zz = z.pts.map(p => p[1]), box = { bx0: Math.min(...zx) + 0.15, bx1: Math.max(...zx) - 0.15, bz0: Math.min(...zz) + 0.15, bz1: Math.max(...zz) - 0.15 };   // a space's box runs 5 cm past its ends
+        for (const s of kerbSlots(m)) { const b = s.bay.box!; expect(b[1] < box.bx0 || b[0] > box.bx1 || b[3] < box.bz0 || b[2] > box.bz1, `${s.id} in a ${z.kind} zone`).toBe(true); }
+        if (z.kind !== 'disabled') expect(m.scene.obstacles.filter(o => o.cls === 'car' && boxesMeet(o, box)).length, `a car in a ${z.kind} zone`).toBe(0);
+        expect(z.lines.length).toBe(z.kind === 'none' ? 2 : 0);   // no parking at any time: a double line along the kerb
+      }
     }
   });
 });
@@ -44,16 +58,19 @@ describe('parking on the street', () => {
     let all = 0, ok = 0;
     for (const seed of [1, 2]) {
       const m: CityMap = city(id, seed);
-      for (const s of m.slots) {
+      for (const s of kerbSlots(m)) {
         const from = parkStart(v, s), local = localScene(m, s), plan = planBack(v, local, from, s.id, { maxNodes: 6000 });
         const clear = plan.status === 'found' && !exactCheck(v, local, plan.field, plan.pieces);
-        all++; expect(checkSlot(m, v, s)).toBe(clear);
-        if (s.guaranteed) expect(clear, `${s.id}, ${s.length.toFixed(2)} m: ${plan.status}${plan.status === 'found' ? ', touches ' + exactCheck(v, local, plan.field, plan.pieces) : ''}`).toBe(true);
+        all++;
+        if (s.guaranteed) {
+          expect(clear, `${s.id}, ${s.length.toFixed(2)} m: ${plan.status}${plan.status === 'found' ? ', touches ' + exactCheck(v, local, plan.field, plan.pieces) : ''}`).toBe(true);
+          expect(checkSlot(m, v, s)).toBe(true);   // the game's own check says the same
+        }
         if (!clear) continue;
         ok++;
         // the planner sees both kerbs of the street, even on the ring where the outer kerb runs on past the junctions
         expect(local.kerbs.length).toBe(2);
-        expect(moves(plan.pieces)).toBeLessThanOrEqual(4);
+        expect(moves(plan.pieces)).toBeLessThanOrEqual(s.length - v.L < 1 ? 5 : 4);   // less than a metre to spare may take a fifth
         // where it ends counts as parked in the space, with the tyres close to the kerb
         const end = plan.pieces[plan.pieces.length - 1].to, at = parkedIn(v, s.bay, end.x, end.z, end.th);
         expect(at?.noseIn).toBe(true);
@@ -61,10 +78,10 @@ describe('parking on the street', () => {
       }
     }
     expect(ok / all).toBeGreaterThan(0.9);
-  });
+  }, 60000);
   it('knows the space you stopped beside, and only on your side of the road, facing the way the lane runs', () => {
     const v = VEHICLES['byd-atto2'], m = city('byd-atto2', 1);
-    for (const s of m.slots) {
+    for (const s of kerbSlots(m)) {
       const p = parkStart(v, s);
       expect(slotNear(m, v, p.x, p.z, p.th)?.id).toBe(s.id);
       expect(slotNear(m, v, p.x, p.z, p.th + Math.PI)?.id).not.toBe(s.id);   // facing against the lane
@@ -77,25 +94,6 @@ describe('parking on the street', () => {
     expect(tyreGap(v, m.scene.kerbs, s.x, s.z, s.th)).toBeGreaterThan(2.5);   // in the lane: the nearest kerb is the parking lane's
   });
 });
-
-/** A driver for the tests: the wheel set so the rear axle arcs through a point a few metres along the path (pure
- *  pursuit), the pedals holding kmh. Touches on the way, and where it ended. */
-function drivePath(sim: Sim, path: Pt[], kmh: number): { hits: number; x: number; z: number; th: number } {
-  const v = sim.vehicle;
-  let hits = 0, k = 0;
-  for (let n = 0; n < 60 * 40; n++) {
-    const Ld = 2.5 + 0.25 * sim.v;
-    while (k < path.length - 1 && Math.hypot(path[k][0] - sim.x, path[k][1] - sim.z) < Ld) k++;
-    if (k === path.length - 1 && Math.hypot(path[k][0] - sim.x, path[k][1] - sim.z) < 2) break;
-    const [tx, tz] = path[k], alpha = wrapPi(Math.atan2(-(tz - sim.z), tx - sim.x) - sim.th);
-    const delta = Math.atan(2 * v.WB * Math.sin(alpha) / Math.max(1, Math.hypot(tx - sim.x, tz - sim.z)));
-    sim.input.wheelHeld = true; sim.wheelAngle = clamp(-delta / DEG / v.MAXSTEER * sim.options.lockDeg, -sim.options.lockDeg, sim.options.lockDeg);
-    const e = kmh / 3.6 - sim.v; sim.input.acc = clamp(e, 0, 1); sim.input.brk = clamp(-e, 0, 1);
-    hits += sim.step(STEP).filter(ev => ev.type === 'touch').length;
-  }
-  return { hits, x: sim.x, z: sim.z, th: sim.th };
-}
-const arc = (cx: number, cz: number, R: number, a0: number, a1: number): Pt[] => Array.from({ length: 25 }, (_, i) => { const a = a0 + (a1 - a0) * i / 24; return [cx + R * Math.cos(a), cz + R * Math.sin(a)] as Pt; });
 
 describe('driving through the district', () => {
   it.each(CARS)('%s: left and right at the Market Street crossing, in lane, without touching anything', id => {

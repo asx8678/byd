@@ -4,7 +4,7 @@
 import { footprint, heroCorners } from './car';
 import { wheelsOf } from './collision';
 import { DEG, wrapPi } from './math';
-import { besideKerb, type Bay, type Kerb, type Rect } from './scene';
+import { besideKerb, toBay, type Bay, type Kerb, type Rect } from './scene';
 import type { Vehicle } from './vehicle';
 
 export interface InBay { noseIn: boolean; noseOut: boolean; errIn: number; errOut: number }
@@ -12,9 +12,10 @@ export interface InBay { noseIn: boolean; noseOut: boolean; errIn: number; errOu
 /** Where all four corners must be: [x0, x1, z0, z1]. */
 export const bayBox = (b: Bay): Rect => b.box ?? [b.x0 - b.sideTol, b.x1 + b.sideTol, b.headZ, b.z1 + b.mouthTol];
 
-/** null when any corner is outside the bay; otherwise how straight the car is, either way round. */
-export function parkedIn(v: Vehicle, b: Bay, x: number, z: number, th: number): InBay | null {
-  const C = heroCorners(v, x, z, th), [x0, x1, z0, z1] = bayBox(b);
+/** null when any corner is outside the bay; otherwise how straight the car is, either way round. A turned bay is
+ *  judged in its own frame. */
+export function parkedIn(v: Vehicle, b: Bay, wx: number, wz: number, wth: number): InBay | null {
+  const [x, z, th] = toBay(b, wx, wz, wth), C = heroCorners(v, x, z, th), [x0, x1, z0, z1] = bayBox(b);
   const inside = C.every(p => p[0] >= x0 && p[0] <= x1 && p[1] >= z0 && p[1] <= z1);
   if (!inside) return null;
   const errIn = wrapPi(th - b.inHeading), errOut = wrapPi(th - b.inHeading - Math.PI);
@@ -40,7 +41,7 @@ export function tyreGap(v: Vehicle, kerbs: readonly Kerb[], x: number, z: number
 /** How a parked car sits: off centre across the bay (m, + to the right as you sit in the car), degrees off straight, tyres to the kerb (m). */
 export interface Placement { offCentre: number; angle: number; kerbGap: number }
 export function placement(v: Vehicle, b: Bay, kerbs: readonly Kerb[], x: number, z: number, th: number, at: InBay): Placement {
-  const cs = Math.cos(th), cx = x + (v.WB / 2) * cs;
+  const [bx, , bth] = toBay(b, x, z, th), cx = bx + (v.WB / 2) * Math.cos(bth);
   return {
     offCentre: b.kind === 'exit' ? 0 : (at.noseIn ? 1 : -1) * (cx - (b.x0 + b.x1) / 2), angle: (at.noseIn ? at.errIn : at.errOut) / DEG,
     kerbGap: b.kind === 'kerb' ? tyreGap(v, kerbs, x, z, th) : Infinity,

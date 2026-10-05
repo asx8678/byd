@@ -5,7 +5,7 @@ import { collides } from './collision';
 import { Field } from './field';
 import { DEG, wrapPi } from './math';
 import { facesRight, isNeat, parkedIn, placement } from './parking';
-import type { Bay, Scene } from './scene';
+import { fromBay, type Bay, type Scene } from './scene';
 import type { Vehicle } from './vehicle';
 
 export interface Pose { x: number; z: number; th: number }
@@ -204,10 +204,15 @@ export function fieldFor(v: Vehicle, scene: Scene): Field {
 /** Poses parked in a bay: its own list when it has one, else centred in the lines from deep to shallow,
  *  nose in, or reversed in when the bay asks for that (bays open towards +z, head towards -z). */
 export function bayGoals(v: Vehicle, b: Bay): Pose[] {
-  if (b.goals) return b.goals.map(g => ({ x: g.x, z: g.z, th: g.th }));
-  const cx = (b.x0 + b.x1) / 2, out: Pose[] = [], back = b.face === 'out';
-  for (let end = b.headZ + 0.35; end + v.L <= b.z1 + b.mouthTol - 0.02; end += 0.1) out.push(back ? { x: cx, z: end + v.OVR, th: b.inHeading + Math.PI } : { x: cx, z: end + (v.L - v.OVR), th: b.inHeading });
-  return out;
+  let out: Pose[];
+  if (b.goals) out = b.goals.map(g => ({ x: g.x, z: g.z, th: g.th }));
+  else {
+    const cx = (b.x0 + b.x1) / 2, back = b.face === 'out';
+    out = [];
+    for (let end = b.headZ + 0.35; end + v.L <= b.z1 + b.mouthTol - 0.02; end += 0.1) out.push(back ? { x: cx, z: end + v.OVR, th: b.inHeading + Math.PI } : { x: cx, z: end + (v.L - v.OVR), th: b.inHeading });
+  }
+  if (!b.frame) return out;
+  return out.map(p => { const [x, z, th] = fromBay(b, p.x, p.z, p.th); return { x, z, th }; });   // a turned bay's, on the map
 }
 
 /** Whether the car can stand in the bay at all: a parked pose in it that touches nothing. */

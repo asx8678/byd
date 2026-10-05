@@ -5,7 +5,8 @@
   "notes": [
     "Map frame: x east, y north, metres. Each road runs the whole grid, from the outermost road on one side to the outermost on the other, so every street ends at a junction.",
     "A side is the right or left side as you drive along the road towards +x (an x road) or +y (a y road). Traffic keeps right: on each side the parked cars face the way its lane runs.",
-    "park: the parking lane's width (none: no parking on that side). walk: the pavement's width. Zones run along a side, from and to measured along the road."
+    "park: the parking lane's width (none: no parking on that side). walk: the pavement's width. Zones run along a side, from and to measured along the road: bus (a stop), loading, none (no parking at any time), disabled (a bay for blue badge holders) or driveway; you may not park in any.",
+    "A lot is a car park inside a block: rect is the room it may take ([x0, y0, x1, y1], behind the pavements); it takes what its aisles and rows need, against the road its driveway comes from (entry), lined up with the aisle nearest at. Bays at 90° have two-way aisles; at 60° and 45° the aisles are one way and take turns."
   ],
   "drive": "right",
   "bounds": [-118, -80, 135, 92],
@@ -20,7 +21,16 @@
   ],
   "zones": [
     { "road": "harbour", "side": "left", "from": 34, "to": 56, "kind": "bus" },
-    { "road": "harbour", "side": "right", "from": -62, "to": -50, "kind": "loading" }
+    { "road": "harbour", "side": "right", "from": -62, "to": -50, "kind": "loading" },
+    { "road": "market", "side": "right", "from": -26.6, "to": -20, "kind": "disabled" },
+    { "road": "mill", "side": "right", "from": 30, "to": 46, "kind": "none" },
+    { "road": "quay", "side": "left", "from": 60, "to": 78, "kind": "none" },
+    { "road": "ropewalk", "side": "right", "from": -50, "to": -46, "kind": "driveway" }
+  ],
+  "lots": [
+    { "id": "P1", "name": "Harbour car park", "rect": [56, -51.6, 104, -8.6], "aisles": "x", "angle": 90, "bay": [2.5, 5.0], "aisle": 6.0, "entry": "harbour", "at": 60 },
+    { "id": "P2", "name": "Market car park", "rect": [-44, -51.6, 1.6, -8.6], "aisles": "x", "angle": 60, "bay": [2.5, 5.0], "aisle": 4.6, "entry": "market", "at": -20 },
+    { "id": "P3", "name": "Ropewalk car park", "rect": [60, 8.6, 104, 62], "aisles": "y", "angle": 45, "bay": [2.5, 5.0], "aisle": 4.0, "entry": "ropewalk", "at": 80 }
   ],
   "harbourSide": "south",
   "fill": { "occupancy": 0.86, "sloppiness": 0.12, "guarantee": 5 },

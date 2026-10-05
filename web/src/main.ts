@@ -5,7 +5,10 @@ import './style.css';
 import { CoachRun, Tracker, feedback, timingCause, type CoachEvent, type CoachSnap, type Feedback, type Step } from './core/coach';
 import type { CheckDone, CheckJob } from './cityCheck.worker';
 import CheckWorker from './cityCheck.worker?worker&inline';
-import { buildCity, checkSlot, localScene, slotNear, streetAt, streetPt, type CityMap, type Slot } from './core/city';
+import { buildCity, checkSlot, localScene, lotAt, parkStart, slotMid, slotNear, slotPlace, streetAt, type CityMap, type MapSpec, type Slot } from './core/city';
+import { districtId, districtLevel, generateDistrict } from './core/district';
+import { alongHeading, lotFit } from './core/lot';
+import { toBay } from './core/scene';
 import { ATTO2, GARAGE_561, MAPS, VEHICLES, vehicleFor } from './core/content';
 import { V_KIN } from './core/dynamics';
 import { generate, parseKey, timeLimit, type Level } from './core/generator/level';
@@ -73,11 +76,13 @@ interface LessonPlay {
 let lesson: LessonPlay | null = null;
 
 /** On the street: the district; in Park mode, the space being parked in, where that try began and how the map stays
- *  turned; the last space you drove on from (stopping beside it again does not start Park mode) and the last one a
- *  banner pointed out. */
-interface CityPlay { map: CityMap; slot: Slot | null; from: Pose | null; lockRot: number | null; declined: string; hinted: string; streetId: string }
+ *  turned; the last space you drove on from (stopping beside it again does not start Park mode), the last one a
+ *  banner pointed out, the street or car park you are on (for the speed limit) and the car park last introduced. */
+interface CityPlay { map: CityMap; slot: Slot | null; from: Pose | null; lockRot: number | null; declined: string; hinted: string; streetId: string; lotHint: string }
 let city: CityPlay | null = null;
 const cityKey = (m: CityMap) => `city:${m.spec.id}:${m.seed}`;
+/** The side you park on in the street: the side traffic keeps to. */
+const kerbSide = (): string => (city?.map.drive ?? settings.drive);
 
 /** The car chosen in Setup: the garage, the levels and the lessons all use it. */
 const chosenCar = (): Vehicle => vehicleFor(settings.car, parseFloat(settings.ras));
@@ -114,7 +119,7 @@ let checker: Worker | null = null;
 function checkSpaces(c: CityPlay): void {
   checker?.terminate(); checker = null;
   try { checker = new CheckWorker(); } catch { return; }
-  const v = sim.vehicle, s0 = c.map.start, mid = (s: Slot) => streetPt(s.street, (s.a0 + s.a1) / 2, 0);
+  const v = sim.vehicle, s0 = c.map.start, mid = slotMid;
   const order = c.map.slots.slice().sort((a, b) => Math.hypot(mid(a)[0] - s0.x, mid(a)[1] - s0.z) - Math.hypot(mid(b)[0] - s0.x, mid(b)[1] - s0.z)).map(s => s.id);
   checker.onmessage = (e: MessageEvent<CheckDone>) => {
     if (city !== c || e.data.seed !== c.map.seed) return;
@@ -122,7 +127,7 @@ function checkSpaces(c: CityPlay): void {
     if (s && s.parkable === undefined) { s.parkable = e.data.parkable; syncStreet(); }
   };
   checker.onerror = () => { checker?.terminate(); checker = null; };
-  checker.postMessage({ spec: c.map.spec, car: v.spec, rearDeg: v.REAR_DEG, seed: c.map.seed, order } satisfies CheckJob);
+  checker.postMessage({ spec: c.map.spec, car: v.spec, rearDeg: v.REAR_DEG, seed: c.map.seed, drive: c.map.drive, order } satisfies CheckJob);
 }
 const syncStreet = () => setStreet(city ? { slots: city.map.slots, target: city.slot, lockRot: city.lockRot } : null);
 /** Paint a message first, then do the slow part (generating a level, planning a route) on the next frame,
@@ -183,9 +188,13 @@ function playGarage(): void {
   snapView(); resetCar(); refreshLevels();
 }
 const refreshLevels = () => {
-  const v = chosenCar(), map = MAPS.harbour;
-  renderLevels(level ? level.key : lesson ? '' : city ? 'city' : 'garage', garageName(), garageSlot(),
-    { name: map.name, sub: `Drive around, then park on the street · layout ${city ? city.map.seed : citySeed(map.id)}`, stars: bestStars(`city:${map.id}`) });
+  const v = chosenCar(), map = MAPS.harbour, made = city && districtLevel(city.map.spec.id) !== null;
+  // the made-up district at the chosen level: the one you are in, or the one its last layout makes
+  const gl = +settings.district, gid = districtId(gl), gSeed = made && city!.map.spec.id === gid ? city!.map.seed : citySeed(gid), gen = generateDistrict(gSeed, gl);
+  const word = gl <= 3 ? 'roomy' : gl >= 8 ? 'tight' : 'average';
+  renderLevels(level ? level.key : lesson ? '' : city ? (made ? 'district' : 'city') : 'garage', garageName(), garageSlot(),
+    { name: map.name, sub: `Drive around, then park on the street${map.lots?.length ? ' or in a car park' : ''} · layout ${city && !made ? city.map.seed : citySeed(map.id)}`, stars: bestStars(`city:${map.id}`) },
+    { name: gen.name, sub: `Made up for you, ${word} · ${gen.roads.length} streets${gen.lots?.length ? `, ${gen.lots.length === 1 ? 'a car park' : `${gen.lots.length} car parks`}` : ''} · layout ${gSeed}`, stars: bestStars(`city:${gid}`) });
   renderCourse(lesson ? lesson.L.def.id : null, v);
   $('lvCar').textContent = v === ATTO2 ? '' : `Built for the ${v.short}: the bays grow for a car bigger than the Atto 2, the aisles and kerb spaces stay as they are.`; $('lvCar').hidden = v === ATTO2;
   $('crsCar').textContent = `Worked out for the ${v.short}: its own routes, marks and numbers, and its own progress. A lesson it cannot do here is greyed out.`; $('crsCar').hidden = v === ATTO2;
@@ -194,16 +203,18 @@ const newSeed = () => 1 + Math.floor(Math.random() * 99999);
 
 // ---- the street ----
 
+/** A street map by its id: a hand-made one, or a made-up district (gen5: level 5) from its layout number. */
+const mapFor = (id: string, seed: number): MapSpec | null => MAPS[id] ?? (districtLevel(id) !== null ? generateDistrict(seed, districtLevel(id)!) : null);
 /** A district for the chosen car (its free spaces are worked out for it): its last layout, or a new one. */
 function playCity(fresh: boolean, id = 'harbour', seed = fresh ? newSeed() : citySeed(id)): void {
   stopReplay(); hideGuide(); closeSheets();
-  const map = MAPS[id] ?? MAPS.harbour;
+  const map = mapFor(id, seed) ?? MAPS.harbour;
   showBanner('', 'Building the district…', `${map.name}, layout ${seed}`, null);
-  afterPaint(() => enterCity(buildCity(map, chosenCar(), seed)));
+  afterPaint(() => enterCity(buildCity(map, chosenCar(), seed, settings.drive)));
 }
 function enterCity(map: CityMap): void {
   leaveLesson(); level = null; useCar(chosenCar());
-  city = { map, slot: null, from: null, lockRot: null, declined: '', hinted: '', streetId: '' };
+  city = { map, slot: null, from: null, lockRot: null, declined: '', hinted: '', streetId: '', lotHint: '' };
   sim.load(map.scene); setRoute([]); setCitySeed(map.spec.id, map.seed); setPlaying(cityKey(map));
   snapView(); resetCar(); refreshLevels(); checkSpaces(city);
 }
@@ -214,14 +225,15 @@ function resetCity(): void {
   if (c.slot && c.from) {
     sim.resetAt(c.from.x, c.from.z, c.from.th); setMode('park'); applySettings(); forgetPrediction(); clearPedals();
     settledT = 0; tryOver = false; tryRewound = false; beginRecording();
-    showBanner('', `Park on ${c.slot.street.name} · again`, `The ${fmtLen(c.slot.length)} space on your right.${par ? ` Par: ${par} ${par === 1 ? 'move' : 'moves'}.` : ''}`, null, 5000);
+    showBanner('', `Park ${c.slot.kind === 'lot' ? 'in' : 'on'} ${slotPlace(c.slot)} · again`, `${c.slot.kind === 'lot' ? `Bay ${c.slot.at.n}, or any free bay.` : `The ${fmtLen(c.slot.length)} space on your ${kerbSide()}.`}${par ? ` Par: ${par} ${par === 1 ? 'move' : 'moves'}.` : ''}`, null, 5000);
     return;
   }
   const s = c.map.start;
-  sim.resetAt(s.x, s.z, s.th); c.slot = null; c.from = null; c.lockRot = null; c.declined = ''; c.hinted = '';
+  sim.resetAt(s.x, s.z, s.th); c.slot = null; c.from = null; c.lockRot = null; c.hinted = ''; c.lotHint = '';
+  c.declined = slotNear(c.map, sim.vehicle, s.x, s.z, s.th)?.id ?? '';   // a space beside the start waits until you have driven on
   setMode('drive'); applySettings(); setRoute([]); syncStreet(); forgetPrediction(); clearPedals(); snapView();
   settledT = 0; tryOver = false; tryRewound = false; beginRecording();
-  showBanner('', c.map.spec.name, 'Drive along the streets and park in a free space on your right, between the cars. Stop beside one and Park mode takes over. Accelerator and brake: higher up on the button for more.', null, 9000);
+  showBanner('', c.map.spec.name, `Drive along the streets and park in a free space on your ${kerbSide()}, between the cars${c.map.lots.length ? ', or in a car park' : ''}. Stop beside one and Park mode takes over. Accelerator and brake: higher up on the button for more.`, null, 9000);
 }
 const fmtLen = (m: number) => `${(m + 1e-9).toFixed(1)} m`;
 /** Into Park mode beside a space (or anywhere, with no space to aim for): Forward and Reverse, the map holds still, and
@@ -229,17 +241,52 @@ const fmtLen = (m: number) => `${(m + 1e-9).toFixed(1)} m`;
 function enterPark(slot: Slot | null): void {
   const c = city!, v = sim.vehicle;
   setMode('park'); clearPedals();
-  c.slot = slot; c.from = { x: sim.x, z: sim.z, th: sim.th }; c.lockRot = upRot(slot ? slot.th : sim.th); applySettings();
+  c.slot = slot; c.from = { x: sim.x, z: sim.z, th: sim.th }; c.lockRot = upRot(slot?.kind === 'lot' ? aisleHeading(slot) : slot ? slot.th : sim.th); applySettings();
   Object.assign(sim, { hits: 0, elapsed: 0, moves: 0, moveSign: 0, started: false, parked: false });
   settledT = 0; tryOver = false; tryRewound = false; setRoute([]); syncStreet(); hideGuide(); forgetPrediction(); beginRecording();
-  if (!slot) { showBanner('', 'Park mode', 'Forward and Reverse, as in the garage. There is no free space here that your car fits: tap Drive to drive on.', null, 5000); return; }
-  showBanner('', `Park mode · ${fmtLen(slot.length)} space`, `On your right, ${fmtLen(slot.length - v.L)} longer than your car. Forward and Reverse, as in the garage; Show me has the route.`, null, 6000);
-  const from = c.from;
+  if (!slot) {
+    const lot = lotAt(c.map, sim.x, sim.z), why = lot ? lotFit(lot, v) : '';
+    showBanner('', 'Park mode', why ? `${why} Tap Drive and find a space on the street.` : 'Forward and Reverse, as in the garage. There is no free space here that your car fits: tap Drive to drive on.', null, 5000);
+    return;
+  }
+  if (slot.kind === 'lot') {
+    const [W, D] = slot.lot.size, way = slot.lot.angle === 90 ? 'Nose first or reversed in: either counts.' : 'Nose first: the bays lean the way the aisle runs.';
+    showBanner('', `Park mode · bay ${slot.at.n}`, `On your ${bayOnRight(slot) ? 'right' : 'left'}, ${W.toFixed(1)} × ${D.toFixed(1)} m, or any free bay. ${way} Show me has the route.`, null, 6000);
+  } else showBanner('', `Park mode · ${fmtLen(slot.length)} space`, `On your ${kerbSide()}, ${fmtLen(slot.length - v.L)} longer than your car. Forward and Reverse, as in the garage; Show me has the route.`, null, 6000);
+  planPar(c, slot);
+}
+/** Par for a try: the planner's route from where the try began into the space, worked out after the next paint. */
+function planPar(c: CityPlay, slot: Slot): void {
+  const from = c.from, v = sim.vehicle;
   afterPaint(() => {
-    if (city !== c || c.slot !== slot || c.from !== from) return;
+    if (city !== c || c.slot !== slot || c.from !== from || !from) return;
     const plan = planBack(v, localScene(c.map, slot), from, slot.id, { maxNodes: 6000 });
-    if (plan.status === 'found') setRoute(plan.pieces);
+    setRoute(plan.status === 'found' ? plan.pieces : []);
   });
+}
+/** A car park's aisle as you face along it: the map turns so it runs up the screen. */
+function aisleHeading(slot: Slot & { kind: 'lot' }): number {
+  const a = alongHeading(slot.lot.along, 1);
+  return Math.cos(sim.th - a) >= 0 ? a : alongHeading(slot.lot.along, -1);
+}
+/** Whether a bay's mouth is on the car's right. */
+function bayOnRight(slot: Slot & { kind: 'lot' }): boolean {
+  const [mx, mz] = slot.at.mouth;
+  return (mx - sim.x) * Math.sin(sim.th) + (mz - sim.z) * Math.cos(sim.th) > 0;
+}
+/** In Park mode in a car park any free bay counts: the one the car is pulling into becomes the space (and par is worked
+ *  out again for it). */
+function retarget(c: CityPlay): void {
+  const cur = c.slot; if (cur?.kind !== 'lot') return;
+  const v = sim.vehicle, mx = sim.x + (v.L / 2 - v.OVR) * Math.cos(sim.th), mz = sim.z - (v.L / 2 - v.OVR) * Math.sin(sim.th);
+  for (const s of c.map.slots) {
+    if (s === cur || s.kind !== 'lot' || s.lot !== cur.lot || s.parkable === false) continue;
+    const b = s.bay, [x, z] = toBay(b, mx, mz, 0);
+    if (x < b.x0 || x > b.x1 || z < b.z0 || z > b.z1) continue;
+    c.slot = s; applySettings(); syncStreet(); setRoute([]); planPar(c, s);
+    showBanner('', `Bay ${s.at.n} then`, 'Any free bay counts.', null, 2500);
+    return;
+  }
 }
 /** Back into Drive mode: the accelerator and brake, the map turning with you. */
 function enterDrive(): void {
@@ -264,27 +311,39 @@ function switchMode(): void {
 function cityFrame(): void {
   const c = city; if (!c || replay) return;
   const v = sim.vehicle;
+  const lot = lotAt(c.map, sim.x, sim.z);
   if (sim.mode === 'drive') {
+    // into a car park: its speed limit and how it works, once each time (or why your car will not fit its bays)
+    if (lot && c.lotHint !== lot.id) {
+      c.lotHint = lot.id; const why = lotFit(lot, v);
+      showBanner(why ? 'bad' : '', lot.name, why ? `${why} Look for a space on the street.` : `${lot.limit} km/h. Stop in an aisle beside a free bay and Park mode takes over: ${lot.angle === 90 ? 'nose first or reversed in' : 'nose first, the way the bays lean'}.`, null, 5000);
+    }
+    if (!lot) c.lotHint = '';
     let near = sim.v < 15 / 3.6 ? slotNear(c.map, v, sim.x, sim.z, sim.th) : null;
     // a space the planner cannot park your car in drops off the map (checked in the background; without a worker, the
     // first time you slow down beside it)
     if (near && near.parkable === undefined && !checker) checkSlot(c.map, v, near);
     if (near && near.parkable === false) {
-      if (c.hinted !== near.id) { c.hinted = near.id; showBanner('', `Too tight for the ${v.short}`, `This ${fmtLen(near.length)} space has room for your car, but no way in that the planner could find. Look for a longer one.`, null, 4000); }
+      if (c.hinted !== near.id) { c.hinted = near.id; showBanner('', `Too tight for the ${v.short}`, `This ${near.kind === 'lot' ? 'bay' : `${fmtLen(near.length)} space`} has room for your car, but no way in that the planner could find. Look for ${near.kind === 'lot' ? 'another' : 'a longer one'}.`, null, 4000); }
       syncStreet(); near = null;
     }
     if (!near) c.declined = '';
     else if (near.id !== c.declined) {
       if (sim.v < 0.1 && pedals.acc === 0) enterPark(near);
-      else if (c.hinted !== near.id) { c.hinted = near.id; showBanner('', `A ${fmtLen(near.length)} space on your right`, 'Stop beside it, level with the car in front of it, and Park mode takes over.', null, 3500); }
+      else if (c.hinted !== near.id && near.kind === 'kerb') { c.hinted = near.id; showBanner('', `A ${fmtLen(near.length)} space on your ${kerbSide()}`, 'Stop beside it, level with the car in front of it, and Park mode takes over.', null, 3500); }
     }
-  } else if (sim.v > PDC_MAX && pedals.fwd) {
-    enterDrive(); showBanner('', 'Drive mode', 'Your finger on Forward is now the accelerator.', null, 3000);
+  } else {
+    retarget(c);
+    if (sim.v > PDC_MAX && pedals.fwd) { enterDrive(); showBanner('', 'Drive mode', 'Your finger on Forward is now the accelerator.', null, 3000); }
   }
-  const st = sim.mode === 'drive' ? streetAt(c.map, sim.x, sim.z, sim.th) : null, id = st?.id ?? '';
-  if (id !== c.streetId) { c.streetId = id; setDriveInfo(st ? `<div><span>Street</span>${st.name}</div>` : ''); setLimit(st ? st.limit : null); }
+  const st = sim.mode === 'drive' ? streetAt(c.map, sim.x, sim.z, sim.th) : null, inLot = sim.mode === 'drive' && !st ? lot : null, id = st?.id ?? inLot?.id ?? '';
+  if (id !== c.streetId) {
+    c.streetId = id;
+    setDriveInfo(st ? `<div><span>Street</span>${st.name}</div>` : inLot ? `<div><span>Car park</span>${inLot.name}</div>` : '');
+    setLimit(st ? st.limit : inLot ? inLot.limit : null);
+  }
 }
-bindLevels({ playLevel, playGarage, playCity });
+bindLevels({ playLevel, playGarage, playCity, playDistrict: fresh => playCity(fresh, districtId(+settings.district)) });
 
 // ---- lessons ----
 
@@ -421,6 +480,8 @@ bindControls(sim, {
       else { garagePar(); resetCar(); if (fitsBay(v, GARAGE_561, settings.bay)) showBanner('', `Now driving the ${v.short}`, carNote(v) + (par ? ` Par in bay ${settings.bay}: ${par} ${par === 1 ? 'move' : 'moves'}.` : ''), null, 6000); }
       return;
     }
+    if (key === 'drive') { if (city) playCity(false, city.map.spec.id, city.map.seed); return; }   // the same layout, the traffic on the other side
+    if (key === 'district') { refreshLevels(); return; }
     if (key === 'start' || key === 'bay') { if (level || lesson || city) playGarage(); else { garagePar(); resetCar(); } }
     else { applySettings(); if (!replay && (key === 'steer' || key === 'center')) beginRecording(); }   // only these change how the car steps
   },
@@ -442,7 +503,7 @@ function startGuide(pieces: Piece[], now: number): void {
 function showMe(now: number): void {
   if (replay) return;
   if (lesson?.st.help === 3) { showBanner('', 'No help in the test', 'Two misses bring the help back. Tap Reset to start the try again.', null, 3500); return; }
-  if (city && !city.slot) { showBanner('', 'Show me parks you', sim.mode === 'drive' ? 'Stop beside a free space on your right: Park mode takes over, and Show me has the route in.' : 'There is no space here to show the way into: tap Drive and find one.', null, 4000); return; }
+  if (city && !city.slot) { showBanner('', 'Show me parks you', sim.mode === 'drive' ? `Stop beside a free space on your ${kerbSide()}: Park mode takes over, and Show me has the route in.` : 'There is no space here to show the way into: tap Drive and find one.', null, 4000); return; }
   const from: Pose = { x: sim.x, z: sim.z, th: sim.th }, s0 = parRoute[0]?.from;
   if (s0 && Math.hypot(from.x - s0.x, from.z - s0.z) < 0.05 && Math.abs(wrapPi(from.th - s0.th)) < DEG) { if (lesson) startWatch(); else startGuide(parRoute, now); return; }
   showBanner('', 'Working out a route…', 'From where your car is now.', null);
@@ -501,7 +562,7 @@ function parkedOnStreet(r: ParkedResult, c: CityPlay, slot: Slot): void {
   setTimeout(() => {
     if (!sim.parked || replay || city !== c || c.slot !== slot) return;
     showResult(r, st, {
-      title: `Parked on ${slot.street.name}`, sub: `${c.map.spec.name} · layout ${c.map.seed} · ${fmtLen(slot.length)} space${par ? ` · par ${par}` : ''}`, par: par || r.moves, limit: limit || r.elapsed, better,
+      title: `Parked ${slot.kind === 'lot' ? 'in' : 'on'} ${slotPlace(slot)}`, sub: `${c.map.spec.name} · layout ${c.map.seed} · ${slot.kind === 'lot' ? `bay ${slot.at.n}` : `${fmtLen(slot.length)} space`}${par ? ` · par ${par}` : ''}`, par: par || r.moves, limit: limit || r.elapsed, better,
       retry: resetCar, newLayout: () => playCity(true, id),
       next: () => { hideResult(); c.declined = slot.id; c.slot = null; c.from = null; applySettings(); syncStreet(); showBanner('', 'Drive on', 'Pull out with Forward and Reverse. Above 10 km/h Drive mode takes over, or tap Drive.', null, 5000); },
       nextLabel: 'Drive on',
@@ -639,8 +700,9 @@ function start(saved: Saved = {}): void {
   const play = saved.play ?? progress.play;
   useCar(chosenCar());
   const cityPlay = /^city:([a-z0-9-]+):(\d+)$/.exec(play);
-  if (cityPlay && MAPS[cityPlay[1]]) {   // back on the street, in Drive mode, where you were if the layout is the same
-    enterCity(buildCity(MAPS[cityPlay[1]], chosenCar(), +cityPlay[2]));
+  const cityMap = cityPlay ? mapFor(cityPlay[1], +cityPlay[2]) : null;
+  if (cityPlay && cityMap) {   // back on the street, in Drive mode, where you were if the layout is the same
+    enterCity(buildCity(cityMap, chosenCar(), +cityPlay[2], settings.drive));
     if (typeof saved.x === 'number' && typeof saved.z === 'number' && typeof saved.th === 'number' && saved.scene === sim.scene.id && (saved.car ?? ATTO2.id) === sim.vehicle.id && !sim.touching(saved.x, saved.z, saved.th)) {
       sim.place(saved.x, saved.z, saved.th); sim.wheelAngle = saved.wheelAngle || 0; city!.declined = slotNear(city!.map, sim.vehicle, saved.x, saved.z, saved.th)?.id ?? ''; beginRecording();
     }
@@ -662,7 +724,7 @@ if (hot?.ready) hot.ready(start); else start(hot?.data ?? {});
 
 // browser checks only (`vite build --mode harness`); other builds drop this
 if (import.meta.env.MODE === 'harness') Object.assign(window, { __game: {
-  sim, level: () => level, route: () => parRoute, lesson: () => lesson, city: () => city, pedals, enterLesson, playCity, switchMode,
+  sim, level: () => level, route: () => parRoute, lesson: () => lesson, city: () => city, pedals, enterLesson, playCity, switchMode, parkStart,
   /** Time the planner's check of a free space (ms), as the game runs it when you slow down beside one. */
   timeCheck: (i: number) => { const c = city!, s = c.map.slots[i], t0 = performance.now(); s.parkable = undefined; checkSlot(c.map, sim.vehicle, s); return performance.now() - t0; },
   /** Run the frame loop for ms of game time at 30 frames a second (automation tabs get no animation frames). */

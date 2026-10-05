@@ -11,6 +11,8 @@ export interface Settings {
   pdc: 'on' | 'off';      // parking sensors: beeps and display
   center: 'on' | 'off';   // steering self-centres when rolling
   planView: 'car' | 'area';
+  drive: 'right' | 'left';  // on the street, the side traffic keeps to (and you park on)
+  district: '2' | '5' | '9';  // how hard the made-up districts are: roomy, average, tight
   layout: number;         // garage layout version these settings were made for
   // learning layers drawn on the plan
   layerPath: 'on' | 'off';    // the path at the current steering, with where it would touch first
@@ -23,7 +25,7 @@ export interface Settings {
 
 const KEY = 'atto2-garage';
 export const settings: Settings = {
-  car: 'byd-atto2', ras: '10', start: 'left', bay: '561', steer: '2.7', pdc: 'on', center: 'on', planView: 'car', layout: 0,
+  car: 'byd-atto2', ras: '10', start: 'left', bay: '561', steer: '2.7', pdc: 'on', center: 'on', planView: 'car', drive: 'right', district: '5', layout: 0,
   layerPath: 'on', layerPivot: 'on', layerSwept: 'off', layerGhost: 'off', layerKerb: 'on', layerNums: 'on',
 };
 try { Object.assign(settings, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch { /* private mode or blocked storage: defaults */ }

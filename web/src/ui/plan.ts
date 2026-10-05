@@ -5,7 +5,7 @@ import { ackermann, footprint, rearAngles } from '../core/car';
 import { roundRect, type CityLayers, type Slot } from '../core/city';
 import { wheelsOf } from '../core/collision';
 import { lookAhead } from '../core/dynamics';
-import { besideKerb, type Rect } from '../core/scene';
+import { bayRect, besideKerb, type Rect } from '../core/scene';
 import { DEG, clamp, wrapPi, type Pt } from '../core/math';
 import type { Pose, RoutePoint } from '../core/planner';
 import type { Prediction } from '../core/predict';
@@ -55,8 +55,49 @@ export interface CoachDraw { route: RoutePoint[] | null; marks: Pose[]; from: nu
 let coach: CoachDraw | null = null;
 export function setCoachDraw(d: CoachDraw | null): void { coach = d; }
 
-/** Jump straight to the target view on the next frame instead of easing there. */
-export function snapView(): void { PV.init = false; }
+/** Jump straight to the target view on the next frame instead of easing there (a new scene: the map zooms itself again). */
+export function snapView(): void { PV.init = false; setUserZoom(null); }
+
+/** Your own zoom, pinched or with the mouse wheel or + and -: pixels per metre, or null while the map zooms itself.
+ *  A double tap (or double click, or 0) gives control back. */
+let userScale: number | null = null, zoomed = false;
+export function setUserZoom(s: number | null): void {
+  userScale = s === null ? null : clamp(s, 0.8, 80); zoomed = true;
+  $('planZoom').hidden = userScale === null;
+}
+function bindGestures(): void {
+  const pts = new Map<number, [number, number]>();
+  let pinch: { d0: number; s0: number } | null = null, down = { t: 0, x: 0, y: 0, id: -1 }, tap = { t: -1e9, x: 0, y: 0 };
+  const spread = () => { const [a, b] = [...pts.values()]; return Math.hypot(a[0] - b[0], a[1] - b[1]); };
+  planCv.addEventListener('pointerdown', e => {
+    pts.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pts.size === 2) pinch = { d0: Math.max(10, spread()), s0: PV.s };
+    else if (pts.size === 1) down = { t: e.timeStamp, x: e.clientX, y: e.clientY, id: e.pointerId };
+  });
+  planCv.addEventListener('pointermove', e => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pinch && pts.size >= 2) setUserZoom(pinch.s0 * spread() / pinch.d0);
+  });
+  const up = (e: PointerEvent) => {
+    if (!pts.delete(e.pointerId)) return;
+    if (pts.size < 2) pinch = null;
+    // two quick taps in the same place: the map zooms itself again
+    if (e.type !== 'pointerup' || pts.size || e.pointerId !== down.id || e.timeStamp - down.t > 300 || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 12) return;
+    if (e.timeStamp - tap.t < 350 && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) < 40) { setUserZoom(null); tap.t = -1e9; }
+    else tap = { t: e.timeStamp, x: e.clientX, y: e.clientY };
+  };
+  planCv.addEventListener('pointerup', up); planCv.addEventListener('pointercancel', up);
+  planCv.addEventListener('wheel', e => { e.preventDefault(); setUserZoom((userScale ?? PV.s) * Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+  document.addEventListener('gesturestart', e => e.preventDefault());   // Safari's own pinch would zoom the page
+  window.addEventListener('keydown', e => {
+    if (e.key === '+' || e.key === '=') setUserZoom((userScale ?? PV.s) * 1.25);
+    else if (e.key === '-' || e.key === '_') setUserZoom((userScale ?? PV.s) / 1.25);
+    else if (e.key === '0') setUserZoom(null);
+  });
+  $('planZoom').addEventListener('click', () => setUserZoom(null));
+}
+bindGestures();
 
 /** On the street: the free spaces the car fits, the one it is parking in, and where the map stays turned in Park mode
  *  (locked to the space, so it holds still while you manoeuvre); null in a car park. */
@@ -68,7 +109,7 @@ let driveInfo: string | null = null;
 export function setDriveInfo(html: string | null): void { driveInfo = html; }
 /** Whether the view was still easing towards where it should be on the last frame (keep drawing until it is there). */
 let moving = false;
-export const viewMoving = (): boolean => moving;
+export const viewMoving = (): boolean => moving || zoomed;
 /** The turn that puts heading th straight up the screen. */
 export const upRot = (th: number): number => th - Math.PI / 2;
 
@@ -91,8 +132,10 @@ function follow(sim: Sim, dt: number): void {
   const ease = (tau: number) => (init ? 1 - Math.exp(-dt / tau) : 1), was = [PV.cx, PV.cz, PV.s, PV.rot, PV.oy];
   const k = ease(0.125);
   PV.cx += (tx - PV.cx) * k; PV.cz += (tz - PV.cz) * k; PV.oy += (oy - PV.oy) * ease(0.3);
-  // Drive mode zooms out quickly as you speed up and back in slowly, and not at all while you wait (at a junction)
-  if (drive && settings.planView !== 'area') { if (ts < PV.s) PV.s += (ts - PV.s) * ease(0.2); else if (Math.abs(sim.v) > 0.5) PV.s += (ts - PV.s) * ease(0.85); }
+  // your own zoom holds; Drive mode zooms out quickly as you speed up and back in slowly, and not at all while you wait
+  // (at a junction)
+  if (userScale !== null) PV.s = userScale;
+  else if (drive && settings.planView !== 'area') { if (ts < PV.s) PV.s += (ts - PV.s) * ease(0.2); else if (Math.abs(sim.v) > 0.5) PV.s += (ts - PV.s) * ease(0.85); }
   else PV.s += (ts - PV.s) * k;
   PV.rot += wrapPi(rot - PV.rot) * (drive ? ease(0.18) : k);
   PV.cr = Math.cos(PV.rot); PV.sr = Math.sin(PV.rot);
@@ -118,15 +161,16 @@ function hatchOf(c: CanvasRenderingContext2D): CanvasPattern | null {
   }
   return hatch;
 }
-/** The street map under everything else: pavements, the roads inside the ring, the blocks and their buildings, water,
- *  the kerbs, bus stops and loading bays, and the street names (upright whichever way the map has turned). */
-function drawCity(c: CanvasRenderingContext2D, L: CityLayers, s: number, inView: (x0: number, x1: number, z0: number, z1: number) => boolean): void {
+/** The street map under everything else: pavements, the roads inside the ring, the blocks and their buildings, the car
+ *  parks and their driveways, water, the kerbs, the zones painted along them and the arrows on one-way aisles. */
+function drawCity(c: CanvasRenderingContext2D, L: CityLayers, s: number, inView: (x0: number, x1: number, z0: number, z1: number) => boolean, d1: number, d2: number): void {
   c.fillStyle = '#25282f'; path(c, rectPts(L.bounds)); c.fill();
   const ring = roundRect(L.ring.rect, L.ring.r, 6);
   c.fillStyle = '#1c1e24'; path(c, ring); c.fill();
   if (L.water) { c.fillStyle = '#122636'; path(c, rectPts(L.water)); c.fill(); }
   const blocks = L.blocks.map(b => roundRect(b.rect, b.r, 4));
   c.fillStyle = '#25282f'; for (const b of blocks) { path(c, b); c.fill(); }
+  c.fillStyle = '#1c1e24'; for (const l of L.lots) { path(c, rectPts(l.rect)); c.fill(); }   // car parks: tarmac inside the block
   const pat = hatchOf(c);
   c.lineWidth = 1; c.strokeStyle = '#4b515b';
   for (const b of L.buildings) {
@@ -134,11 +178,32 @@ function drawCity(c: CanvasRenderingContext2D, L: CityLayers, s: number, inView:
     path(c, b); c.fillStyle = '#1d2026'; c.fill(); if (pat) { c.fillStyle = pat; c.fill(); } c.stroke();
   }
   c.strokeStyle = '#8e939c'; c.lineWidth = Math.max(1, 0.15 * s); path(c, ring); c.stroke(); for (const b of blocks) { path(c, b); c.stroke(); }
-  if (s > 2.6) for (const z of L.zones) {
-    c.strokeStyle = '#f2c230'; c.lineWidth = Math.max(1, 0.08 * s); c.setLineDash([Math.max(3, 0.5 * s), Math.max(3, 0.5 * s)]); path(c, z.pts); c.stroke(); c.setLineDash([]);
-    if (s > 6) label(c, z.kind === 'bus' ? 'BUS STOP' : 'LOADING', z.at[0], z.at[1], z.th, `700 ${clamp(0.55 * s, 9, 15).toFixed(1)}px "Barlow Condensed", sans-serif`, '#f2c230');
+  c.fillStyle = '#1c1e24'; for (const l of L.lots) { path(c, rectPts(l.gate)); c.fill(); }   // a driveway: the kerb dropped across the pavement
+  // the zones along the kerbs: no parking at any time a double red line, a driveway's keep-clear white, the rest yellow
+  c.globalAlpha = d1;
+  if (d1 > 0) for (const z of L.zones) {
+    c.lineWidth = Math.max(1, 0.08 * s);
+    if (z.kind === 'none') { c.strokeStyle = '#ec5b4f'; for (const l of z.lines) { path(c, l, false); c.stroke(); } continue; }
+    const drive = z.kind === 'driveway';
+    c.strokeStyle = drive ? 'rgba(235,232,223,.6)' : '#f2c230'; c.setLineDash([Math.max(3, 0.5 * s), Math.max(3, 0.5 * s)]); path(c, z.pts); c.stroke(); c.setLineDash([]);
+    if (d2 > 0 && !drive) { c.globalAlpha = d2; label(c, z.kind === 'bus' ? 'BUS STOP' : z.kind === 'loading' ? 'LOADING' : 'DISABLED', z.at[0], z.at[1], z.th, `700 ${clamp(0.55 * s, 9, 15).toFixed(1)}px "Barlow Condensed", sans-serif`, '#f2c230'); c.globalAlpha = d1; }
   }
-  if (s > 1.2) for (const n of L.names) label(c, n.text.toUpperCase(), n.x, n.z, n.th, `600 ${clamp(0.5 * s, 10, 15).toFixed(1)}px "Barlow Condensed", sans-serif`, 'rgba(235,232,223,.7)');
+  // one-way aisles: an arrow every 13 m the way they are driven
+  if (d1 > 0) {
+    c.fillStyle = 'rgba(235,232,223,.5)';
+    for (const a of L.arrows) {
+      if (!inView(a.x - 2, a.x + 2, a.z - 2, a.z + 2)) continue;
+      const f = (u: number, w: number): Pt => [a.x + u * Math.cos(a.th) + w * Math.sin(a.th), a.z - u * Math.sin(a.th) + w * Math.cos(a.th)];
+      path(c, [f(1.1, 0), f(0.2, -0.55), f(0.2, -0.18), f(-1.1, -0.18), f(-1.1, 0.18), f(0.2, 0.18), f(0.2, 0.55)]); c.fill();
+    }
+  }
+  c.globalAlpha = 1;
+}
+/** The street names and the car parks' (zoomed out), over everything on the ground. */
+function drawCityLabels(c: CanvasRenderingContext2D, L: CityLayers, s: number): void {
+  if (s <= 1.2) return;
+  for (const n of L.names) label(c, n.text.toUpperCase(), n.x, n.z, n.th, `600 ${clamp(0.5 * s, 10, 15).toFixed(1)}px "Barlow Condensed", sans-serif`, 'rgba(235,232,223,.7)');
+  if (s < 8) for (const l of L.lots) label(c, `P · ${l.name.toUpperCase()}`, (l.rect[0] + l.rect[1]) / 2, (l.rect[2] + l.rect[3]) / 2, 0, `700 ${clamp(0.55 * s, 10, 15).toFixed(1)}px "Barlow Condensed", sans-serif`, 'rgba(143,184,255,.95)');
 }
 /** Text along a direction th on the map (radians, as the car's heading), turned so it never reads upside down. */
 function label(c: CanvasRenderingContext2D, text: string, x: number, z: number, th: number, font: string, fill: string): void {
@@ -149,12 +214,16 @@ function label(c: CanvasRenderingContext2D, text: string, x: number, z: number, 
   c.save(); c.translate(sx, sy); c.rotate(a); c.font = font; c.textAlign = 'center'; c.textBaseline = 'middle';
   c.lineWidth = 3; c.strokeStyle = 'rgba(13,14,18,.85)'; c.strokeText(text, 0, 0); c.fillStyle = fill; c.fillText(text, 0, 0); c.restore();
 }
+/** How far a detail level has faded in at s pixels per metre: none below `at`, all of it a third above. On the street,
+ *  level 1 (lane lines, bays, parked cars, zones) comes in from 2.6 and level 2 (labels) from 7.8; below 2.6 the map
+ *  shows only the blocks, the roads and their names. */
+const fadeIn = (s: number, at: number): number => clamp((s - at) / (0.3 * at), 0, 1);
 const zoneCol = (d: number): string => d < 0.3 ? '#ec5b4f' : d < 0.5 ? '#ff8a3d' : d < 1.0 ? '#f2c230' : '#5ed08a';
 
 export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
   const size = fitCanvas(planCv); if (!size) return;
   const { w, h } = size, { x, z, th } = sim, v = sim.vehicle, sc = sim.scene;
-  PV.w = w; PV.h = h; follow(sim, dt);
+  PV.w = w; PV.h = h; follow(sim, dt); zoomed = false;
   const c = ctx, s = PV.s; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.lineJoin = 'round';
   c.fillStyle = '#0d0e12'; c.fillRect(0, 0, w, h);
   // what is on the screen, in the world: the corners of the screen turned back into the map
@@ -162,7 +231,8 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
   const vx0 = Math.min(...corners.map(q => q[0])) - 1, vx1 = Math.max(...corners.map(q => q[0])) + 1, vz0 = Math.min(...corners.map(q => q[1])) - 1, vz1 = Math.max(...corners.map(q => q[1])) + 1;
   const inView = (x0: number, x1: number, z0: number, z1: number) => !(x1 < vx0 || x0 > vx1 || z1 < vz0 || z0 > vz1);
   const city = sc.city, drive = sim.mode === 'drive', fast = drive && Math.abs(sim.v) > PDC_MAX;
-  if (city) drawCity(c, city, s, inView);
+  const d1 = city ? fadeIn(s, 2.6) : 1, d2 = city ? fadeIn(s, 7.8) : 1;   // detail levels: only a street map is ever zoomed out that far
+  if (city) drawCity(c, city, s, inView, d1, d2);
   else {
     // floors, the lower level over the low wall, pavements with their kerbs
     c.fillStyle = '#1c1e24'; for (const f of sc.floors) { path(c, rectPts(f)); c.fill(); }
@@ -173,43 +243,56 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
     }
   }
   // the target space; on the street, the free spaces this car fits (close enough to read)
-  if (street && s > 2.6) {
-    c.lineWidth = 1; c.setLineDash([4, 4]); c.strokeStyle = 'rgba(94,208,138,.55)';
-    for (const sl of street.slots) { const [x0, x1, z0, z1] = sl.bay.box!; if (sl !== street.target && sl.parkable !== false && inView(x0, x1, z0, z1)) { path(c, rectPts([sl.bay.x0 + 0.08, sl.bay.x1 - 0.08, sl.bay.z0 + 0.05, sl.bay.z1 - 0.05])); c.stroke(); } }
-    c.setLineDash([]);
+  if (street && d1 > 0) {
+    c.globalAlpha = d1; c.lineWidth = 1; c.setLineDash([4, 4]); c.strokeStyle = 'rgba(94,208,138,.55)';
+    for (const sl of street.slots) {
+      if (sl === street.target || sl.parkable === false) continue;
+      const q = bayRect(sl.bay, [sl.bay.x0 + 0.08, sl.bay.x1 - 0.08, sl.bay.z0 + 0.05, sl.bay.z1 - 0.05]), xs = q.map(p => p[0]), zs = q.map(p => p[1]);
+      if (inView(Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs))) { path(c, q); c.stroke(); }
+    }
+    c.setLineDash([]); c.globalAlpha = 1;
   }
   const B = sc.bays[sim.options.bay] ?? sc.bays[sc.defaultBay];
   if (B) {
-    c.fillStyle = 'rgba(94,208,138,.11)'; path(c, rectPts([B.x0, B.x1, B.z0, B.z1])); c.fill();
-    if (B.kind === 'kerb') { c.strokeStyle = 'rgba(94,208,138,.6)'; c.lineWidth = 1; c.setLineDash([4, 4]); path(c, rectPts([B.x0 + 0.08, B.x1 - 0.08, B.z0 + 0.05, B.z1 - 0.05])); c.stroke(); c.setLineDash([]); }
+    c.fillStyle = 'rgba(94,208,138,.11)'; path(c, bayRect(B, [B.x0, B.x1, B.z0, B.z1])); c.fill();
+    if (B.kind === 'kerb') { c.strokeStyle = 'rgba(94,208,138,.6)'; c.lineWidth = 1; c.setLineDash([4, 4]); path(c, bayRect(B, [B.x0 + 0.08, B.x1 - 0.08, B.z0 + 0.05, B.z1 - 0.05])); c.stroke(); c.setLineDash([]); }
   }
-  // lane markings: dashed white
-  if (sc.dashes.length && s > 2.6) {
+  // lane markings: dashed white (detail level 1)
+  c.globalAlpha = d1;
+  if (sc.dashes.length && d1 > 0) {
     c.strokeStyle = 'rgba(235,232,223,.55)'; c.lineWidth = Math.max(1, 0.1 * s); c.setLineDash([3 * s, 3 * s]); c.beginPath();
     for (const [x0, z0, x1, z1] of sc.dashes) { const a = PS(x0, z0), b = PS(x1, z1); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); }
     c.stroke(); c.setLineDash([]);
   }
-  // painted lines, numbers, the drain cover
-  c.strokeStyle = '#d9ab2b'; c.lineWidth = Math.max(1, 0.1 * s); c.lineCap = 'butt'; c.beginPath();
-  for (const [x0, z0, x1, z1] of sc.lines) { const a = PS(x0, z0), b = PS(x1, z1); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); }
-  c.stroke();
+  // painted lines (bays, detail level 1), numbers, the drain cover
+  if (d1 > 0) {
+    c.strokeStyle = '#d9ab2b'; c.lineWidth = Math.max(1, 0.1 * s); c.lineCap = 'butt'; c.beginPath();
+    for (const [x0, z0, x1, z1] of sc.lines) { if (!inView(Math.min(x0, x1), Math.max(x0, x1), Math.min(z0, z1), Math.max(z0, z1))) continue; const a = PS(x0, z0), b = PS(x1, z1); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); }
+    c.stroke();
+  }
+  c.globalAlpha = 1;
   c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = `700 ${Math.max(9, 0.42 * s).toFixed(1)}px "Barlow Condensed", sans-serif`; c.fillStyle = 'rgba(214,74,58,.9)';
   for (const [t, mx, mz] of sc.marks.text) { const [sx, sy] = PS(mx, mz); c.fillText(t, sx, sy); }
   if (sc.marks.manhole) { c.fillStyle = '#2c2f35'; path(c, rectPts(sc.marks.manhole)); c.fill(); }
   // what is solid: walls and pillars light, low things amber, parked cars dark with their names
   c.lineWidth = 1;
+  const carLabels = d2 * fadeIn(s, 15);   // a parked car's name needs room to be read
   for (const o of sim.obstacles) {
     if (o.cls === 'kerb' || !inView(o.bx0, o.bx1, o.bz0, o.bz1) || (city && o.name === 'building')) continue;
-    if (o.cls === 'car' && o.kind === 'poly') {
-      c.fillStyle = '#353a43'; c.strokeStyle = '#5b636e'; path(c, o.pts); c.fill(); c.stroke();
-      if (s > 15 && o.label) { const [sx, sy] = PS(o.cx, o.cz); c.fillStyle = '#a7afb9'; c.font = `600 ${clamp(0.3 * s, 9, 13).toFixed(1)}px "Barlow Condensed", sans-serif`; c.fillText(o.label, sx, sy); }
+    if (o.cls === 'car' && o.kind === 'poly') {   // detail level 1 on the street
+      if (d1 <= 0) continue;
+      c.globalAlpha = d1; c.fillStyle = '#353a43'; c.strokeStyle = '#5b636e'; path(c, o.pts); c.fill(); c.stroke();
+      if (carLabels > 0 && o.label) { const [sx, sy] = PS(o.cx, o.cz); c.globalAlpha = carLabels; c.fillStyle = '#a7afb9'; c.font = `600 ${clamp(0.3 * s, 9, 13).toFixed(1)}px "Barlow Condensed", sans-serif`; c.fillText(o.label, sx, sy); }
+      c.globalAlpha = 1;
       continue;
     }
+    if (city && o.kind === 'circle' && d1 <= 0) continue;   // lamp posts come in with detail level 1
     const low = o.cls === 'low';
     c.fillStyle = o.fill || (low ? '#b9832a' : o.cls === 'lowwall' ? '#8e9498' : '#c9ccc8'); c.strokeStyle = o.fill ? '#ebe8df' : low ? '#f2c230' : '#6d747a';
     if (o.kind === 'circle') { const [sx, sy] = PS(o.x, o.z); c.beginPath(); c.arc(sx, sy, o.r * s, 0, 6.3); c.fill(); c.stroke(); }
     else { path(c, o.pts); c.fill(); c.stroke(); }
   }
+  if (city) drawCityLabels(c, city, s);
   if (sc.door) { c.strokeStyle = '#59636b'; c.lineWidth = Math.max(1.5, 0.07 * s); const a = PS(sc.door[0], 0.03), b = PS(sc.door[1], 0.03); c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke(); }
   // a lesson: the route, the marks, your path and where it first drifted
   if (coach) {
@@ -363,7 +446,7 @@ function drawKerbCloseUp(c: CanvasRenderingContext2D, kw: KerbWheel): void {
 /** The numbers layer: the car's angle to the space, the gap to a kerb, and the gaps either side. */
 function numbersHtml(sim: Sim, kw: KerbWheel | null): string {
   const b = sim.scene.bays[sim.options.bay] ?? sim.scene.bays[sim.scene.defaultBay], out: string[] = [];
-  const a = (h: number) => Math.abs(wrapPi(sim.th - h)) / DEG;
+  const a = (h: number) => Math.abs(wrapPi(sim.th - h - (b?.frame?.rot ?? 0))) / DEG;   // a turned bay's headings are in its own frame
   if (b) {   // on the street there is no space to aim for until Park mode picks one
     const ang = b.face === 'in' ? a(b.inHeading) : b.face === 'out' ? a(b.inHeading + Math.PI) : Math.min(a(b.inHeading), a(b.inHeading + Math.PI));
     out.push(`<span>${b.kind === 'kerb' || b.kind === 'exit' ? 'To kerb' : 'To bay'}</span><b>${ang.toFixed(0)}°</b>`);

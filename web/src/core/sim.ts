@@ -8,7 +8,7 @@ import { blendOf, rates } from './dynamics';
 import { DEG, clamp } from './math';
 import { facesRight, parkedIn, placement } from './parking';
 import { predictPath, type Prediction } from './predict';
-import type { Bay, Obstacle, Scene } from './scene';
+import { toBay, type Bay, type Obstacle, type Scene } from './scene';
 import { edgeGaps, scanPdc, type SideValues } from './sensors';
 import type { Vehicle } from './vehicle';
 
@@ -210,7 +210,7 @@ export class Sim {
   private targetBay(): Bay | undefined { return this.scene.bays[this.options.bay] ?? this.scene.bays[this.scene.defaultBay]; }
   private resultAt(b: Bay, at: NonNullable<ReturnType<typeof parkedIn>>): ParkedResult {
     const v = this.vehicle, { noseIn } = at, p = placement(v, b, this.scene.kerbs, this.x, this.z, this.th, at);
-    const cs = Math.cos(this.th), cx = this.x + (v.WB / 2) * cs, gl = cx - v.W / 2 - b.x0, gr = b.x1 - cx - v.W / 2;
+    const [bx, , bth] = toBay(b, this.x, this.z, this.th), cx = bx + (v.WB / 2) * Math.cos(bth), gl = cx - v.W / 2 - b.x0, gr = b.x1 - cx - v.W / 2;
     return {
       bay: this.options.bay, noseIn, kind: b.kind ?? 'bay',
       offCentre: p.offCentre, angle: p.angle,

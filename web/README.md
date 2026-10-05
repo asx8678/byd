@@ -2,7 +2,7 @@
 
 Practise parking a BYD Atto 2 nose-first into bay 561, then in generated levels and a course of lessons, in the Atto 2 or in a Smart fortwo, a Ram 1500 or a Mercedes S-Class with rear-axle steering (10°, 4.5° or off), each turning the circle its maker publishes: a row of bays entered nose first, the same reversing in, and parallel parking at a kerb, each from level 1 (roomy) to level 10 (tight). A course of ten lessons teaches each manoeuvre with a coach: watch the route, drive it guided step by step, then with less and less help, then a test. Learning layers (the path, the turning circles, the swept path of all four corners, the ideal path, a kerb close-up and the numbers) switch on in Setup, and ⟲ 5 s rewinds to try a step again. The screen is a plan: it draws the path the car takes at the current steering, an outline of the car every 0.8 m along it and, in red, where it would touch something first. It also has parking sensors with beeps, touch detection, a move counter against par, and a result card with three stars when you're parked.
 
-On the street (Play → On the street) you drive a district in Drive mode: an accelerator and a brake you press harder higher up the button, physics with tyres that slip and grip that runs out (blended into the parking model below 18 km/h), and a map that turns so you drive up and zooms out with speed. Stop beside a free space on your right and Park mode takes over for the parking itself.
+On the street (Play → On the street) you drive a district in Drive mode: an accelerator and a brake you press harder higher up the button, physics with tyres that slip and grip that runs out (blended into the parking model below 18 km/h), and a map that turns so you drive up and zooms out with speed (pinch it to zoom yourself, double-tap to give the zoom back). Stop beside a free space on your kerb side, or beside a free bay in a car park (rows of bays at 90°, 60° or 45°), and Park mode takes over for the parking itself. Play the hand-made Harbour district or a district made up for you (roomy, average or tight), and switch the traffic to the left in Setup for the UK, Ireland, Japan or Australia.
 
 It runs in any modern browser on iPhone, Android and PC, and installs to the home screen as an app that works offline.
 
@@ -29,7 +29,7 @@ content/       data the game loads; JSON, so a Swift port reads the same files (
   vehicles/      one file per car: dimensions, outline, mirrors, turning circle, rear-axle steering, driveline, sensors
   scenes/        one file per place: obstacles, painted lines, bays, starts (garage-561.json is your garage)
   lessons/       course.json: the lessons, their stored routes, the handbooks' words with sources, pass rules
-  maps/          street districts for the map kit: roads, sides, zones, who is parked (harbour.json)
+  maps/          street districts for the map kit: roads, sides, zones, car parks, who is parked (harbour.json)
 src/core/      the game itself, no browser code: easy to test, and the part to port to Swift
   math.ts        DEG, clamp, wrapPi, the Pt type
   vehicle.ts     a car from its file; the steering lock is worked out from the published turning circles, and with
@@ -46,13 +46,20 @@ src/core/      the game itself, no browser code: easy to test, and the part to p
                  exact low-speed model) or Drive mode (accelerator and brake through dynamics.ts)
   dynamics.ts    Drive mode's street physics: a single-track model with tyres that slip, weight transfer, ABS,
                  power, drag; blended into the low-speed model between 7 and 18 km/h; the zoom rule's look-ahead
-  city.ts        the map kit: a district spec compiled into a scene, the free spaces a car fits (and whether
-                 the planner can park it there), the street you are on, the space you stopped beside
+  city.ts        the map kit: a district spec compiled into a scene, the free spaces a car fits along the kerbs
+                 and in the car parks (and whether the planner can park it there), the street or car park you are
+                 on, the space you stopped beside; traffic keeping right or left
+  lot.ts         car parks for the map kit: rows of bays at 90°, 60° or 45° either side of their aisles (one way
+                 when angled), cross aisles, a low wall and a driveway; who is parked in them
+  district.ts    districts made up from a seed and a level: the grid, the streets' widths and speeds, parking,
+                 zones, car parks, how full and how tight
   world.ts       a spatial grid over a big scene's obstacles, so collisions and sensors only look nearby
-  parking.ts     when a car counts as parked in a bay, and how neatly (shared by Sim, the planner and the stars)
+  parking.ts     when a car counts as parked in a bay, and how neatly (shared by Sim, the planner and the stars);
+                 a bay turned on the map (a car park's) is judged in its own frame
   score.ts       three stars: nothing touched, neat, efficient (par + 1 moves, inside the time)
   replay.ts      fixed 60 Hz steps; recording an attempt and playing it back; replaying to a step (rewind)
-  field.ts       a 5 cm raster and distance field of the scene, for fast collision checks while planning
+  field.ts       a 5 cm raster and distance field of the scene, for fast collision checks while planning (kerbs
+                 as half-planes for the wheels, and a raster of their own for any off those lines)
   planner.ts     route search (hybrid A*): into a bay from the car (planToBay), or outward from the
                  space back to the car (planBack, quicker for parallel parking); Show me, par, levels
   generator/     levels from (template, level, seed): templates.ts builds the scene, level.ts solves it
@@ -69,7 +76,9 @@ src/core/      the game itself, no browser code: easy to test, and the part to p
   robot.ts       drivers who do only what the coach shows, guided or on cue marks, a little early, late or off
 src/ui/        the browser side: drawing, controls, sound, settings
   plan.ts        the map (canvas 2D): north up, or in Drive mode turned so you drive up and zoomed by speed;
-                 on the street the pavements, blocks and their hatched buildings, kerbs, zones and street names
+                 pinch, the mouse wheel or + and - to zoom yourself, a double tap (or 0) to give it back; on the
+                 street the pavements, blocks and their hatched buildings, car parks, kerbs, zones and names, with
+                 detail that fades in as you zoom in (lane lines, bays and parked cars from 2.6 px/m, labels from 7.8)
   pdcDisplay.ts  sensor graphic, STOP card, red screen-edge glow
   hud.ts         readouts and the banner
   controls.ts    steering wheel, pedals (hold to move; in Drive mode an accelerator and a brake pressed harder
@@ -126,7 +135,10 @@ The other tests check that:
 - below 7 km/h a Drive-mode step moves the car along exactly the arc a Park-mode step would, and its turning circle at walking pace is the spec sheet's; speeding up through the 7–18 km/h blend and slowing down again the turn rate never jolts
 - steady cornering: at a fixed steering wheel the circle widens with speed (understeer), and turned too hard at 50 km/h the car runs wide at its tyres' limit without spinning
 - a drive with pedals, the wheel and a switch into Park mode and back replays exactly; the zoom rule shows the blueprint's look-ahead at each speed
-- the Harbour district: the same seed gives the same district, parked cars keep to their lanes, every car gets the spaces the fill promised and the planner parks it in each of them (and in nine in ten of all the free gaps) from where Park mode starts; stopping beside a space is recognised only on your side of the road; kerbs on other streets do not count; every car drives Harbour Street at 50 km/h and turns left and right at the Market Street crossing without touching anything
+- the Harbour district: the same seed gives the same district, parked cars keep to their lanes, every car gets the spaces the fill promised and the planner parks it in each of them (and in nine in ten of all the free gaps) from where Park mode starts; stopping beside a space is recognised only on your side of the road; kerbs on other streets do not count; the zones keep their kerb clear; every car drives Harbour Street at 50 km/h and turns left and right at the Market Street crossing without touching anything
+- car parks: a bay turned to any angle is judged pose by pose exactly as the same bay unturned, and the planner parks in it; the Harbour district's three car parks (90°, 60° and 45°) sit in their blocks with their driveways open and their bays inside the walls; the planner parks the Atto 2, the Smart and the S-Class (10° and off) in every bay kept free from where Park mode starts, and stopping there is recognised; the Ram is told it is too long for 5 m bays; every car drives in from the street through each driveway without touching anything
+- driving on the left: the same district with the traffic turned round (the same kerbs, parked cars and spaces), you start in the other lane and park on your left, the planner parks the Atto 2 and the S-Class in every promised space there, and every car drives Harbour Street in the left lane
+- made-up districts: the same seed and level give the same district; at roomy, average and tight, every car is promised five spaces and the planner parks it in each, the start and the driveways are clear and nearly every bay a car park keeps free is in reach; and the levels get narrower, fuller, sloppier and tighter
 
 ## Porting to Swift later
 
