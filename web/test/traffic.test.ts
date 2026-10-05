@@ -3,14 +3,14 @@
 // and wait for it, and come back exactly from a snapshot; the parked cars that pull out, the couriers who stop in the
 // lane, and the drivers who honk. TRAFFIC_SEEDS=n runs n layouts of every district (default 2).
 import { describe, expect, it } from 'vitest';
-import { buildCity, type CityMap, type Drive, type MapSpec } from '../src/core/city';
+import { buildCity, parkStart, sideDir, type CityMap, type Drive, type KerbSlot, type MapSpec } from '../src/core/city';
 import { ATTO2, MAPS, VEHICLES } from '../src/core/content';
 import { generateDistrict } from '../src/core/district';
 import { footprint } from '../src/core/car';
 import { circleHitsPoly, polysOverlap } from '../src/core/geometry';
 import type { Pt } from '../src/core/math';
 import { STEP } from '../src/core/replay';
-import { AMBER, CYCLE, DENSITY, DRIVERS, GREEN, TYPES, Traffic, lightAt, networkOf, poseOn, type CarSnap, type El, type PlayerView, type TrafficSnap } from '../src/core/traffic';
+import { AMBER, CYCLE, DENSITY, DRIVERS, GREEN, TYPES, Traffic, diveFor, lightAt, networkOf, poseOn, type CarSnap, type El, type PlayerView, type TrafficSnap } from '../src/core/traffic';
 import { nearby } from '../src/core/world';
 
 const harbour = (seed = 1, drive: Drive = 'right'): CityMap => buildCity(MAPS.harbour, ATTO2, seed, drive);
@@ -31,12 +31,12 @@ function oneCar(map: CityMap, el: El, s: number, v: number, type = 2, drv = 0): 
   T.restore(snap);
   return T;
 }
-const VAN = TYPES.findIndex(t => t.name === 'van'), COURIER = DRIVERS.findIndex(d => d.name === 'courier');
+const VAN = TYPES.findIndex(t => t.name === 'van'), COURIER = DRIVERS.findIndex(d => d.name === 'courier'), THIEF = DRIVERS.findIndex(d => d.name === 'thief');
 /** The traffic's fingerprint after a minute (see below), as M7 part 1 left it (commit 4b5c050). A change that moves the
  *  traffic itself on purpose changes it: say why in the commit. */
 const FINGERPRINT = 766601948;
-/** The cars besides the traffic, as the game has them in light and busy traffic. */
-const EXTRAS = { light: { leavers: 3, couriers: 1 }, busy: { leavers: 5, couriers: 2 } } as const;
+/** The cars besides the traffic, as the game has them in light and busy traffic (two thieves: as in a tight district). */
+const EXTRAS = { light: { leavers: 3, couriers: 1, thieves: 2, patience: 5 }, busy: { leavers: 5, couriers: 2, thieves: 2, patience: 5 } } as const;
 /** Your car standing still on lane el, rear axle s along it. */
 const standing = (el: El, s: number, more: Partial<PlayerView> = {}): PlayerView => {
   const [x, z, th] = poseOn(el, s);
@@ -311,5 +311,115 @@ describe('parked cars that pull out, couriers, and drivers who honk', () => {
     for (let n = 0; n < 22 * 60; n++) { R.step(STEP, q); expect(R.held).toEqual([]); }
     expect(lightAt(J, lights.axis, R.t)).toBe('red');
     expect(D.v).toBeLessThan(0.01); expect(D.honk).toBe(-1);
+  });
+});
+
+describe('spot thieves', () => {
+  const kerb = 1 as const;
+  /** Harbour (layout 1), the first space on the street a city car can dive into with room to come up behind it, your car
+   *  stopped where Park mode starts for it, and a thief in a city car coming up the lane 25 m behind where it would wait. */
+  function contest(patience = 5) {
+    const m = harbour(), net = networkOf(m);
+    const sl = m.slots.find((s): s is KerbSlot => s.kind === 'kerb' && !!diveFor(net, s, 0) && diveFor(net, s, 0)!.s0 > 30)!, dv = diveFor(net, sl, 0)!;
+    const T = new Traffic(net), lane = net.els[dv.el];
+    T.restore({ t: 0, r: 1, x: 3, base: 0, patience, cars: [carOn(m, 0, lane, dv.s0 - 25, 6, 0, THIEF)] });
+    const at = parkStart(ATTO2, sl), p: PlayerView = { x: at.x, z: at.z, th: at.th, v: 0, L: ATTO2.L, W: ATTO2.W, OVR: ATTO2.OVR, ind: 0, hazard: false, park: true, bay: sl.id };
+    return { m, net, T, sl, dv, p, thief: T.cars[0] };
+  }
+  /** Step until the thief waits at the back of the space (its patience running), then `secs` more, doing `act` each step. */
+  function play(T: Traffic, p: PlayerView, secs: number, act: (t: number) => void = () => {}): { waited: number; met: number } {
+    const c = T.cars[0];
+    let waited = -1, met = 0;
+    for (let n = 0; n < 60 * 60; n++) {
+      if (waited >= 0 && T.t - waited > secs) break;
+      act(waited >= 0 ? T.t - waited : -1);
+      T.step(STEP, p);
+      if (waited < 0 && c.aimT >= 0) waited = c.aimT;
+      if (polysOverlap(c.box, playerBox(p))) met++;
+    }
+    return { waited, met };
+  }
+  it('comes for the space you stop beside, and waits in the lane with its nose at the back of the space', () => {
+    const { T, sl, dv, p, thief } = contest();
+    T.step(STEP, p);
+    expect(thief.aim).toBe(sl.id);
+    const { waited } = play(T, p, 1);
+    expect(waited).toBeGreaterThan(0);
+    const ty = TYPES[thief.type], dir = sideDir(sl.street, sl.side), back = dir > 0 ? sl.a0 : sl.a1, along = sl.street.along === 'x' ? thief.x : thief.z;
+    expect((along + dir * (ty.L - ty.OVR) * 1 - back) * dir).toBeLessThan(0.65);   // its nose at most 50 cm (and a little) past the back of the space
+    expect(Math.abs(thief.s - dv.s0)).toBeLessThan(0.15);
+  });
+  it('gives up when you signal towards the kerb and start reversing within its patience', () => {
+    const { T, sl, p, thief } = contest(5);
+    p.ind = kerb;
+    const r = play(T, p, 12, w => { p.v = w > 2 && w < 3 ? -0.4 : 0; });
+    expect(r.waited).toBeGreaterThan(0);
+    expect(thief.aim).toBe(''); expect(thief.state).toBe('drive');
+    expect(T.thiefIn(sl.id)).toBeNull(); expect(T.taken(sl.id)).toBe(false);
+    expect({ met: r.met, jams: thief.jams }).toEqual({ met: 0, jams: 0 });
+  });
+  it('dives in nose first when you never signal: you lose the space', () => {
+    const { T, sl, p, thief } = contest(5);
+    const r = play(T, p, 20, w => { p.v = w > 2 && w < 3 ? -0.4 : 0; });   // you reverse, but never signal
+    expect(T.thiefIn(sl.id)).toBe(thief); expect(thief.state).toBe('parked'); expect(T.taken(sl.id)).toBe(true);
+    expect({ met: r.met, jams: thief.jams }).toEqual({ met: 0, jams: 0 });
+    // parked for good, inside the space
+    for (let n = 0; n < 120 * 60; n++) T.step(STEP, null);
+    expect(thief.state).toBe('parked'); expect(T.taken(sl.id)).toBe(true);
+  });
+  it('dives in when you signal but start reversing after its patience has run out', () => {
+    const { T, sl, p, thief } = contest(3);
+    p.ind = kerb;
+    let dove = -1;
+    play(T, p, 20, w => { p.v = w > 3.5 && w < 4.5 ? -0.4 : 0; if (dove < 0 && thief.state === 'in') dove = w; });
+    expect(dove).toBeGreaterThanOrEqual(3); expect(dove).toBeLessThan(3.5);
+    expect(T.thiefIn(sl.id)).toBe(thief);
+  });
+  it('gives up when it comes up behind you already reversing into the space, signal on', () => {
+    const { T, sl, p, thief } = contest(5);
+    p.ind = kerb; p.v = -0.3;
+    T.step(STEP, p);
+    expect(thief.aim).toBe('');
+    for (let n = 0; n < 20 * 60; n++) T.step(STEP, p);
+    expect(T.thiefIn(sl.id)).toBeNull(); expect(thief.jams).toBe(0);
+  });
+  it('in made-up districts too: you stopped beside a space for a minute, claiming it or not, and nothing touches anything', () => {
+    let came = 0;
+    for (const [spec, seed, level] of [[MAPS.harbour, 1, 5], [generateDistrict(2, 5), 2, 5], [generateDistrict(1, 9), 1, 9]] as [MapSpec, number, number][]) for (const drive of ['right', 'left'] as Drive[]) {
+      const m = buildCity(spec, ATTO2, seed, drive), net = networkOf(m), side = drive === 'right' ? 1 : -1;
+      for (const sl of (m.slots.filter(s => s.kind === 'kerb') as KerbSlot[]).filter(s => [0, 1, 2].some(t => diveFor(net, s, t))).slice(0, 2)) for (const claim of [false, true]) {
+        const at = parkStart(ATTO2, sl), T = Traffic.spawn(net, seed, DENSITY.busy, at, { leavers: 5, couriers: 2, thieves: level >= 8 ? 2 : 1, patience: level >= 8 ? 3 : 5 });
+        if (T.taken(sl.id)) continue;
+        const p: PlayerView = { x: at.x, z: at.z, th: at.th, v: 0, L: ATTO2.L, W: ATTO2.W, OVR: ATTO2.OVR, ind: claim ? side : 0, hazard: false, park: true, bay: sl.id };
+        let waited = -1, met = 0, touches = 0;
+        for (let n = 0; n < 60 * 60; n++) {
+          if (waited < 0 && T.cars.some(c => c.aim === sl.id && c.aimT >= 0)) waited = T.t;
+          p.v = claim && waited >= 0 && T.t - waited > 1 && T.t - waited < 1.5 ? -0.3 : 0;
+          T.step(STEP, p);
+          for (let i = 0; i < T.cars.length; i++) {
+            const a = T.cars[i];
+            if (Math.abs(a.x - p.x) < 9 && Math.abs(a.z - p.z) < 9 && polysOverlap(a.box, playerBox(p))) met++;
+            for (let k = i + 1; k < T.cars.length; k++) { const b = T.cars[k]; if (Math.abs(a.x - b.x) < 8 && Math.abs(a.z - b.z) < 8 && polysOverlap(a.box, b.box)) touches++; }
+          }
+        }
+        if (waited >= 0) { came++; expect(!!T.thiefIn(sl.id), `${sl.id} claimed ${claim}`).toBe(!claim); }
+        expect({ met, touches, jams: T.cars.reduce((s, c) => s + c.jams, 0), stuck: T.cars.filter(c => c.state === 'in').length }).toEqual({ met: 0, touches: 0, jams: 0, stuck: 0 });
+      }
+    }
+    expect(came).toBeGreaterThan(0);
+  }, 120000);
+  it('comes for the space of a parked car you are waiting behind to pull out, and waits while it is still there', () => {
+    const m = harbour(), net = networkOf(m), T = Traffic.spawn(net, 1, 0, m.start, { leavers: 5, thieves: 1, patience: 5 });
+    const thief = T.cars.find(c => c.drv === THIEF)!, L = T.cars.find(c => c.state === 'parked' && c.wakeD > 0 && diveFor(net, m.slots.find(s => s.id === T.places[c.place].slot) as KerbSlot, thief.type))!;
+    // move the thief onto the lane 40 m behind the parked car, and you 8 m behind it, signalling towards the kerb
+    const lane = net.els[T.places[L.place].el], snap = T.snapshot();
+    snap.cars[thief.id] = { ...snap.cars[thief.id], el: lane.id, s: Math.max(1, L.s - 40), v: 5, route: routeFrom(m, lane) };
+    T.restore(snap);
+    const th = T.cars[thief.id], back = T.cars[L.id].s - TYPES[L.type].OVR, p = standing(lane, back - 8 - (ATTO2.L - ATTO2.OVR), { ind: kerb });
+    for (let n = 0; n < 3; n++) T.step(STEP, p);   // it wakes as you come up, and you are waiting for it
+    expect(T.cars[L.id].ind).not.toBe(0);
+    expect(th.aim).toBe(T.places[L.place].slot);
+    for (let n = 0; n < 2 * 60; n++) T.step(STEP, p);
+    expect(th.aimT).toBe(-1);   // the space is not free yet, and you are in its way
   });
 });

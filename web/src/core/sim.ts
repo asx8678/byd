@@ -207,7 +207,7 @@ export class Sim {
   /** Your car as the traffic sees it. */
   view(): PlayerView {
     const v = this.vehicle;
-    return { x: this.x, z: this.z, th: this.th, v: this.v, L: v.L, W: v.W, OVR: v.OVR, ind: this.ind, hazard: this.hazard, park: this.mode === 'park' };
+    return { x: this.x, z: this.z, th: this.th, v: this.v, L: v.L, W: v.W, OVR: v.OVR, ind: this.ind, hazard: this.hazard, park: this.mode === 'park', bay: this.mode === 'park' ? this.options.bay : '' };
   }
   /** The traffic and the rules as they are now (null off the street). */
   world(): WorldSnap | null { return this.traffic ? { traffic: this.traffic.snapshot(), rules: this.rules?.snapshot() ?? null } : null; }

@@ -22,7 +22,7 @@ import { Recorder, STEP, playback, replayTo, restoreState, stateOf as simState }
 import { starsFor } from './core/score';
 import { Rules } from './core/rules';
 import { PDC_MAX, Sim, type Mode, type ParkedResult, type SimEvent } from './core/sim';
-import { DENSITY, Traffic, networkOf } from './core/traffic';
+import { DENSITY, TYPES, Traffic, networkOf } from './core/traffic';
 import { beep, horn, updateBeeper } from './ui/audio';
 import { renderCarFacts, renderCarPicker, syncCarPicker } from './ui/cars';
 import { bindCard, renderCard } from './ui/coachCard';
@@ -118,12 +118,14 @@ function leaveCity(): void {
   setStreet(null); setDriveInfo(null); setLimit(null); setMode('park'); checker?.terminate(); checker = null; parWorker?.terminate(); parWorker = null;
 }
 /** The district's traffic from its layout number (the same every time), as many cars as Setup asks for (none: just the
- *  lights), clear of where you are, with parked cars that will pull out and couriers (more of each in busy traffic); and
- *  a fresh drive for the rules. */
+ *  lights), clear of where you are, with parked cars that will pull out and couriers (more of each in busy traffic) and a
+ *  spot thief (two in a tight district, where they wait 3 s for you to claim a space; 8 s in a roomy one, 5 s elsewhere);
+ *  and a fresh drive for the rules. */
 function spawnTraffic(c: CityPlay, at: { x: number; z: number } = c.map.start): void {
-  const net = networkOf(c.map), busy = settings.traffic === 'busy';
+  const net = networkOf(c.map), busy = settings.traffic === 'busy', level = districtLevel(c.map.spec.id) ?? 5;
   c.map.scene.net = net;
-  sim.traffic = settings.traffic === 'off' ? Traffic.spawn(net, c.map.seed, 0, at) : Traffic.spawn(net, c.map.seed, DENSITY[settings.traffic], at, { leavers: busy ? 5 : 3, couriers: busy ? 2 : 1 });
+  sim.traffic = settings.traffic === 'off' ? Traffic.spawn(net, c.map.seed, 0, at)
+    : Traffic.spawn(net, c.map.seed, DENSITY[settings.traffic], at, { leavers: busy ? 5 : 3, couriers: busy ? 2 : 1, thieves: level >= 8 ? 2 : 1, patience: level <= 3 ? 8 : level >= 8 ? 3 : 5 });
   sim.rules = new Rules(net);
 }
 /** Whether a space is free now: none parked in it for the moment. */
@@ -360,6 +362,13 @@ function cityFrame(): void {
       else if (c.hinted !== near.id && near.kind === 'kerb') { c.hinted = near.id; showBanner('', `A ${fmtLen(near.length)} space on your ${kerbSide()}`, 'Stop beside it, level with the car in front of it, and Park mode takes over.', null, 3500); }
     }
   } else {
+    // a thief dived into the space you were after: you lose it, not points
+    const thief = c.slot?.kind === 'kerb' ? sim.traffic?.thiefIn(c.slot.id) : null;
+    if (thief) {
+      enterDrive();
+      showBanner('bad', 'A thief took the space', `The ${TYPES[thief.type].name} dived in nose first while you waited. You lose the space, not points: find another one. Next time signal and start reversing sooner.`, null, 7000);
+      return;
+    }
     retarget(c);
     if (sim.v > PDC_MAX && pedals.fwd) { enterDrive(); showBanner('', 'Drive mode', 'Your finger on Forward is now the accelerator.', null, 3000); }
   }
