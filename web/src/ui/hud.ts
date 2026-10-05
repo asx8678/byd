@@ -13,13 +13,14 @@ export function showBanner(cls: '' | 'good' | 'bad', title: string, text: string
   room.h = banner.offsetHeight; placeBanner();
 }
 
-/** Where a message goes: at the foot of the map, just above the path's readout, unless the car is down there; then at
+/** Where a message goes: at the foot of the map, just above the path's readout, unless the car (or the space it is
+ *  going into) is down there; then at
  *  the top of the map. In landscape always at the top, clear of the wheel's and the pedals' columns. */
-const room = { top: 0, foot: 0, H: 0, land: false, cy: 0, r: 0, h: 0 };
+const room = { top: 0, foot: 0, H: 0, land: false, lo: 0, hi: 0, h: 0 };
 let banAt: 'top' | 'bottom' = 'bottom', banKey = '';
 function placeBanner(): void {
   if (!room.H || banner.classList.contains('hide')) return;
-  const over = (a: number) => Math.max(0, Math.min(a + room.h, room.cy + room.r) - Math.max(a, room.cy - room.r));
+  const over = (a: number) => Math.max(0, Math.min(a + room.h, room.hi) - Math.max(a, room.lo));
   const ot = over(room.top), ob = over(room.foot - room.h);
   if (room.land) banAt = 'top'; else if (!ob) banAt = 'bottom'; else if (ot + 20 < ob) banAt = 'top'; else if (ob + 20 < ot) banAt = 'bottom';
   const key = `${banAt}|${Math.round(room.top)}|${Math.round(room.foot)}|${Math.round(room.H)}`; if (key === banKey) return; banKey = key;
@@ -28,10 +29,10 @@ function placeBanner(): void {
 }
 /** The map's free band (screen px from the top of the stage) as the layout leaves it. */
 export function bannerRoom(top: number, foot: number, H: number, land: boolean): void { Object.assign(room, { top, foot, H, land }); placeBanner(); }
-/** Where the car is on the screen: its middle's row and how far it reaches up and down. */
-export function bannerCar(cy: number, r: number): void {
-  if (Math.abs(cy - room.cy) < 2 && Math.abs(r - room.r) < 2) return;
-  room.cy = cy; room.r = r; placeBanner();
+/** The rows of the screen a message should keep off: the car's, and in Park mode the space it is going into. */
+export function bannerCar(lo: number, hi: number): void {
+  if (Math.abs(lo - room.lo) < 2 && Math.abs(hi - room.hi) < 2) return;
+  room.lo = lo; room.hi = hi; placeBanner();
 }
 
 const wheelSvg = $('wheelSvg');

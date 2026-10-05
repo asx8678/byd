@@ -11,7 +11,7 @@ const edgeEl = { top: $('edgeF'), bottom: $('edgeR'), left: $('edgeL'), right: $
 const edgeLast = { top: -1, bottom: -1, left: -1, right: -1 };
 let pdcKey = '', pdcTxtKey = '';
 
-/** Under the readouts, clear of the plan's buttons; the STOP card level with the car. */
+/** Under the top buttons, clear of the plan's own buttons; the STOP card level with the car. */
 export function layoutPdc(band: { top: number; carY: number } | null): void {
   if (!band) return;
   $('pdcWrap').style.top = band.top + 40 + 'px';

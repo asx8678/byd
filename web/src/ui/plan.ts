@@ -23,11 +23,11 @@ const planCv = $<HTMLCanvasElement>('planCv'), ctx = planCv.getContext('2d')!;
 const PV = { cx: 0, cz: 4, s: 24, w: 0, h: 0, oy: 0, oyPark: 0, oyDrive: 0, top: 0, band: 0, foot: 0, init: false, rot: 0, cr: 1, sr: 0 };
 let pred: Prediction | null = null, predKey = '', predT = -1, infoTxt = '', predTxt = '', scaleW = -1, numsTxt = '';
 
-/** Under the HUD and above the wheel and pedals: where the readouts sit and which band the car is centred in. Returns that band. */
+/** Under the top buttons and above the wheel and pedals: where the readouts sit and which band the car is centred in. Returns that band. */
 export function layoutPlan(stage: HTMLElement): { top: number; bottom: number; carY: number } | null {
   const c = stage.getBoundingClientRect(), W = c.width, H = c.height; if (!W || !H) return null;
   let hudB = $('hud').getBoundingClientRect().bottom - c.top + 8;
-  // in a lesson the coach card sits under the readouts, and the wheel readout makes way for it
+  // in a lesson the coach card sits under the buttons, and the wheel readout makes way for it
   const card = $('coach');
   if (!card.hidden) { card.style.top = hudB + 'px'; hudB = card.getBoundingClientRect().bottom - c.top + 6; }
   $('planInfo').hidden = !card.hidden;
@@ -231,7 +231,13 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
   const size = fitCanvas(planCv); if (!size) return;
   const { w, h } = size, { x, z, th } = sim, v = sim.vehicle, sc = sim.scene;
   PV.w = w; PV.h = h; follow(sim, dt); zoomed = false;
-  { const mid = v.L / 2 - v.OVR; bannerCar(PS(x + mid * Math.cos(th), z - mid * Math.sin(th))[1], (v.L / 2 + 0.4) * PV.s); }   // keep messages off the car
+  {   // keep messages off the car and, in Park mode, off the space it is going into
+    const mid = v.L / 2 - v.OVR, cy = PS(x + mid * Math.cos(th), z - mid * Math.sin(th))[1], r = (v.L / 2 + 0.4) * PV.s;
+    let lo = cy - r, hi = cy + r;
+    const T = sim.mode === 'park' ? sim.scene.bays[sim.options.bay] : undefined;
+    if (T) for (const q of bayRect(T, [T.x0, T.x1, T.z0, T.z1])) { const y = PS(q[0], q[1])[1]; lo = Math.min(lo, y); hi = Math.max(hi, y); }
+    bannerCar(lo, hi);
+  }
   const c = ctx, s = PV.s; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.lineJoin = 'round';
   c.fillStyle = '#0d0e12'; c.fillRect(0, 0, w, h);
   // what is on the screen, in the world: the corners of the screen turned back into the map
