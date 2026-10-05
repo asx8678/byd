@@ -532,7 +532,8 @@ export class Traffic {
   private readonly on: TCar[][];     // who is on each lane and path, in order along it (made each step)
   private readonly into: number[][]; // the paths leading into each lane
   private blame = false;             // this step: whether whoever waits behind your car is held up by you
-  private patience = 5;              // how long a thief waits for you to claim a space (s)
+  /** How long a thief waits for you to claim a space (s). */
+  patience = 5;
   private pair = false;              // whether two thieves come for a space
   private called: string[] = [];     // the spaces thieves have come for (each only once)
   private readonly kerbSlots: Map<string, KerbSlot>;

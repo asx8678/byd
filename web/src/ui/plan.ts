@@ -296,7 +296,7 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
     else { path(c, o.pts); c.fill(); c.stroke(); }
   }
   if (city) drawCityLabels(c, city, s);
-  if (sim.traffic) { drawTraffic(c, sim.traffic, s, inView, d2); drawLights(c, sim.traffic, s); }
+  if (sim.traffic) { drawTraffic(c, sim.traffic, s, inView, d1, d2); drawLights(c, sim.traffic, s); }
   if (sc.door) { c.strokeStyle = '#59636b'; c.lineWidth = Math.max(1.5, 0.07 * s); const a = PS(sc.door[0], 0.03), b = PS(sc.door[1], 0.03); c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke(); }
   // a lesson: the route, the marks, your path and where it first drifted
   if (coach) {
@@ -457,33 +457,46 @@ function drawLights(c: CanvasRenderingContext2D, t: Traffic, s: number): void {
     }
   }
 }
-/** The other cars: lighter than the parked ones, a windscreen to show which way they face, brake lights, indicators,
- *  and zoomed in close, the driver and the speed. */
-function drawTraffic(c: CanvasRenderingContext2D, t: Traffic, s: number, inView: (x0: number, x1: number, z0: number, z1: number) => boolean, d2: number): void {
+/** The other cars: lighter than the parked ones, a windscreen to show which way they face, brake lights, indicators and
+ *  hazard lights, a horn's sound drawn ahead of one that honks, and zoomed in close, the driver and the speed. A car parked
+ *  at the kerb (one that will pull out, or a thief that took a space) looks like the parked cars (detail level 1). */
+function drawTraffic(c: CanvasRenderingContext2D, t: Traffic, s: number, inView: (x0: number, x1: number, z0: number, z1: number) => boolean, d1: number, d2: number): void {
   const lit = blinkOn(t.t), labels = d2 * fadeIn(s, 15);
   c.lineWidth = 1;
   for (const car of t.cars) {
     if (!inView(car.x - 6, car.x + 6, car.z - 6, car.z + 6)) continue;
-    const ty = TYPES[car.type], nose = ty.L - ty.OVR, hw = ty.W / 2, P = (pts: Pt[]) => footprint(car.x, car.z, car.h, pts);
-    c.fillStyle = '#5a6574'; c.strokeStyle = '#b4bcc6'; path(c, car.box); c.fill(); c.stroke();
-    c.fillStyle = 'rgba(24,28,36,.8)'; path(c, P([[nose - 0.9, -hw + 0.16], [nose - 1.4, -hw + 0.2], [nose - 1.4, hw - 0.2], [nose - 0.9, hw - 0.16]])); c.fill();
-    if (car.acc < -0.6 || (car.v < 0.05 && car.wait)) {
-      c.fillStyle = '#ff3b30';
-      for (const sg of [-1, 1]) { path(c, P([[-ty.OVR, sg * (hw - 0.06)], [-ty.OVR + 0.18, sg * (hw - 0.06)], [-ty.OVR + 0.18, sg * (hw - 0.42)], [-ty.OVR, sg * (hw - 0.42)]])); c.fill(); }
+    const ty = TYPES[car.type], nose = ty.L - ty.OVR, hw = ty.W / 2, P = (pts: Pt[]) => footprint(car.x, car.z, car.h, pts), parked = car.state === 'parked';
+    if (parked) {
+      if (d1 <= 0) continue;
+      c.globalAlpha = d1; c.fillStyle = '#353a43'; c.strokeStyle = '#5b636e'; path(c, car.box); c.fill(); c.stroke(); c.globalAlpha = 1;
+    } else {
+      c.fillStyle = '#5a6574'; c.strokeStyle = '#b4bcc6'; path(c, car.box); c.fill(); c.stroke();
+      c.fillStyle = 'rgba(24,28,36,.8)'; path(c, P([[nose - 0.9, -hw + 0.16], [nose - 1.4, -hw + 0.2], [nose - 1.4, hw - 0.2], [nose - 0.9, hw - 0.16]])); c.fill();
+      if (car.acc < -0.6 || (car.v < 0.05 && car.wait)) {
+        c.fillStyle = '#ff3b30';
+        for (const sg of [-1, 1]) { path(c, P([[-ty.OVR, sg * (hw - 0.06)], [-ty.OVR + 0.18, sg * (hw - 0.06)], [-ty.OVR + 0.18, sg * (hw - 0.42)], [-ty.OVR, sg * (hw - 0.42)]])); c.fill(); }
+      }
     }
-    if (car.ind && lit) {
+    const sides = car.haz ? [-1, 1] : car.ind ? [car.ind] : [];
+    if (sides.length && lit) {
       c.fillStyle = '#ffb020';
-      for (const x0 of [-ty.OVR, nose - 0.22]) { path(c, P([[x0, car.ind * (hw - 0.24)], [x0 + 0.22, car.ind * (hw - 0.24)], [x0 + 0.22, car.ind * hw], [x0, car.ind * hw]])); c.fill(); }
+      for (const sg of sides) for (const x0 of [-ty.OVR, nose - 0.22]) { path(c, P([[x0, sg * (hw - 0.24)], [x0 + 0.22, sg * (hw - 0.24)], [x0 + 0.22, sg * hw], [x0, sg * hw]])); c.fill(); }
     }
-    if (labels > 0) {
+    if (car.honk >= 0 && t.t - car.honk < 0.6) {   // the horn: two arcs ahead of its nose
+      const [sx, sy] = PS(car.x + (nose + 0.3) * Math.cos(car.h), car.z - (nose + 0.3) * Math.sin(car.h)), a = PV.rot - car.h;   // its heading on the screen (the map turns)
+      c.strokeStyle = '#ffd166'; c.lineWidth = 2;
+      for (const r of [Math.max(5, 0.5 * s), Math.max(9, 0.9 * s)]) { c.beginPath(); c.arc(sx, sy, r, a - 0.7, a + 0.7); c.stroke(); }
+      c.lineWidth = 1;
+    }
+    if (labels > 0 && !parked) {
       const [sx, sy] = PS(car.x + (nose / 2) * Math.cos(car.h), car.z - (nose / 2) * Math.sin(car.h));
       c.globalAlpha = labels; c.font = `600 ${clamp(0.3 * s, 9, 13).toFixed(1)}px "Barlow Condensed", sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
-      c.fillStyle = '#ebe8df'; c.fillText(`${DRIVERS[car.drv].name} · ${Math.round(car.v * 3.6)}`, sx, sy); c.globalAlpha = 1;
+      c.fillStyle = '#ebe8df'; c.fillText(`${DRIVERS[car.drv].name}${car.imp ? ', impatient' : ''} · ${Math.round(car.v * 3.6)}`, sx, sy); c.globalAlpha = 1;
     }
   }
 }
 /** On the street, under the street's name: the next traffic light on your way (in your lane, 80 m at most) with how
- *  far its stop line is, and the faults on this drive so far. */
+ *  far its stop line is, the faults on this drive so far, and how long you have held up traffic. */
 function streetInfo(sim: Sim): string {
   const t = sim.traffic;
   if (!t) return '';
@@ -499,8 +512,9 @@ function streetInfo(sim: Sim): string {
       if (!best || d < best.d) best = { d, light: t.lightFor(ap) };
     }
   }
-  const n = sim.rules?.faults.length ?? 0;
-  return (best ? `<div><span>Lights</span><i class="lt ${best.light}"></i>${Math.round(best.d)} m</div>` : '') + (n ? `<div><span>Faults</span><b class="bad">${n}</b></div>` : '');
+  const n = sim.rules?.faults.length ?? 0, held = Math.round(sim.rules?.heldUp ?? 0);
+  return (best ? `<div><span>Lights</span><i class="lt ${best.light}"></i>${Math.round(best.d)} m</div>` : '') + (n ? `<div><span>Faults</span><b class="bad">${n}</b></div>` : '')
+    + (held ? `<div><span>Held up</span>${held} s</div>` : '');
 }
 
 type KerbWheel = { gap: number; wheel: Pt[]; nx: number; nz: number; c: number };

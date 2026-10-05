@@ -23,8 +23,8 @@ import { starsFor } from './core/score';
 import { Rules } from './core/rules';
 import { PDC_MAX, Sim, type Mode, type ParkedResult, type SimEvent } from './core/sim';
 import { COUNTRIES, theftNote } from './core/country';
-import { DENSITY, TYPES, Traffic, networkOf } from './core/traffic';
-import { beep, horn, updateBeeper } from './ui/audio';
+import { DENSITY, TYPES, Traffic, diveFor, networkOf } from './core/traffic';
+import { beep, horn, toot, updateBeeper } from './ui/audio';
 import { renderCarFacts, renderCarPicker, syncCarPicker } from './ui/cars';
 import { bindCard, renderCard } from './ui/coachCard';
 import { bindControls, pedals, releasePedals, setPedalMode, tickPedals } from './ui/controls';
@@ -81,7 +81,7 @@ let lesson: LessonPlay | null = null;
 /** On the street: the district; in Park mode, the space being parked in, where that try began and how the map stays
  *  turned; the last space you drove on from (stopping beside it again does not start Park mode), the last one a
  *  banner pointed out, the street or car park you are on (for the speed limit) and the car park last introduced. */
-interface CityPlay { map: CityMap; slot: Slot | null; from: Pose | null; lockRot: number | null; declined: string; hinted: string; streetId: string; lotHint: string }
+interface CityPlay { map: CityMap; slot: Slot | null; from: Pose | null; lockRot: number | null; declined: string; hinted: string; streetId: string; lotHint: string; told: Set<string> }
 let city: CityPlay | null = null;
 const cityKey = (m: CityMap) => `city:${m.spec.id}:${m.seed}`;
 /** The side you park on in the street: the side traffic keeps to. */
@@ -239,7 +239,7 @@ function playCity(fresh: boolean, id = 'harbour', seed = fresh ? newSeed() : cit
 }
 function enterCity(map: CityMap): void {
   leaveLesson(); level = null; useCar(chosenCar());
-  city = { map, slot: null, from: null, lockRot: null, declined: '', hinted: '', streetId: '', lotHint: '' };
+  city = { map, slot: null, from: null, lockRot: null, declined: '', hinted: '', streetId: '', lotHint: '', told: new Set() };
   sim.load(map.scene); setRoute([]); setCitySeed(map.spec.id, map.seed); setPlaying(cityKey(map));
   snapView(); resetCar(); refreshLevels(); checkSpaces(city);
 }
@@ -373,11 +373,46 @@ function cityFrame(): void {
     retarget(c);
     if (sim.v > PDC_MAX && pedals.fwd) { enterDrive(); showBanner('', 'Drive mode', 'Your finger on Forward is now the accelerator.', null, 3000); }
   }
+  cityHints(c);
   const st = sim.mode === 'drive' ? streetAt(c.map, sim.x, sim.z, sim.th) : null, inLot = sim.mode === 'drive' && !st ? lot : null, id = st?.id ?? inLot?.id ?? '';
   if (id !== c.streetId) {
     c.streetId = id;
     setDriveInfo(st ? `<div><span>Street</span>${st.name}</div>` : inLot ? `<div><span>Car park</span>${inLot.name}</div>` : '');
     setLimit(st ? st.limit : inLot ? inLot.limit : null);
+  }
+}
+/** What the traffic round you is up to, once each: a parked car ahead of you signalling to pull out (how to wait for its
+ *  space), a thief waiting for the space you are after (how to claim it in time), and one giving up on it. */
+function cityHints(c: CityPlay): void {
+  const t = sim.traffic; if (!t) return;
+  const v = sim.vehicle, ux = Math.cos(sim.th), uz = -Math.sin(sim.th), fx = sim.x + (v.L - v.OVR) * ux, fz = sim.z + (v.L - v.OVR) * uz, side = kerbSide();
+  for (const car of t.cars) {
+    const dx = car.x - fx, dz = car.z - fz, along = dx * ux + dz * uz, across = Math.abs(dx * uz - dz * ux);
+    if (car.state === 'parked' && car.ind && sim.mode === 'drive' && along > 0 && along < 45 && across < 5 && Math.cos(car.h - sim.th) > 0.8 && !c.told.has(`leaver:${car.id}`)) {
+      c.told.add(`leaver:${car.id}`);
+      showBanner('', 'A parked car is pulling out', `Its indicator is on. Stop a little behind it, leaving it room, and signal ${side}: once it has gone, the space is yours.`, null, 6000);
+    }
+    if (car.aim && car.aimT >= 0 && Math.hypot(dx, dz) < 40 && !c.told.has(`thief:${car.id}:${car.aim}`)) {
+      c.told.add(`thief:${car.id}:${car.aim}`);
+      showBanner('bad', 'A thief wants the space', `The ${TYPES[car.type].name} behind is waiting to dive in. Signal ${side} and start reversing into the space within ${t.patience} s, or it is gone.`, null, Math.max(4000, t.patience * 1000));
+    }
+    const mine = c.slot?.kind === 'kerb' ? c.slot.id : '';
+    if (mine && c.told.has(`thief:${car.id}:${mine}`) && !car.aim && car.state === 'drive' && !t.thiefIn(mine) && !c.told.has(`mine:${mine}`)) {
+      c.told.add(`mine:${mine}`);
+      showBanner('good', 'The space is yours', 'You signalled and began to reverse in time: the thief drives on.', null, 3500);
+    }
+  }
+}
+/** The other cars' horns, as each honk starts: louder the nearer it is (80 m at most). */
+const heard = new Map<number, number>();
+function streetSounds(): void {
+  const S = replay ? replay.sim : sim, t = S.traffic;
+  if (!t) { heard.clear(); return; }
+  for (const c of t.cars) {
+    if (c.honk < 0 || heard.get(c.id) === c.honk) continue;
+    heard.set(c.id, c.honk);
+    const d = Math.hypot(c.x - S.x, c.z - S.z);
+    if (t.t - c.honk < 0.3 && d < 80) toot(1 / (1 + d / 15), c.imp);
   }
 }
 bindLevels({ playLevel, playGarage, playCity, playDistrict: fresh => playCity(fresh, districtId(+settings.district)) });
@@ -607,10 +642,10 @@ function parkedOnStreet(r: ParkedResult, c: CityPlay, slot: Slot): void {
   setTimeout(() => {
     if (!sim.parked || replay || city !== c || c.slot !== slot) return;
     showResult(r, st, {
-      drive: sim.rules ? sim.rules.faults.slice() : null,
+      drive: sim.rules ? sim.rules.faults.slice() : null, held: sim.rules ? { secs: sim.rules.heldUp, cars: sim.rules.heldCars.size } : null,
       title: `Parked ${slot.kind === 'lot' ? 'in' : 'on'} ${slotPlace(slot)}`, sub: `${c.map.spec.name} · layout ${c.map.seed} · ${slot.kind === 'lot' ? `bay ${slot.at.n}` : `${fmtLen(slot.length)} space`}${par ? ` · par ${par}` : ''}`, par: par || r.moves, limit: limit || r.elapsed, better,
       retry: resetCar, newLayout: () => playCity(true, id),
-      next: () => { hideResult(); c.declined = slot.id; c.slot = null; c.from = null; sim.rules?.clear(); applySettings(); syncStreet(); showBanner('', 'Drive on', 'Pull out with Forward and Reverse. Above 10 km/h Drive mode takes over, or tap Drive.', null, 5000); },
+      next: () => { hideResult(); c.declined = slot.id; c.slot = null; c.from = null; sim.rules?.clear(); applySettings(); syncStreet(); showBanner('', 'Drive on', `Signal ${kerbSide() === 'right' ? 'left' : 'right'}, then pull out with Forward and Reverse. Above 10 km/h Drive mode takes over, or tap Drive.`, null, 5000); },
       nextLabel: 'Drive on',
     });
   }, 500);
@@ -726,6 +761,7 @@ function tick(now: number): void {
     settle(STEP);
   }
   cityFrame();
+  streetSounds();
   const S = replay ? replay.sim : sim;
   if (guide) {
     const el = (now - guide.t0) / 1000; let i = guide.times.findIndex(x => x >= el); if (i < 0) i = guide.pts.length - 1; guide.at = i;
@@ -774,7 +810,7 @@ if (hot?.ready) hot.ready(start); else start(hot?.data ?? {});
 
 // browser checks only (`vite build --mode harness`); other builds drop this
 if (import.meta.env.MODE === 'harness') Object.assign(window, { __game: {
-  sim, level: () => level, route: () => parRoute, lesson: () => lesson, city: () => city, pedals, enterLesson, playCity, switchMode, parkStart,
+  sim, level: () => level, route: () => parRoute, lesson: () => lesson, city: () => city, pedals, enterLesson, playCity, switchMode, parkStart, diveFor,
   /** Time the planner's check of a free space (ms), as the game runs it when you slow down beside one. */
   timeCheck: (i: number) => { const c = city!, s = c.map.slots[i], t0 = performance.now(); s.parkable = undefined; checkSlot(c.map, sim.vehicle, s); return performance.now() - t0; },
   /** Time making a district's road network (ms), as entering it does (the district itself built first). */

@@ -61,4 +61,19 @@ export function horn(on: boolean): void {
   }
 }
 
+/** Another car's horn: a short blast (two for an impatient driver), a little lower than yours, quieter the further off it
+ *  is (gain 0 to 1). */
+export function toot(gain: number, twice: boolean): void {
+  initAudio(true);
+  if (!actx || gain <= 0.01) return;
+  const t0 = actx.currentTime, g = actx.createGain(), f = actx.createBiquadFilter();
+  f.type = 'lowpass'; f.frequency.value = 2000; g.gain.setValueAtTime(0.0001, t0);
+  for (const [a, d] of twice ? [[0, 0.16], [0.24, 0.2]] : [[0, 0.42]]) {
+    g.gain.exponentialRampToValueAtTime(0.08 * gain, t0 + a + 0.02); g.gain.setValueAtTime(0.08 * gain, t0 + a + d - 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t0 + a + d);
+  }
+  const end = t0 + (twice ? 0.46 : 0.44);
+  for (const freq of [370, 466]) { const o = actx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = freq; o.connect(f); o.start(t0); o.stop(end); }
+  f.connect(g).connect(actx.destination);
+}
+
 document.addEventListener('visibilitychange', () => { if (document.hidden) { tone(false); horn(false); } });

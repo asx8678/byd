@@ -66,6 +66,7 @@ export function bindLevels(h: LevelHooks): void {
 export interface ResultInfo {
   title: string; sub: string; par: number; limit: number; better: boolean;
   drive?: Fault[] | null;   // on the street: the faults on the way to the space
+  held?: { secs: number; cars: number } | null;   // and how long you held up traffic, and how many cars
   retry(): void; newLayout: (() => void) | null; next: (() => void) | null; nextLabel: string;
 }
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
@@ -94,7 +95,12 @@ export function showResult(r: ParkedResult, st: Stars, info: ResultInfo): void {
   const items = lines.map(([ok, t]) => { const li = el('li', ok ? 'ok' : 'no'); li.append(el('i', '', ok ? '★' : '☆'), el('span', '', t)); return li; });
   if (info.drive) {   // the drive here, judged by the rules of the road (not a star: it is how you got to the space)
     const f = info.drive, li = el('li', f.length ? 'lno' : 'lok');
-    li.append(el('i', '', f.length ? '✗' : '✓'), el('span', '', f.length ? `On the way, ${f.length} ${f.length === 1 ? 'fault' : 'faults'}: ${f.map(q => q.brief).join('; ')}` : 'On the way: no faults (lights, speed, nothing hit)'));
+    li.append(el('i', '', f.length ? '✗' : '✓'), el('span', '', f.length ? `On the way, ${f.length} ${f.length === 1 ? 'fault' : 'faults'}: ${f.map(q => q.brief).join('; ')}` : 'On the way: no faults (lights, speed, signals, junctions, where you stopped, nothing hit)'));
+    items.push(li);
+  }
+  if (info.held) {   // the time the traffic waited for you (15 s is about a parking move or two)
+    const h = info.held, ok = h.secs < 15, li = el('li', ok ? 'lok' : 'lno');
+    li.append(el('i', '', ok ? '✓' : '✗'), el('span', '', h.secs < 1 ? 'Held up no one' : `Held up traffic for ${Math.round(h.secs)} s (${h.cars} ${h.cars === 1 ? 'car' : 'cars'})${ok ? '' : ': under 15 s is good'}`));
     items.push(li);
   }
   $('resList').replaceChildren(...items);
