@@ -19,18 +19,18 @@ export interface Draft { spec: SceneSpec; goals: Pose[]; entry: Region; knobs: K
 export function mulberry32(a: number): () => number { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
 // parked cars by size: length, width, how common, what the plan calls them
-const CARS: [number, number, number, string][] = [
+export const CARS: [number, number, number, string][] = [
   [2.70, 1.66, 0.5, 'city car'], [4.06, 1.75, 5, 'hatchback'], [4.35, 1.83, 5, 'crossover'],
   [4.70, 1.83, 2, 'estate'], [5.00, 1.90, 1.5, 'saloon'], [5.90, 2.08, 0.4, 'pickup'],
 ];
-const pickFrom = (rnd: () => number, list: typeof CARS) => {
+export const pickFrom = (rnd: () => number, list: typeof CARS): (typeof CARS)[number] => {
   let tot = 0; for (const c of list) tot += c[2];
   let x = rnd() * tot; for (const c of list) { x -= c[2]; if (x <= 0) return c; }
   return list[1];
 };
 
 /** Corners of a car-sized box centred at (cx, cz) pointing along th. */
-function carBox(cx: number, cz: number, th: number, L: number, W: number): number[][] {
+export function carBox(cx: number, cz: number, th: number, L: number, W: number): number[][] {
   const c = Math.cos(th), s = Math.sin(th), P = (a: number, b: number) => [cx + a * c + b * s, cz - a * s + b * c];
   return [P(-L / 2, -W / 2), P(L / 2, -W / 2), P(L / 2, W / 2), P(-L / 2, W / 2)];
 }

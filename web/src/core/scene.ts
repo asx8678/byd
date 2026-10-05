@@ -1,6 +1,7 @@
 // A scene from its data file (content/scenes/*.json) or from the level generator: what the car can touch,
 // the painted lines, the bays it can park in and where it can start. World frame in metres, x to the right,
 // z down the plan; rear-axle poses with heading th (0 = driving to the right, +90° = up the plan).
+import type { CityLayers } from './city';
 import { DEG, type Pt } from './math';
 
 export type Rect = [number, number, number, number];   // [x0, x1, z0, z1]
@@ -11,8 +12,18 @@ export type ObstacleClass = 'wall' | 'low' | 'lowwall' | 'car' | 'kerb';
 interface ObstacleBase { name: string; fill: string; h: number; cls: ObstacleClass; label: string; bx0: number; bx1: number; bz0: number; bz1: number; cx: number; cz: number }
 export type Obstacle = (ObstacleBase & { kind: 'poly'; pts: Pt[] }) | (ObstacleBase & { kind: 'circle'; x: number; z: number; r: number });
 
-/** A kerb as the route planner sees it: the wheels keep nx·x + nz·z ≤ c. */
-export interface Kerb { nx: number; nz: number; c: number; name: string }
+/** A kerb as the route planner sees it: the wheels keep nx·x + nz·z ≤ c. It runs from a to b: on a map with many
+ *  streets a kerb only counts for a wheel beside it (see besideKerb). */
+export interface Kerb { nx: number; nz: number; c: number; name: string; a: Pt; b: Pt }
+
+/** Whether a point is beside a kerb: level with it somewhere between its ends (20 cm to spare), and less than 6 m out
+ *  from it (or up to a metre over it), so that a kerb across a block or on another street does not count. */
+export function besideKerb(k: Kerb, x: number, z: number): boolean {
+  const ux = k.b[0] - k.a[0], uz = k.b[1] - k.a[1], l = Math.hypot(ux, uz), t = ((x - k.a[0]) * ux + (z - k.a[1]) * uz) / l;
+  if (t < -0.2 || t > l + 0.2) return false;
+  const g = k.c - (k.nx * x + k.nz * z);
+  return g > -1 && g < 6;
+}
 
 /** A space you can park in, and how strictly "parked" is judged. */
 export interface Bay {
@@ -64,6 +75,8 @@ export interface Scene {
   readonly marks: { text: [string, number, number][]; manhole: Rect | null };
   readonly floors: readonly Rect[]; readonly pit: Rect | null; readonly door: [number, number] | null;
   readonly areaView: Rect; readonly lot: Rect | null;
+  /** A street map's extra layers for the plan (core/city.ts); none in a car park or a level. */
+  readonly city?: CityLayers;
 }
 
 const rect = (a: number[] | undefined): Rect | null => (a ? [a[0], a[1], a[2], a[3]] : null);
@@ -84,7 +97,7 @@ export function makeScene(s: SceneSpec): Scene {
   const kerbs: Kerb[] = [];
   for (const k of s.kerbs ?? []) {
     const [ax, az] = k.a, [bx, bz] = k.b, l = Math.hypot(bx - ax, bz - az), nx = -(bz - az) / l, nz = (bx - ax) / l, d = k.depth ?? 2;
-    kerbs.push({ nx, nz, c: nx * ax + nz * az, name: k.name });
+    kerbs.push({ nx, nz, c: nx * ax + nz * az, name: k.name, a: [ax, az], b: [bx, bz] });
     const pts: Pt[] = [[ax, az], [bx, bz], [bx + nx * d, bz + nz * d], [ax + nx * d, az + nz * d]], xs = pts.map(p => p[0]), zs = pts.map(p => p[1]);
     const bx0 = Math.min(...xs), bx1 = Math.max(...xs), bz0 = Math.min(...zs), bz1 = Math.max(...zs);
     obstacles.push({ kind: 'poly', pts, name: k.name, fill: '', h: 0.12, cls: 'kerb', label: '', bx0, bx1, bz0, bz1, cx: (bx0 + bx1) / 2, cz: (bz0 + bz1) / 2 });

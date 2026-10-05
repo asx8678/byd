@@ -26,6 +26,9 @@ export function recordStars(slot: string, n: number): boolean {
   return better;
 }
 export const seedFor = (t: TemplateId, level: number): number => progress.seeds[`${t}:${level}`] ?? 1;
+/** The layout you last had on a street map, and remembering a new one. */
+export const citySeed = (id: string): number => progress.seeds[`city:${id}`] ?? 1;
+export function setCitySeed(id: string, seed: number): void { progress.seeds[`city:${id}`] = seed; save(); }
 export function setPlaying(play: string, t?: TemplateId, level?: number, seed?: number): void {
   progress.play = play;
   if (t && level && seed) progress.seeds[`${t}:${level}`] = seed;

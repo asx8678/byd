@@ -5,7 +5,7 @@
   "short": "S-Class",
   "basedOn": "Mercedes-Benz S-Class long wheelbase W223 (V223), S 580 4MATIC, US model year 2027",
   "sources": [
-    "Mercedes-Benz USA, 2027 S-Class quick reference guide: length 208.8 in, width 75.6 in (83.6 in with mirrors), wheelbase 126.6 in; turning circle 39.0 ft with 4.5° rear-axle steering (standard) and 35.4 ft with 10° (optional), wall to wall. https://media.mbusa.com/news/2027-mercedes-benz-s-class-quick-reference-guide",
+    "Mercedes-Benz USA, 2027 S-Class quick reference guide: length 208.8 in, width 75.6 in (83.6 in with mirrors), wheelbase 126.6 in; turning circle 39.0 ft with 4.5° rear-axle steering (standard) and 35.4 ft with 10° (optional), wall to wall; S 580 4MATIC: 4.0 l V8 biturbo mild hybrid, 530 hp (395 kW), 553 lb-ft, 0-60 mph 3.9 s (Mercedes' estimate), top speed 130 mph (limited), curb weight 5,016 lb (2275 kg). https://media.mbusa.com/news/2027-mercedes-benz-s-class-quick-reference-guide",
     "Mercedes-Benz USA, 2022 S-Class quick reference guide: height 59.2 in; the 10° rear-axle steering cuts the circle by up to 7 ft. https://web.archive.org/web/2022/https://media.mbusa.com/releases/release-7122b266eca9fbce132ea26634041549-2022-mercedes-benz-s-class-sedan-quick-reference-guide",
     "Spec databases (auto-data.net, cars-data.com) for the 2021-2025 car: track 1.655 m front, 1.683 m rear; overhangs 0.877 m front, 1.196 m rear"
   ],
@@ -14,9 +14,10 @@
     "the front overhang: 5.304 m - 3.216 m - 1.196 m = 0.892 m (the facelift's extra 15 mm put at the front)",
     "how the rear wheels follow the front ones (in proportion, at the tangents)",
     "the outline between the published length and width",
-    "the mirrors' place and height, the tyres and the kerb weight"
+    "the mirrors' place and height and the tyres",
+    "Drive mode: the weight split, the height of the centre of gravity, the drag area, the tyres' grip, the pull from rest and the slowing with no pedal; the share of the power the model gets is tuned so 0-60 mph takes the published 3.9 s; above 20 km/h the rear wheels' counter-steer fades out, and by 60 km/h they run straight"
   ],
-  "dims": { "length": 5.304, "width": 1.920, "widthMirrors": 2.123, "height": 1.504, "wheelbase": 3.216, "track": 1.655, "overhangFront": 0.892, "overhangRear": 1.196, "wheelRadius": 0.356, "wheelWidth": 0.255, "mass": 2250 },
+  "dims": { "length": 5.304, "width": 1.920, "widthMirrors": 2.123, "height": 1.504, "wheelbase": 3.216, "track": 1.655, "overhangFront": 0.892, "overhangRear": 1.196, "wheelRadius": 0.356, "wheelWidth": 0.255, "mass": 2275 },
   "turning": { "by": "Mercedes", "circles": [{ "rearSteer": 4.5, "wallDiameter": 11.89 }, { "rearSteer": 10, "wallDiameter": 10.79 }] },
   "rearSteer": { "options": [10, 4.5, 0], "default": 10 },
   "outline": { "half": [[4.108, 0.45], [4.05, 0.70], [3.91, 0.865], [3.64, 0.945], [2.60, 0.96], [-0.70, 0.96], [-1.08, 0.88], [-1.196, 0.58]] },
@@ -24,6 +25,7 @@
   "planCorners": [[3.91, -0.865], [3.91, 0.865], [-1.08, -0.88], [-1.08, 0.88]],
   "glass": [2.27, -0.55],
   "drive": { "creepForward": 1.2, "maxForward": 5.5, "rampForward": 1.1, "creepReverse": 0.9, "maxReverse": 2.8, "rampReverse": 0.6, "holdTime": 1.0, "accel": 2.0, "brake": 3.5 },
+  "dynamics": { "power": 395, "driven": "all", "frontShare": 0.52, "cgHeight": 0.55, "cdA": 0.55, "grip": 1.05, "launch": 8.0, "coast": 0.6, "powerShare": 0.737, "topSpeed": 209, "zeroTo60mph": 3.9 },
   "parkingSensors": {
     "layout": "4-front-4-rear-2-each-side",
     "ranges": { "front": 1.2, "rear": 1.5, "side": 0.6 },

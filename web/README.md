@@ -2,6 +2,8 @@
 
 Practise parking a BYD Atto 2 nose-first into bay 561, then in generated levels and a course of lessons, in the Atto 2 or in a Smart fortwo, a Ram 1500 or a Mercedes S-Class with rear-axle steering (10°, 4.5° or off), each turning the circle its maker publishes: a row of bays entered nose first, the same reversing in, and parallel parking at a kerb, each from level 1 (roomy) to level 10 (tight). A course of ten lessons teaches each manoeuvre with a coach: watch the route, drive it guided step by step, then with less and less help, then a test. Learning layers (the path, the turning circles, the swept path of all four corners, the ideal path, a kerb close-up and the numbers) switch on in Setup, and ⟲ 5 s rewinds to try a step again. The screen is a plan: it draws the path the car takes at the current steering, an outline of the car every 0.8 m along it and, in red, where it would touch something first. It also has parking sensors with beeps, touch detection, a move counter against par, and a result card with three stars when you're parked.
 
+On the street (Play → On the street) you drive a district in Drive mode: an accelerator and a brake you press harder higher up the button, physics with tyres that slip and grip that runs out (blended into the parking model below 18 km/h), and a map that turns so you drive up and zooms out with speed. Stop beside a free space on your right and Park mode takes over for the parking itself.
+
 It runs in any modern browser on iPhone, Android and PC, and installs to the home screen as an app that works offline.
 
 ## Commands
@@ -27,6 +29,7 @@ content/       data the game loads; JSON, so a Swift port reads the same files (
   vehicles/      one file per car: dimensions, outline, mirrors, turning circle, rear-axle steering, driveline, sensors
   scenes/        one file per place: obstacles, painted lines, bays, starts (garage-561.json is your garage)
   lessons/       course.json: the lessons, their stored routes, the handbooks' words with sources, pass rules
+  maps/          street districts for the map kit: roads, sides, zones, who is parked (harbour.json)
 src/core/      the game itself, no browser code: easy to test, and the part to port to Swift
   math.ts        DEG, clamp, wrapPi, the Pt type
   vehicle.ts     a car from its file; the steering lock is worked out from the published turning circles, and with
@@ -39,7 +42,13 @@ src/core/      the game itself, no browser code: easy to test, and the part to p
   collision.ts   what the car touches in a pose (body, a door mirror, or a tyre on a kerb)
   sensors.ts     gaps around the body, and the ultrasonic parking sensors (5 rays per cone)
   predict.ts     the path at the current steering, rolled forward in 6 cm steps until it would touch
-  sim.ts         Sim(scene, car): state, input, step(dt) → events (touch, parked)
+  sim.ts         Sim(scene, car): state, input, step(dt) → events (touch, parked); Park mode (hold to move, the
+                 exact low-speed model) or Drive mode (accelerator and brake through dynamics.ts)
+  dynamics.ts    Drive mode's street physics: a single-track model with tyres that slip, weight transfer, ABS,
+                 power, drag; blended into the low-speed model between 7 and 18 km/h; the zoom rule's look-ahead
+  city.ts        the map kit: a district spec compiled into a scene, the free spaces a car fits (and whether
+                 the planner can park it there), the street you are on, the space you stopped beside
+  world.ts       a spatial grid over a big scene's obstacles, so collisions and sensors only look nearby
   parking.ts     when a car counts as parked in a bay, and how neatly (shared by Sim, the planner and the stars)
   score.ts       three stars: nothing touched, neat, efficient (par + 1 moves, inside the time)
   replay.ts      fixed 60 Hz steps; recording an attempt and playing it back; replaying to a step (rewind)
@@ -59,10 +68,12 @@ src/core/      the game itself, no browser code: easy to test, and the part to p
                  coached drivers can follow them), and the lesson's tips matched to its steps
   robot.ts       drivers who do only what the coach shows, guided or on cue marks, a little early, late or off
 src/ui/        the browser side: drawing, controls, sound, settings
-  plan.ts        the map (canvas 2D)
+  plan.ts        the map (canvas 2D): north up, or in Drive mode turned so you drive up and zoomed by speed;
+                 on the street the pavements, blocks and their hatched buildings, kerbs, zones and street names
   pdcDisplay.ts  sensor graphic, STOP card, red screen-edge glow
   hud.ts         readouts and the banner
-  controls.ts    steering wheel, hold-to-move pedals, keyboard, Setup, Levels and Info
+  controls.ts    steering wheel, pedals (hold to move; in Drive mode an accelerator and a brake pressed harder
+                 higher up), keyboard, the Park/Drive button, Setup, Levels and Info
   levels.ts      the Levels tab of the Play sheet and the result card with its stars
   course.ts      the Course tab, the lesson card and a lesson's result card (localStorage key `atto2-course`)
   cars.ts        the car picker in Setup and the chosen car's facts, estimates and sources in Info
@@ -70,13 +81,15 @@ src/ui/        the browser side: drawing, controls, sound, settings
   progress.ts    best stars per car, last layouts and what you were playing (localStorage key `atto2-levels`)
   audio.ts       the beeper
   settings.ts    saved choices (localStorage key `atto2-garage`)
+src/cityCheck.worker.ts  the street's free spaces checked with the planner in a worker, so driving never stutters
 src/main.ts    wiring and the frame loop: the simulation steps at a fixed 60 Hz, drawing is capped at
                30 fps and skipped while nothing changes; Replay plays the current attempt from its start;
                Show me lets a ghost drive the route that set par, or plans one from where the car is;
                a try's result is read once the car has sat parked for a second; lessons: Watch, tries,
                the coach between the pedals and the car (applied before each step, so replays stay exact)
 public/        manifest, icons, service worker
-test/          golden test and its recorded fixtures, replay, content, planner and generator tests
+test/          golden test and its recorded fixtures, replay, content, planner, generator, car, lesson,
+               Drive-mode physics (dynamics.test.ts) and street district (city.test.ts) tests
 prototype/     the scenario generator prototype (now in src/core: generator/, planner.ts, coach.ts)
 ```
 
@@ -109,6 +122,11 @@ The other tests check that:
 - two passes lower the help, two fails raise it with slow motion, and a pass in the test finishes the lesson
 - a U-turn is measured the long way round, and leaving a space only counts once the car is out in the lane, straight
 - going back 5 s and driving on again ends exactly where never going back does, coach and path included
+- Drive mode against what the makers publish: 0–100 km/h (the Atto 2 DM-i Boost 7.5 s, the Smart 14.4 s) and the S-Class's 0–60 mph (3.9 s) within 3%, every car's top speed, and stopping from 100 km/h in a normal 33–46 m (50 km/h: 8–12.5 m)
+- below 7 km/h a Drive-mode step moves the car along exactly the arc a Park-mode step would, and its turning circle at walking pace is the spec sheet's; speeding up through the 7–18 km/h blend and slowing down again the turn rate never jolts
+- steady cornering: at a fixed steering wheel the circle widens with speed (understeer), and turned too hard at 50 km/h the car runs wide at its tyres' limit without spinning
+- a drive with pedals, the wheel and a switch into Park mode and back replays exactly; the zoom rule shows the blueprint's look-ahead at each speed
+- the Harbour district: the same seed gives the same district, parked cars keep to their lanes, every car gets the spaces the fill promised and the planner parks it in each of them (and in nine in ten of all the free gaps) from where Park mode starts; stopping beside a space is recognised only on your side of the road; kerbs on other streets do not count; every car drives Harbour Street at 50 km/h and turns left and right at the Market Street crossing without touching anything
 
 ## Porting to Swift later
 

@@ -4,7 +4,7 @@
 import { footprint, heroCorners } from './car';
 import { wheelsOf } from './collision';
 import { DEG, wrapPi } from './math';
-import type { Bay, Kerb, Rect } from './scene';
+import { besideKerb, type Bay, type Kerb, type Rect } from './scene';
 import type { Vehicle } from './vehicle';
 
 export interface InBay { noseIn: boolean; noseOut: boolean; errIn: number; errOut: number }
@@ -27,11 +27,11 @@ export function facesRight(b: Bay, at: InBay): boolean {
   return f === 'in' ? at.noseIn : f === 'out' ? at.noseOut : at.noseIn || at.noseOut;
 }
 
-/** The kerb-side tyres' gap to the nearest kerb, the larger of the two (m); Infinity with no kerbs. */
+/** The kerb-side tyres' gap to the nearest kerb beside them, the larger of the two (m); Infinity with no kerbs. */
 export function tyreGap(v: Vehicle, kerbs: readonly Kerb[], x: number, z: number, th: number): number {
   let near = Infinity, gap = Infinity;
   for (const k of kerbs) {
-    const g = wheelsOf(v).map(w => Math.min(...footprint(x, z, th, w.pts).map(p => k.c - (k.nx * p[0] + k.nz * p[1])))).sort((a, b) => a - b);
+    const g = wheelsOf(v).map(w => Math.min(...footprint(x, z, th, w.pts).map(p => (besideKerb(k, p[0], p[1]) ? k.c - (k.nx * p[0] + k.nz * p[1]) : Infinity)))).sort((a, b) => a - b);
     if (g[0] < near) { near = g[0]; gap = g[1]; }
   }
   return gap;

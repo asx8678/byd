@@ -5,22 +5,23 @@
   "short": "Ram 1500",
   "basedOn": "Ram 1500 DT Crew Cab, 5'7\" box, 4x4 (2019-)",
   "sources": [
-    "FCA's 2019 Ram 1500 technical specifications (metric): length 5.916, width 2.084, height 1.971, wheelbase 3.672 m; track 1.741 m front, 1.729 m rear; turning diameter 14.08 m curb to curb; 3.1 steering-wheel turns; 275/55 R20 tyres. https://www.automobilrevue.cz/priloha/5bdaff866ac65/allnew2019-ram-1500-tech-spec--oct-18-5bf437059f475.pdf"
+    "FCA's 2019 Ram 1500 technical specifications (metric): length 5.916, width 2.084, height 1.971, wheelbase 3.672 m; track 1.741 m front, 1.729 m rear; turning diameter 14.08 m curb to curb; 3.1 steering-wheel turns; 275/55 R20 tyres; 5.7 l HEMI V8 291 kW (395 hp) and 556 Nm, 8-speed automatic; mass in running order 2404 kg, 1398 kg front and 1006 kg rear (Crew Cab, 5'7\" box); top speed 170 km/h. https://www.automobilrevue.cz/priloha/5bdaff866ac65/allnew2019-ram-1500-tech-spec--oct-18-5bf437059f475.pdf"
   ],
   "notes": "Rear-axle frame: x forward from the rear axle, z to the right, metres. The steering lock comes from the 14.08 m curb-to-curb circle. The sheet gives no overhangs, only their sum (length minus wheelbase, 2.244 m), and no width with mirrors. One track for all four wheels: the front one, which sets the kerb circle.",
   "estimates": [
     "how the 2.244 m of overhang splits: 1.00 m front, 1.244 m rear",
     "the mirrors: 2.48 m across, their place and height",
     "the outline between the published length and width",
-    "the kerb weight"
+    "Drive mode: the height of the centre of gravity, the drag area, the tyres' grip, the pull from rest, the slowing with no pedal, and the share of the power the model gets: the sheet gives no 0-100 time, so it is the other cars' average; 4WD Auto counts as four-wheel drive"
   ],
-  "dims": { "length": 5.916, "width": 2.084, "widthMirrors": 2.48, "height": 1.971, "wheelbase": 3.672, "track": 1.741, "overhangFront": 1.0, "overhangRear": 1.244, "wheelRadius": 0.405, "wheelWidth": 0.275, "mass": 2400 },
+  "dims": { "length": 5.916, "width": 2.084, "widthMirrors": 2.48, "height": 1.971, "wheelbase": 3.672, "track": 1.741, "overhangFront": 1.0, "overhangRear": 1.244, "wheelRadius": 0.405, "wheelWidth": 0.275, "mass": 2404 },
   "turning": { "by": "FCA", "circles": [{ "kerbDiameter": 14.08 }], "turnsLockToLock": 3.1 },
   "outline": { "half": [[4.672, 0.62], [4.63, 0.86], [4.52, 0.985], [4.30, 1.035], [3.30, 1.042], [-0.90, 1.042], [-1.19, 0.985], [-1.244, 0.85]] },
   "mirrors": { "height": 1.32, "box": [2.30, 1.0, 2.58, 1.24] },
   "planCorners": [[4.52, -0.985], [4.52, 0.985], [-1.19, -0.985], [-1.19, 0.985]],
   "glass": [2.55, 0.62],
   "drive": { "creepForward": 1.2, "maxForward": 5.5, "rampForward": 1.1, "creepReverse": 0.9, "maxReverse": 2.8, "rampReverse": 0.6, "holdTime": 1.0, "accel": 2.0, "brake": 3.5 },
+  "dynamics": { "power": 291, "driven": "all", "frontShare": 0.5815, "cgHeight": 0.78, "cdA": 1.2, "grip": 0.9, "launch": 5.5, "coast": 0.5, "powerShare": 0.705, "topSpeed": 170 },
   "parkingSensors": {
     "layout": "4-front-4-rear",
     "ranges": { "front": 1.2, "rear": 1.5, "side": 0 },

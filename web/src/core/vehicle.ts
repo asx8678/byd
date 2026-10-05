@@ -2,6 +2,7 @@
 // driveline and parking sensors. Bicycle model; local frame: x forward, z to the right, with the origin on the
 // centre line at the point the car turns about. That is the rear axle, unless the rear wheels steer as well:
 // then the origin sits a little ahead of the rear axle (see makeVehicle) and the rest of the game is unchanged.
+import { makeDyn, type Dyn, type DynamicsSpec } from './dynamics';
 import { DEG, type Pt } from './math';
 
 export type Side = 'front' | 'rear' | 'left' | 'right';
@@ -26,6 +27,8 @@ export interface VehicleSpec {
   glass?: number[];                                                // where the windows run on the plan, front and back (x)
   seats?: number;                                                  // 2 for a two-seater: no back seat for the coach to name
   drive: { creepForward: number; maxForward: number; rampForward: number; creepReverse: number; maxReverse: number; rampReverse: number; holdTime: number; accel: number; brake: number };
+  /** Drive mode on the street: power, weight split, grip (see dynamics.ts). */
+  dynamics?: DynamicsSpec;
   parkingSensors: { layout: string; ranges: { front: number; rear: number; side: number }; coneDeg: number; bands: Record<Side, number[]>; cornerZ?: number; sideZ?: number } | null;
 }
 
@@ -58,6 +61,8 @@ export interface Vehicle {
   /** The windows on the plan, from the windscreen's foot back to the rear window (x). */
   readonly glass: readonly [number, number];
   readonly drive: Drive;
+  /** Drive mode's figures (null for a car without them: it stays in Park mode). */
+  readonly dyn: Dyn | null;
   readonly sensors: readonly SensorMount[];
   readonly pdc: { front: number; rear: number; side: number; half: number; bands: Record<Side, readonly number[]> };
   /** The data file, for the facts and sources shown in the app. */
@@ -128,7 +133,7 @@ export function makeVehicle(s: VehicleSpec, rearDeg = s.rearSteer?.default ?? 0)
   const RA = x0 ? -x0 : 0, OVR = d.overhangRear + x0;
   const tyres = [WB, RA].flatMap(ax => [[ax + d.wheelRadius, TRACK / 2 + d.wheelWidth / 2], [ax - d.wheelRadius, TRACK / 2 + d.wheelWidth / 2]]);
   const REACH = Math.max(...[...body, ...mirrors.flat(), ...tyres].map(([a, b]) => Math.hypot(a, b)));
-  const v: Omit<Vehicle, 'sensors'> = {
+  const v: Omit<Vehicle, 'sensors' | 'dyn'> = {
     id: variantId(s, rearDeg), name: s.name, family: s.id, short: s.short ?? s.name,
     L, W, H: d.height, WB, RA, RS: rearDeg ? Math.tan(rearDeg * DEG) / (WB / R_REAR) : 0, REAR_DEG: rearDeg, TRACK,
     OVF: d.overhangFront, OVR, WR: d.wheelRadius, WW: d.wheelWidth, R_CC, MASS: d.mass,
@@ -145,7 +150,7 @@ export function makeVehicle(s: VehicleSpec, rearDeg = s.rearSteer?.default ?? 0)
       : { front: 0, rear: 0, side: 0, half: 0, bands: { front: [], rear: [], left: [], right: [] } },
     spec: s,
   };
-  return { ...v, sensors: s.parkingSensors ? standardSensors(v, s.parkingSensors) : [] };
+  return { ...v, dyn: s.dynamics ? makeDyn(s, WB, RA, v.RS) : null, sensors: s.parkingSensors ? standardSensors(v, s.parkingSensors) : [] };
 }
 
 /** Each layout's groups: four sensors in a bumper (two centre, two corner angled 35° out), two per side, each a cone. */

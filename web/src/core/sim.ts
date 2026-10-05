@@ -1,20 +1,26 @@
-// The simulation: one car in one scene, driven by hold-to-move pedals and a steering wheel.
+// The simulation: one car in one scene, driven by a steering wheel and either hold-to-move pedals (Park mode, the
+// exact low-speed model) or an accelerator and a brake (Drive mode on the street, see dynamics.ts).
 // Pure logic with no screen code, so it can be tested and ported as it is. The car and the scene
 // come from data files or the level generator; with no arguments it is the Atto 2 in the garage around bay 561.
 import { collides, type CarPart } from './collision';
 import { ATTO2, GARAGE_561 } from './content';
+import { blendOf, rates } from './dynamics';
 import { DEG, clamp } from './math';
 import { facesRight, parkedIn, placement } from './parking';
 import { predictPath, type Prediction } from './predict';
-import type { Obstacle, Scene } from './scene';
+import type { Bay, Obstacle, Scene } from './scene';
 import { edgeGaps, scanPdc, type SideValues } from './sensors';
 import type { Vehicle } from './vehicle';
 
 export interface SimInput {
-  fwd: boolean; rev: boolean;      // pedals held
+  fwd: boolean; rev: boolean;      // pedals held (Park mode)
   kl: boolean; kr: boolean;        // keyboard steering held
   wheelHeld: boolean;              // a finger on the steering wheel (no self-centring then)
+  acc: number; brk: number;        // accelerator and brake, 0 to 1 (Drive mode)
 }
+export type Mode = 'park' | 'drive';
+/** Drive mode's parking sensors (and the gaps the numbers show) switch off above this speed, as real ones do (m/s). */
+export const PDC_MAX = 10 / 3.6;
 
 export interface ParkedResult {
   bay: string; noseIn: boolean;
@@ -40,8 +46,13 @@ export class Sim {
   // rear-axle pose (m, rad), speed (m/s, + forward), steering wheel angle (degrees, clockwise +)
   x = 0; z = 0; th = 0; v = 0;
   wheelAngle = 0;
+  /** Park mode: hold to move, the exact low-speed model. Drive mode: accelerator and brake, the street model. */
+  mode: Mode = 'park';
+  // Drive mode's state besides the speed: side speed at the origin (m/s, left +), yaw rate (rad/s, left +), and the
+  // last longitudinal acceleration (m/s², it shifts the weight between the axles)
+  vy = 0; r = 0; ax = 0;
   wheelTarget: number | null = null;   // animate the wheel towards this (Straighten)
-  readonly input: SimInput = { fwd: false, rev: false, kl: false, kr: false, wheelHeld: false };
+  readonly input: SimInput = { fwd: false, rev: false, kl: false, kr: false, wheelHeld: false, acc: 0, brk: 0 };
   readonly options: SimOptions;
   hits = 0; elapsed = 0; parked = false; inContact = false; started = false;
   lastMoveDir: 1 | -1 = 1;
@@ -69,7 +80,7 @@ export class Sim {
 
   /** Single-track angle in degrees, right positive. */
   get steerDeg(): number { return this.wheelAngle / this.options.lockDeg * this.vehicle.MAXSTEER; }
-  get gear(): 'D' | 'R' | 'P' { return this.input.fwd || this.v > 0.05 ? 'D' : this.input.rev || this.v < -0.05 ? 'R' : 'P'; }
+  get gear(): 'D' | 'R' | 'P' { return this.mode === 'drive' || this.input.fwd || this.v > 0.05 ? 'D' : this.input.rev || this.v < -0.05 ? 'R' : 'P'; }
   /** The parking sensors are listening while the car moves and for 1.5 s after. */
   get armed(): boolean { return this.time - this.lastDriveT < 1.5; }
 
@@ -88,7 +99,15 @@ export class Sim {
     this.x = x; this.z = z; this.th = th;
     this.v = 0; this.wheelAngle = 0; this.wheelTarget = null; this.hits = 0; this.elapsed = 0;
     this.started = false; this.inContact = false; this.parked = false; this.lastMoveDir = 1; this.moves = 0; this.moveSign = 0;
-    this.input.fwd = this.input.rev = false;
+    this.input.fwd = this.input.rev = false; this.input.acc = this.input.brk = 0; this.vy = this.r = this.ax = 0;
+  }
+
+  /** Park mode or Drive mode, keeping the speed (Drive mode never reverses) and the turn the car is in. The pedals are
+   *  left as they are: the caller decides what a pedal still held means now. */
+  setMode(m: Mode): void {
+    if (m === this.mode || (m === 'drive' && !this.vehicle.dyn)) return;
+    this.mode = m; this.holdT = 0; this.ax = 0; this.vy = 0;
+    if (m === 'drive') { this.v = Math.max(0, this.v); this.r = this.v * Math.tan(-this.steerDeg * DEG) / this.vehicle.WB; } else this.r = 0;
   }
 
   /** Put the car somewhere directly (tests, restoring a saved session). */
@@ -99,43 +118,68 @@ export class Sim {
 
   /** Advance by dt seconds. Returns what happened (touches, parking) for the UI to show. */
   step(dt: number): SimEvent[] {
-    const events: SimEvent[] = [], inp = this.input, lock = this.options.lockDeg;
+    const events: SimEvent[] = [], inp = this.input, lock = this.options.lockDeg, drive = this.mode === 'drive';
     this.time += dt;
-    // steering: the Straighten animation, keyboard, and self-centring as the car rolls
+    // steering: the Straighten animation, keyboard (more slowly at speed), and self-centring as the car rolls
     if (this.wheelTarget !== null) { const d = this.wheelTarget - this.wheelAngle; const stepA = 540 * dt; this.wheelAngle = Math.abs(d) <= stepA ? this.wheelTarget : this.wheelAngle + Math.sign(d) * stepA; if (this.wheelAngle === this.wheelTarget) this.wheelTarget = null; }
-    if (inp.kl) this.wheelAngle = clamp(this.wheelAngle - 420 * dt, -lock, lock);
-    if (inp.kr) this.wheelAngle = clamp(this.wheelAngle + 420 * dt, -lock, lock);
+    const kRate = drive ? 420 / (1 + (this.v / 8) ** 2) : 420;
+    if (inp.kl) this.wheelAngle = clamp(this.wheelAngle - kRate * dt, -lock, lock);
+    if (inp.kr) this.wheelAngle = clamp(this.wheelAngle + kRate * dt, -lock, lock);
     if (this.options.selfCentre && !inp.wheelHeld && !inp.kl && !inp.kr && this.wheelTarget === null && Math.abs(this.v) > 0.05) {   // self-aligning torque returns the wheel
       const rate = Math.min(180, 55 * Math.abs(this.v)); this.wheelAngle = Math.abs(this.wheelAngle) <= rate * dt ? 0 : this.wheelAngle - Math.sign(this.wheelAngle) * rate * dt;
     }
-    // longitudinal: hold to move, release to brake; the longer the hold, the higher the target speed
-    const D = this.vehicle.drive;
-    this.holdT = (inp.fwd || inp.rev) ? this.holdT + dt : 0;
-    const ramp = Math.max(0, this.holdT - D.HOLD_T);
-    const tgt = this.targetSpeed(ramp);
-    if (tgt === 0) { this.v = Math.abs(this.v) <= D.BRAKE * dt ? 0 : this.v - Math.sign(this.v) * D.BRAKE * dt; }
-    else if (tgt > this.v) this.v = Math.min(tgt, this.v + (this.v < 0 ? D.BRAKE : D.ACC) * dt);
-    else this.v = Math.max(tgt, this.v - (this.v > 0 ? D.BRAKE : D.ACC) * dt);
-    if (inp.fwd) this.lastMoveDir = 1; else if (inp.rev) this.lastMoveDir = -1;
+    const delta = -this.steerDeg * DEG, dyn = this.vehicle.dyn!;
+    if (drive) {
+      // longitudinal, Drive mode: the accelerator and brake through the tyres; it never rolls backwards
+      const R = rates(dyn, { u: this.v, vy: this.vy, r: this.r, ax: this.ax }, { delta, acc: inp.acc, brk: inp.brk }, blendOf(this.v));
+      this.ax = R.ax; this.v = Math.max(0, this.v + R.du * dt); this.holdT = 0;
+      this.lastMoveDir = 1; if (inp.acc > 0) this.started = true;
+    } else {
+      // longitudinal: hold to move, release to brake; the longer the hold, the higher the target speed
+      const D = this.vehicle.drive;
+      this.holdT = (inp.fwd || inp.rev) ? this.holdT + dt : 0;
+      const ramp = Math.max(0, this.holdT - D.HOLD_T);
+      const tgt = this.targetSpeed(ramp);
+      if (tgt === 0) { this.v = Math.abs(this.v) <= D.BRAKE * dt ? 0 : this.v - Math.sign(this.v) * D.BRAKE * dt; }
+      else if (tgt > this.v) this.v = Math.min(tgt, this.v + (this.v < 0 ? D.BRAKE : D.ACC) * dt);
+      else this.v = Math.max(tgt, this.v - (this.v > 0 ? D.BRAKE : D.ACC) * dt);
+      if (inp.fwd) this.lastMoveDir = 1; else if (inp.rev) this.lastMoveDir = -1;
+    }
     if (inp.fwd || inp.rev) this.started = true;
     if (this.started && !this.parked) this.elapsed += dt;
-    // kinematics with a collision check per substep
-    const sub = 4, h = dt / sub, delta = -this.steerDeg * DEG;
+    // kinematics with a collision check per substep; in Drive mode above 7 km/h the tyres slip: the car moves by the
+    // tyre model's side speed and yaw rate, blended with the low-speed model's up to 18 km/h
+    const sub = 4, h = dt / sub, lam = drive ? blendOf(this.v) : 0;
     for (let i = 0; i < sub && this.v !== 0; i++) {
-      const nth = this.th + this.v / this.vehicle.WB * Math.tan(delta) * h, nx = this.x + this.v * Math.cos(this.th) * h, nz = this.z - this.v * Math.sin(this.th) * h;
+      let nth: number, nx: number, nz: number;
+      if (lam > 0) {
+        const R = rates(dyn, { u: this.v, vy: this.vy, r: this.r, ax: this.ax }, { delta, acc: inp.acc, brk: inp.brk }, lam);
+        this.vy += R.dvy * h; this.r += R.dr * h;
+        const cs = Math.cos(this.th), sn = Math.sin(this.th), yaw = lam * this.r + (1 - lam) * this.v * Math.tan(delta) / this.vehicle.WB, side = lam * this.vy;
+        nth = this.th + yaw * h; nx = this.x + (this.v * cs - side * sn) * h; nz = this.z + (-this.v * sn - side * cs) * h;
+      } else {
+        nth = this.th + this.v / this.vehicle.WB * Math.tan(delta) * h; nx = this.x + this.v * Math.cos(this.th) * h; nz = this.z - this.v * Math.sin(this.th) * h;
+      }
       const hit = this.touching(nx, nz, nth);
       if (hit) {
         if (!this.inContact) { this.inContact = true; this.hits++; events.push({ type: 'touch', name: hit.obstacle.name, part: hit.part, hits: this.hits }); }
-        this.v = 0; break;
+        this.v = 0; this.vy = 0; this.r = 0; break;
       }
       this.x = nx; this.z = nz; this.th = nth; this.inContact = false;
     }
+    // below 7 km/h Drive mode is the low-speed model: no side slip, the yaw rate the steering sets
+    if (drive && lam === 0) { this.vy = 0; this.r = this.v * Math.tan(delta) / this.vehicle.WB; }
     if (Math.abs(this.v) > 0.05 && Math.sign(this.v) !== this.moveSign) { this.moveSign = Math.sign(this.v); this.moves++; }
-    // sensors only when the car has moved
-    const ps = this.x.toFixed(4) + ',' + this.z.toFixed(4) + ',' + this.th.toFixed(5);
-    if (ps !== this.poseSig) { this.poseSig = ps; edgeGaps(this.vehicle, this.obstacles, this.x, this.z, this.th, this.gaps); scanPdc(this.vehicle, this.obstacles, this.x, this.z, this.th, this.sensorReadings, this.pdc); }
+    // sensors only when the car has moved; in Drive mode only below 10 km/h
+    if (!drive || Math.abs(this.v) < PDC_MAX) {
+      const ps = this.x.toFixed(4) + ',' + this.z.toFixed(4) + ',' + this.th.toFixed(5);
+      if (ps !== this.poseSig) { this.poseSig = ps; edgeGaps(this.vehicle, this.obstacles, this.x, this.z, this.th, this.gaps); scanPdc(this.vehicle, this.obstacles, this.x, this.z, this.th, this.sensorReadings, this.pdc); }
+    } else if (this.poseSig !== 'off') {
+      this.poseSig = 'off'; this.sensorReadings.fill(Infinity);
+      for (const k of ['front', 'rear', 'left', 'right'] as const) { this.gaps[k] = 9; this.pdc[k] = Infinity; }
+    }
     const parked = this.checkParked(); if (parked) events.push({ type: 'parked', result: parked });
-    if (inp.fwd || inp.rev || Math.abs(this.v) > 0.05) this.lastDriveT = this.time;
+    if (inp.fwd || inp.rev || (drive && inp.acc > 0) || Math.abs(this.v) > 0.05) this.lastDriveT = this.time;
     return events;
   }
 
@@ -148,7 +192,7 @@ export class Sim {
   /** All four corners inside the target bay, stopped, within 6° of straight, the way round the bay asks for. */
   private checkParked(): ParkedResult | null {
     if (Math.abs(this.v) > 0.02) return null;
-    const b = this.targetBay(), at = parkedIn(this.vehicle, b, this.x, this.z, this.th);
+    const b = this.targetBay(), at = b && parkedIn(this.vehicle, b, this.x, this.z, this.th);
     if (!at) { this.parked = false; return null; }
     if (!facesRight(b, at) || this.parked) return null;
     this.parked = true;
@@ -158,12 +202,13 @@ export class Sim {
   /** How the car sits in the target bay right now, or null when it is not in it the right way round. The parked
    *  event reports the first stop; this is for reading the result later, once the car has settled. */
   parkedResult(): ParkedResult | null {
-    const b = this.targetBay(), at = parkedIn(this.vehicle, b, this.x, this.z, this.th);
+    const b = this.targetBay(), at = b && parkedIn(this.vehicle, b, this.x, this.z, this.th);
     return at && facesRight(b, at) ? this.resultAt(b, at) : null;
   }
 
-  private targetBay() { return this.scene.bays[this.options.bay] ?? this.scene.bays[this.scene.defaultBay]; }
-  private resultAt(b: ReturnType<Sim['targetBay']>, at: NonNullable<ReturnType<typeof parkedIn>>): ParkedResult {
+  /** The space the car should park in (none on a street before Park mode picks one). */
+  private targetBay(): Bay | undefined { return this.scene.bays[this.options.bay] ?? this.scene.bays[this.scene.defaultBay]; }
+  private resultAt(b: Bay, at: NonNullable<ReturnType<typeof parkedIn>>): ParkedResult {
     const v = this.vehicle, { noseIn } = at, p = placement(v, b, this.scene.kerbs, this.x, this.z, this.th, at);
     const cs = Math.cos(this.th), cx = this.x + (v.WB / 2) * cs, gl = cx - v.W / 2 - b.x0, gr = b.x1 - cx - v.W / 2;
     return {

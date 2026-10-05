@@ -10,19 +10,24 @@ import { TEMPLATE_NAMES, bestStars, daily, seedFor } from './progress';
 export interface LevelHooks {
   playLevel(t: TemplateId, level: number, seed: number): void;
   playGarage(): void;
+  playCity(fresh: boolean): void;   // the street map, its last layout or a new one
 }
 let hooks: LevelHooks;
 
 const starText = (n: number) => (n < 0 ? '' : '★'.repeat(n) + '☆'.repeat(3 - n));
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''): HTMLElementTagNameMap[K] => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
 
-/** Refresh the sheet: best stars, and which one is being played (a level key, or "garage"). */
-export function renderLevels(playing: string, garageName: string, garageSlot: string): void {
+/** The street map's entry: its name, a line under it, the best stars there. */
+export interface CityEntry { name: string; sub: string; stars: number }
+/** Refresh the sheet: best stars, and which one is being played (a level key, "garage" or "city"). */
+export function renderLevels(playing: string, garageName: string, garageSlot: string, city: CityEntry): void {
   const d = daily();
   $('lvDailyName').textContent = `${TEMPLATE_NAMES[d.template].long} · level ${d.level}`;
   $('lvGarageName').textContent = garageName;
   $('lvGarageStars').textContent = starText(bestStars(garageSlot));
   $('lvGarage').classList.toggle('cur', playing === 'garage');
+  $('lvCityName').textContent = city.name; $('lvCitySub').textContent = city.sub; $('lvCityStars').textContent = starText(city.stars);
+  $('lvCity').classList.toggle('cur', playing === 'city');
   const cur = /^([a-z-]+):(\d+):/.exec(playing);
   $('lvGroups').replaceChildren(...TEMPLATES.map(t => {
     const g = el('div', 'lvGroup'), grid = el('div', 'lvGrid');
@@ -48,6 +53,8 @@ export function bindLevels(h: LevelHooks): void {
   });
   $('lvDailyGo').addEventListener('click', () => { const d = daily(); hooks.playLevel(d.template, d.level, d.seed); });
   $('lvGarage').addEventListener('click', () => hooks.playGarage());
+  $('lvCity').addEventListener('click', () => hooks.playCity(false));
+  $('lvCityNew').addEventListener('click', () => hooks.playCity(true));
 }
 
 export interface ResultInfo {

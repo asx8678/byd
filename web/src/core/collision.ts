@@ -4,6 +4,7 @@ import { circleHitsPoly, polysOverlap } from './geometry';
 import type { Pt } from './math';
 import type { Obstacle } from './scene';
 import type { Vehicle } from './vehicle';
+import { nearby } from './world';
 
 export type WheelPart = 'front left wheel' | 'front right wheel' | 'rear left wheel' | 'rear right wheel';
 export type CarPart = '' | 'left mirror' | 'right mirror' | WheelPart;
@@ -29,7 +30,7 @@ export function wheelsOf(v: Vehicle): { part: WheelPart; pts: Pt[] }[] {
 export function collides(v: Vehicle, obstacles: readonly Obstacle[], px: number, pz: number, h: number): Hit | null {
   let B: Pt[] | null = null, ML: Pt[] = [], MR: Pt[] = [], WH: { part: WheelPart; pts: Pt[] }[] | null = null;
   const r = Math.max(4.5, v.REACH + 0.8);   // nothing of the car reaches further than REACH from its origin
-  for (const o of obstacles) {
+  for (const o of nearby(obstacles, px, pz, r)) {
     if (o.bx1 < px - r || o.bx0 > px + r || o.bz1 < pz - r || o.bz0 > pz + r) continue;
     if (o.cls === 'kerb' && o.kind === 'poly') {   // only the tyres meet a kerb
       if (!WH) WH = wheelsOf(v).map(w => ({ part: w.part, pts: footprint(px, pz, h, w.pts) }));

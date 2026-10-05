@@ -2,21 +2,23 @@
 // starting pose and settings plus the inputs that changed, step by step. Replaying them on the same
 // device gives the same drive exactly; shared ghosts should also store poses, because tiny floating-
 // point differences between devices can add up.
-import { Sim, type SimEvent, type SimOptions } from './sim';
+import { Sim, type Mode, type SimEvent, type SimOptions } from './sim';
 import type { Scene } from './scene';
 import type { Vehicle } from './vehicle';
 
 /** The steady rate the game steps at, in seconds per step. */
 export const STEP = 1 / 60;
 
-type Key = 'fwd' | 'rev' | 'kl' | 'kr' | 'held' | 'wheel' | 'target';
+type Key = 'fwd' | 'rev' | 'kl' | 'kr' | 'held' | 'wheel' | 'target' | 'acc' | 'brk' | 'drive';
 /** [step index, what changed, its new value] */
 export type RecEvent = [number, Key, number | boolean | null];
 /** Everything about the car at the moment a recording starts, so playback begins in exactly the same state. */
 export interface StartState {
   x: number; z: number; th: number; v: number; wheelAngle: number; wheelTarget: number | null; holdT: number; time: number; lastDriveT: number;
   hits: number; elapsed: number; started: boolean; parked: boolean; inContact: boolean; lastMoveDir: 1 | -1; moves: number; moveSign: number;
-  input: { fwd: boolean; rev: boolean; kl: boolean; kr: boolean; wheelHeld: boolean };
+  input: { fwd: boolean; rev: boolean; kl: boolean; kr: boolean; wheelHeld: boolean; acc?: number; brk?: number };
+  // Drive mode (recordings made before it have none of these: Park mode, at rest)
+  mode?: Mode; vy?: number; r?: number; ax?: number;
 }
 export interface Recording {
   format: 1; scene: string; vehicle: string; dt: number;
@@ -25,10 +27,11 @@ export interface Recording {
 export const stateOf = (s: Sim): StartState => ({
   x: s.x, z: s.z, th: s.th, v: s.v, wheelAngle: s.wheelAngle, wheelTarget: s.wheelTarget, holdT: s.holdT, time: s.time, lastDriveT: s.lastDriveT,
   hits: s.hits, elapsed: s.elapsed, started: s.started, parked: s.parked, inContact: s.inContact, lastMoveDir: s.lastMoveDir, moves: s.moves, moveSign: s.moveSign, input: { ...s.input },
+  mode: s.mode, vy: s.vy, r: s.r, ax: s.ax,
 });
 
 type Snap = Record<Key, number | boolean | null>;
-const snap = (s: Sim): Snap => ({ fwd: s.input.fwd, rev: s.input.rev, kl: s.input.kl, kr: s.input.kr, held: s.input.wheelHeld, wheel: s.wheelAngle, target: s.wheelTarget });
+const snap = (s: Sim): Snap => ({ fwd: s.input.fwd, rev: s.input.rev, kl: s.input.kl, kr: s.input.kr, held: s.input.wheelHeld, wheel: s.wheelAngle, target: s.wheelTarget, acc: s.input.acc, brk: s.input.brk, drive: s.mode === 'drive' });
 
 /** Watches a simulation between steps and writes down what the player changed. */
 export class Recorder {
@@ -57,6 +60,16 @@ export class Recorder {
   }
 }
 
+/** One recorded change, applied to a simulation. */
+function apply(sim: Sim, k: Key, val: number | boolean | null): void {
+  if (k === 'wheel') sim.wheelAngle = val as number;
+  else if (k === 'target') sim.wheelTarget = val as number | null;
+  else if (k === 'held') sim.input.wheelHeld = val as boolean;
+  else if (k === 'acc' || k === 'brk') sim.input[k] = val as number;
+  else if (k === 'drive') sim.setMode(val ? 'drive' : 'park');
+  else sim.input[k] = val as boolean;
+}
+
 /** Put a simulation into a recorded state (the car, its timers and counters, and what is held). */
 export function restoreState(sim: Sim, st: StartState): void {
   const { input, ...rest } = st;
@@ -71,13 +84,7 @@ export function replayTo(rec: Recording, scene: Scene, vehicle: Vehicle, n: numb
   const sim = new Sim(scene, vehicle);
   Object.assign(sim.options, rec.options); restoreState(sim, rec.start);
   for (let i = 0, e = 0; i < Math.min(n, rec.steps); i++) {
-    for (; e < rec.events.length && rec.events[e][0] === i; e++) {
-      const [, k, val] = rec.events[e];
-      if (k === 'wheel') sim.wheelAngle = val as number;
-      else if (k === 'target') sim.wheelTarget = val as number | null;
-      else if (k === 'held') sim.input.wheelHeld = val as boolean;
-      else sim.input[k] = val as boolean;
-    }
+    for (; e < rec.events.length && rec.events[e][0] === i; e++) apply(sim, rec.events[e][1], rec.events[e][2]);
     before?.(sim); sim.step(rec.dt); after?.(sim);
   }
   return sim;
@@ -92,13 +99,7 @@ export function playback(rec: Recording, scene: Scene, vehicle: Vehicle): { sim:
   let i = 0, e = 0;
   const step = (): SimEvent[] | null => {
     if (i >= rec.steps) return null;
-    for (; e < rec.events.length && rec.events[e][0] === i; e++) {
-      const [, k, val] = rec.events[e];
-      if (k === 'wheel') sim.wheelAngle = val as number;
-      else if (k === 'target') sim.wheelTarget = val as number | null;
-      else if (k === 'held') sim.input.wheelHeld = val as boolean;
-      else sim.input[k] = val as boolean;
-    }
+    for (; e < rec.events.length && rec.events[e][0] === i; e++) apply(sim, rec.events[e][1], rec.events[e][2]);
     i++;
     return sim.step(rec.dt);
   };

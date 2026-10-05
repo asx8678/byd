@@ -1,0 +1,28 @@
+{
+  "format": 1,
+  "id": "harbour",
+  "name": "Harbour district",
+  "notes": [
+    "Map frame: x east, y north, metres. Each road runs the whole grid, from the outermost road on one side to the outermost on the other, so every street ends at a junction.",
+    "A side is the right or left side as you drive along the road towards +x (an x road) or +y (a y road). Traffic keeps right: on each side the parked cars face the way its lane runs.",
+    "park: the parking lane's width (none: no parking on that side). walk: the pavement's width. Zones run along a side, from and to measured along the road."
+  ],
+  "drive": "right",
+  "bounds": [-118, -80, 135, 92],
+  "corner": 6,
+  "roads": [
+    { "id": "ropewalk", "name": "Ropewalk", "axis": "x", "at": 70, "lane": 3.0, "limit": 30, "right": { "park": 2.0, "walk": 2.6 }, "left": { "walk": 2.6 } },
+    { "id": "harbour", "name": "Harbour Street", "axis": "x", "at": 0, "lane": 3.25, "limit": 50, "right": { "park": 2.1, "walk": 3.2 }, "left": { "park": 2.1, "walk": 3.2 } },
+    { "id": "quay", "name": "Quay Road", "axis": "x", "at": -60, "lane": 3.25, "limit": 50, "right": { "walk": 4.0 }, "left": { "park": 2.1, "walk": 3.0 } },
+    { "id": "mill", "name": "Mill Lane", "axis": "y", "at": -95, "lane": 3.0, "limit": 30, "right": { "park": 2.0, "walk": 2.6 }, "left": { "walk": 2.6 } },
+    { "id": "market", "name": "Market Street", "axis": "y", "at": 10, "lane": 3.0, "limit": 30, "right": { "park": 2.0, "walk": 3.0 }, "left": { "park": 2.0, "walk": 3.0 } },
+    { "id": "dock", "name": "Dock Road", "axis": "y", "at": 110, "lane": 3.25, "limit": 50, "right": { "walk": 2.6 }, "left": { "walk": 2.6 } }
+  ],
+  "zones": [
+    { "road": "harbour", "side": "left", "from": 34, "to": 56, "kind": "bus" },
+    { "road": "harbour", "side": "right", "from": -62, "to": -50, "kind": "loading" }
+  ],
+  "harbourSide": "south",
+  "fill": { "occupancy": 0.86, "sloppiness": 0.12, "guarantee": 5 },
+  "start": { "road": "harbour", "at": -78, "dir": 1 }
+}

@@ -15,6 +15,7 @@ One car per file; `src/core/content.ts` lists them. The file's frame has the rea
 - `mirrors`: the right mirror's box `[x0, z0, x1, z1]` and its height. The left mirror is mirrored. Mirrors only meet obstacles taller than that height. Use `null` for none.
 - `planCorners`: the four corners on the rounded outline (FL, FR, RL, RR), used for the drawn tracks. `glass`: where the windows run on the plan, `[front, back]` (x). `seats`: 2 for a two-seater, which has no back seat for the coach to name.
 - `drive`: the hold-to-move driveline (creep and top speeds, ramp, hold time, acceleration, braking).
+- `dynamics`: Drive mode on the street (`src/core/dynamics.ts`). `power` (kW), `driven` (`front`, `rear` or `all`), `frontShare` (the weight on the front axle), `cgHeight` (m), `cdA` (drag coefficient times frontal area, m²), `grip` (the front tyres' friction coefficient on dry asphalt; the rears get 5% more), `launch` (the most the drive train pulls from rest, m/s²), `coast` (slowing with no pedal pressed, m/s²), `topSpeed` (km/h), and the published `zeroTo100` or `zeroTo60mph` (s). `powerShare` is the share of the peak power the model applies on average through a run: it is tuned so the car takes the published 0–100 time (`test/dynamics.test.ts` checks it). Most cars publish power, mass, top speed and 0–100; the rest are estimates, and `estimates` says which.
 - `parkingSensors`: `layout` (`4-front-4-rear-2-each-side`, `4-front-4-rear` or `4-rear`), ranges, cone angle, zone edges, and where the corner and side sensors sit across the car (`cornerZ`, `sideZ`). Use `null` for a car without sensors.
 
 A car goes in when its turning circle in the simulation matches the sheet (`test/cars.test.ts`). Figures nobody published are estimates until measured, and the file says which. The W124 waits for its steering lock.
@@ -43,6 +44,17 @@ One place per file. The world frame has x to the right and z down the plan. A he
 - `lines`, `dashes`, `marks`, `floors`, `pit`, `door`: what is drawn (`dashes` are white lane markings).
 - `areaView`: the bounds of the "Whole area" view.
 - `layoutVersion`: bump it when the layout changes. Saved settings and positions from an older layout are then reset.
+
+## maps/*.json
+
+A street district for the map kit (`src/core/city.ts`), which compiles it into a scene (kerbs, buildings, parked cars, lamp posts), the free spaces along the kerbs and the layers the plan draws; the game never sees the spec itself. The map's frame has x east and y north (the game's z is -y).
+
+- `bounds`: `[x0, y0, x1, y1]`. `corner`: the kerb's radius at a junction's corners. `drive`: `right` (traffic keeps right; the left comes later).
+- `roads`: each with `id`, `name`, `axis` (`x` or `y`: which way it runs), `at` (where its centre line is across that), `lane` (one lane each way, metres), `limit` (km/h), and its `right` and `left` sides as you drive towards +x or +y, each `{ park, walk }`: the parking lane's width (left out: no parking on that side) and the pavement's. Every road runs the whole grid, from the outermost road across it to the one on the far side, so the streets make blocks inside a ring.
+- `zones`: `{ road, side, from, to, kind }`, a stretch of kerb measured along the road where nobody parks: `bus` (a bus stop) or `loading`.
+- `harbourSide`: `south` puts water beyond the outermost road on that side, behind a quay wall.
+- `fill`: who is parked, from the layout number: `occupancy` (how full the parking lanes are), `sloppiness` (how far parked cars sit from the kerb and how crooked), `guarantee` (how many spaces the chosen car fits with 1.4 to 2.6 m to spare). Nobody parks within 7 m of a junction.
+- `start`: where you start, `{ road, at, dir }`: in your lane, driving towards +x or +y (`dir` 1) or the other way.
 
 ## lessons/course.json
 

@@ -3,18 +3,23 @@
   "id": "byd-atto2",
   "name": "BYD Atto 2",
   "short": "Atto 2",
-  "basedOn": "BYD Atto 2 DM-i (2025-)",
+  "basedOn": "BYD Atto 2 DM-i Boost (2025-)",
   "sources": [
     "BYD spec sheet: length, width, height, wheelbase, overhangs, 5.3 m kerb-to-kerb turning radius",
-    "Outline traced from the body's widest sections so the corners are rounded like the bumpers"
+    "Outline traced from the body's widest sections so the corners are rounded like the bumpers",
+    "BYD UK launch release (2025), ATTO 2 DM-i Boost: 156 kW (212 PS) system power, 300 Nm motor torque, 0-62 mph (0-100 km/h) 7.5 s, top speed 111 mph, kerb weight 1620 kg, 17-inch wheels, front-wheel drive. The Active: 122 kW, 9.1 s, 1510 kg, 16-inch wheels. https://bydukmedia.com/en/news-articles/its-not-a-car,-its-a-byd-super-hybrid-atto-2-dm-i-arrives-to-redefine-the-compact-suv.html"
+  ],
+  "estimates": [
+    "Drive mode: the weight split, the height of the centre of gravity, the drag area, the tyres' grip, the pull from rest and the slowing with no pedal; the share of the power the model gets is tuned so 0-100 km/h takes the published 7.5 s"
   ],
   "notes": "Rear-axle frame: x forward from the rear axle, z to the right, metres. The steering lock is derived from the turning radius: rear-axle radius = sqrt(R^2 - WB^2) - track/2.",
-  "dims": { "length": 4.33, "width": 1.83, "height": 1.675, "wheelbase": 2.62, "track": 1.57, "overhangFront": 0.883, "overhangRear": 0.827, "wheelRadius": 0.334, "wheelWidth": 0.215, "mass": 1580 },
+  "dims": { "length": 4.33, "width": 1.83, "height": 1.675, "wheelbase": 2.62, "track": 1.57, "overhangFront": 0.883, "overhangRear": 0.827, "wheelRadius": 0.334, "wheelWidth": 0.215, "mass": 1620 },
   "turning": { "by": "BYD", "kerbRadius": 5.3 },
   "outline": { "half": [[3.503, 0.52], [3.40, 0.76], [3.123, 0.878], [2.80, 0.912], [0, 0.915], [-0.58, 0.858], [-0.76, 0.76], [-0.827, 0.62]] },
   "mirrors": { "height": 1.12, "box": [1.77, 0.90, 1.98, 1.04] },
   "planCorners": [[3.40, -0.76], [3.40, 0.76], [-0.76, -0.76], [-0.76, 0.76]],
   "drive": { "creepForward": 1.2, "maxForward": 5.5, "rampForward": 1.1, "creepReverse": 0.9, "maxReverse": 2.8, "rampReverse": 0.6, "holdTime": 1.0, "accel": 2.0, "brake": 3.5 },
+  "dynamics": { "power": 156, "driven": "front", "frontShare": 0.60, "cgHeight": 0.58, "cdA": 0.74, "grip": 1.0, "launch": 5.0, "coast": 1.0, "powerShare": 0.718, "topSpeed": 179, "zeroTo100": 7.5 },
   "parkingSensors": {
     "layout": "4-front-4-rear-2-each-side",
     "ranges": { "front": 1.2, "rear": 1.5, "side": 0.6 },

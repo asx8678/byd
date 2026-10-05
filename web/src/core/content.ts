@@ -4,6 +4,8 @@ import sclass from '../../content/vehicles/mercedes-s-class-w223.json';
 import ram from '../../content/vehicles/ram-1500-dt.json';
 import smart from '../../content/vehicles/smart-fortwo-c453.json';
 import garage561 from '../../content/scenes/garage-561.json';
+import harbour from '../../content/maps/harbour.json';
+import type { MapSpec } from './city';
 import { makeScene, type Scene, type SceneSpec } from './scene';
 import { makeVehicle, variantId, type Vehicle, type VehicleSpec } from './vehicle';
 
@@ -17,6 +19,8 @@ export const GARAGE_561: Scene = makeScene(garage561 as unknown as SceneSpec);
 export const VEHICLES: Readonly<Record<string, Vehicle>> = Object.fromEntries(CAR_SPECS.flatMap(s =>
   s.id === ATTO2.id ? [[ATTO2.id, ATTO2]] : (s.rearSteer?.options ?? [0]).map(deg => [variantId(s, deg), makeVehicle(s, deg)])));
 export const SCENES: Readonly<Record<string, Scene>> = { [GARAGE_561.id]: GARAGE_561 };
+/** The street maps, by id (see core/city.ts). */
+export const MAPS: Readonly<Record<string, MapSpec>> = { harbour: harbour as unknown as MapSpec };
 
 /** A car file's Vehicle with its rear-axle steering at rearDeg (its default when that is not one of its settings). */
 export function vehicleFor(carId: string, rearDeg?: number): Vehicle {
