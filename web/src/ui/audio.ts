@@ -5,9 +5,10 @@ import { settings } from './settings';
 
 let actx: AudioContext | null = null, beepNext = 0, toneOsc: OscillatorNode | null = null;
 
-/** Phones only play sound after a touch, so this runs on the first press of the wheel or a pedal. */
-export function initAudio(): void {
-  if (settings.pdc !== 'on') return;
+/** Phones only play sound after a touch, so this runs on the first press of the wheel or a pedal (and of the horn, which
+ *  sounds even with the sensors' beeps off). */
+export function initAudio(force = false): void {
+  if (settings.pdc !== 'on' && !force) return;
   try {
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!actx) actx = new AC();
@@ -43,4 +44,21 @@ export function updateBeeper(sim: Sim, now: number): void {
   if (now >= beepNext) { beep(freq, 0.07, 0.14); beepNext = now + period; }
 }
 
-document.addEventListener('visibilitychange', () => { if (document.hidden) tone(false); });
+/** The horn while it is held: two notes a major third apart, as most car horns are. */
+let hornNodes: { o: OscillatorNode[]; g: GainNode } | null = null;
+export function horn(on: boolean): void {
+  if (on) initAudio(true);
+  if (!actx) return;
+  if (on && !hornNodes) {
+    const g = actx.createGain(), f = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 2400;
+    g.gain.setValueAtTime(0.0001, actx.currentTime); g.gain.exponentialRampToValueAtTime(0.09, actx.currentTime + 0.02);
+    const o = [420, 525].map(freq => { const n = actx!.createOscillator(); n.type = 'sawtooth'; n.frequency.value = freq; n.connect(f); n.start(); return n; });
+    f.connect(g).connect(actx.destination); hornNodes = { o, g };
+  } else if (!on && hornNodes) {
+    const { o, g } = hornNodes, t = actx.currentTime; hornNodes = null;
+    g.gain.setValueAtTime(g.gain.value, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
+    for (const n of o) n.stop(t + 0.05);
+  }
+}
+
+document.addEventListener('visibilitychange', () => { if (document.hidden) { tone(false); horn(false); } });

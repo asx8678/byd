@@ -2,7 +2,7 @@
 
 Practise parking a BYD Atto 2 nose-first into bay 561, then in generated levels and a course of lessons, in the Atto 2 or in a Smart fortwo, a Ram 1500 or a Mercedes S-Class with rear-axle steering (10°, 4.5° or off), each turning the circle its maker publishes: a row of bays entered nose first, the same reversing in, and parallel parking at a kerb, each from level 1 (roomy) to level 10 (tight). A course of ten lessons teaches each manoeuvre with a coach: watch the route, drive it guided step by step, then with less and less help, then a test. Learning layers (the path, the turning circles, the swept path of all four corners, the ideal path, a kerb close-up and the numbers) switch on in Setup, and ⟲ 5 s rewinds to try a step again. The screen is a plan: it draws the path the car takes at the current steering, an outline of the car every 0.8 m along it and, in red, where it would touch something first. It also has parking sensors with beeps, touch detection, a move counter against par, and a result card with three stars when you're parked.
 
-On the street (Play → On the street) you drive a district in Drive mode: an accelerator and a brake you press harder higher up the button, physics with tyres that slip and grip that runs out (blended into the parking model below 18 km/h), and a map that turns so you drive up and zooms out with speed (pinch it to zoom yourself, double-tap to give the zoom back). Stop beside a free space on your kerb side, or beside a free bay in a car park (rows of bays at 90°, 60° or 45°), and Park mode takes over for the parking itself. Play the hand-made Harbour district or a district made up for you (roomy, average or tight), and switch the traffic to the left in Setup for the UK, Ireland, Japan or Australia.
+On the street (Play → On the street) you drive a district in Drive mode: an accelerator and a brake you press harder higher up the button, physics with tyres that slip and grip that runs out (blended into the parking model below 18 km/h), and a map that turns so you drive up and zooms out with speed (pinch it to zoom yourself, double-tap to give the zoom back). Stop beside a free space on your kerb side, or beside a free bay in a car park (rows of bays at 90°, 60° or 45°), and Park mode takes over for the parking itself. Play the hand-made Harbour district or a district made up for you (roomy, average or tight), and switch the traffic to the left in Setup for the UK, Ireland, Japan or Australia. Other cars drive the streets (none, light or busy), traffic lights and give-way lines run the junctions, and you have indicators, hazard lights and a horn; going through a red light, speeding and hitting a car count as faults on the way to your space.
 
 It runs in any modern browser on iPhone, Android and PC, and installs to the home screen as an app that works offline.
 
@@ -42,8 +42,15 @@ src/core/      the game itself, no browser code: easy to test, and the part to p
   collision.ts   what the car touches in a pose (body, a door mirror, or a tyre on a kerb)
   sensors.ts     gaps around the body, and the ultrasonic parking sensors (5 rays per cone)
   predict.ts     the path at the current steering, rolled forward in 6 cm steps until it would touch
-  sim.ts         Sim(scene, car): state, input, step(dt) → events (touch, parked); Park mode (hold to move, the
-                 exact low-speed model) or Drive mode (accelerator and brake through dynamics.ts)
+  sim.ts         Sim(scene, car): state, input, step(dt) → events (touch, parked, fault); Park mode (hold to move,
+                 the exact low-speed model) or Drive mode (accelerator and brake through dynamics.ts); your
+                 indicators and hazards; on the street the traffic and the rules step with it
+  traffic.ts     the road network from a district (lanes, paths through the junctions, lights, give-way lines, the
+                 zones paths share and who goes first) and the other cars: six sizes, three kinds of driver, the
+                 Intelligent Driver Model, giving way by the time needed to get across, only where their size fits;
+                 seeded and snapshot-able
+  rules.ts       the faults of a drive: a red light, more than 3 km/h over the limit for over a second, hitting
+                 a car in traffic, touching anything in Drive mode
   dynamics.ts    Drive mode's street physics: a single-track model with tyres that slip, weight transfer, ABS,
                  power, drag; blended into the low-speed model between 7 and 18 km/h; the zoom rule's look-ahead
   city.ts        the map kit: a district spec compiled into a scene, the free spaces a car fits along the kerbs
@@ -57,7 +64,8 @@ src/core/      the game itself, no browser code: easy to test, and the part to p
   parking.ts     when a car counts as parked in a bay, and how neatly (shared by Sim, the planner and the stars);
                  a bay turned on the map (a car park's) is judged in its own frame
   score.ts       three stars: nothing touched, neat, efficient (par + 1 moves, inside the time)
-  replay.ts      fixed 60 Hz steps; recording an attempt and playing it back; replaying to a step (rewind)
+  replay.ts      fixed 60 Hz steps; recording an attempt (with the traffic as it was, and a checkpoint every 10 s)
+                 and playing it back; replaying to a step (rewind, from the last checkpoint)
   field.ts       a 5 cm raster and distance field of the scene, for fast collision checks while planning (kerbs
                  as half-planes for the wheels, and a raster of their own for any off those lines)
   planner.ts     route search (hybrid A*): into a bay from the car (planToBay), or outward from the
@@ -98,7 +106,8 @@ src/main.ts    wiring and the frame loop: the simulation steps at a fixed 60 Hz,
                the coach between the pedals and the car (applied before each step, so replays stay exact)
 public/        manifest, icons, service worker
 test/          golden test and its recorded fixtures, replay, content, planner, generator, car, lesson,
-               Drive-mode physics (dynamics.test.ts) and street district (city.test.ts) tests
+               Drive-mode physics (dynamics.test.ts), street district (city.test.ts), car park, made-up
+               district, traffic (traffic.test.ts) and your drive (drive.test.ts) tests
 prototype/     the scenario generator prototype (now in src/core: generator/, planner.ts, coach.ts)
 ```
 
@@ -139,6 +148,8 @@ The other tests check that:
 - car parks: a bay turned to any angle is judged pose by pose exactly as the same bay unturned, and the planner parks in it; the Harbour district's three car parks (90°, 60° and 45°) sit in their blocks with their driveways open and their bays inside the walls; the planner parks the Atto 2, the Smart and the S-Class (10° and off) in every bay kept free from where Park mode starts, and stopping there is recognised; the Ram is told it is too long for 5 m bays; every car drives in from the street through each driveway without touching anything
 - driving on the left: the same district with the traffic turned round (the same kerbs, parked cars and spaces), you start in the other lane and park on your left, the planner parks the Atto 2 and the S-Class in every promised space there, and every car drives Harbour Street in the left lane
 - made-up districts: the same seed and level give the same district; at roomy, average and tight, every car is promised five spaces and the planner parks it in each, the start and the driveways are clear and nearly every bay a car park keeps free is in reach; and the levels get narrower, fuller, sloppier and tighter
+- traffic: Harbour's junctions get lights at the crossroads and on the 50 km/h roads, give way on the other side roads and nothing at the ring's corners; every path through a junction starts where its lane ends, ends where the next begins and is no tighter than 6 m; the lights never show green both ways; the same seed gives the same traffic and a snapshot carries on exactly; four minutes of Harbour and of a roomy, an average and a tight made-up district, light and busy, keeping right and left (`TRAFFIC_SEEDS=n` for more layouts), with no car touching another, a kerb or anything parked, none through a red light, none stuck and the last-resort check never needed; a car stops a couple of metres behind your car (further when you signal to park), waits at its line while you are in its way and goes when you have gone, and is what your car touches when you drive into it
+- your drive: an indicator cancels itself after the wheel has been turned its way and back, but not for a lane change; crossing the stop line on red is a fault, on green or amber it is not; speeding is one fault a spell, with its top speed; hitting a car in traffic is a touch and a fault; a drive in busy traffic replays exactly (car, traffic and rules), through JSON too, and rewinds to exactly where everything was, from its checkpoints as from the start
 
 ## Porting to Swift later
 

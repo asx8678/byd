@@ -1,6 +1,7 @@
 // The plan: a map that fills the screen, with the path the car takes at the current steering, an outline of the car
 // every 0.8 m along it and, in red, where it would touch something first. North up in a car park; on the street in
-// Drive mode it turns so you always drive up, and zooms out with speed so you see far enough ahead to stop.
+// Drive mode it turns so you always drive up, and zooms out with speed so you see far enough ahead to stop. On the
+// street it also draws the traffic, the lights and the lines at the junctions.
 import { ackermann, footprint, rearAngles } from '../core/car';
 import { roundRect, type CityLayers, type Slot } from '../core/city';
 import { wheelsOf } from '../core/collision';
@@ -11,6 +12,7 @@ import type { Pose, RoutePoint } from '../core/planner';
 import type { Prediction } from '../core/predict';
 import { SIDES, rangeOf } from '../core/sensors';
 import { PDC_MAX, type Sim } from '../core/sim';
+import { DRIVERS, TYPES, type Traffic } from '../core/traffic';
 import { $, fitCanvas } from './dom';
 import { settings } from './settings';
 
@@ -264,6 +266,7 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
     for (const [x0, z0, x1, z1] of sc.dashes) { const a = PS(x0, z0), b = PS(x1, z1); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); }
     c.stroke(); c.setLineDash([]);
   }
+  if (sim.traffic) drawJunctionLines(c, sim.traffic, s, d1);
   // painted lines (bays, detail level 1), numbers, the drain cover
   if (d1 > 0) {
     c.strokeStyle = '#d9ab2b'; c.lineWidth = Math.max(1, 0.1 * s); c.lineCap = 'butt'; c.beginPath();
@@ -293,6 +296,7 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
     else { path(c, o.pts); c.fill(); c.stroke(); }
   }
   if (city) drawCityLabels(c, city, s);
+  if (sim.traffic) { drawTraffic(c, sim.traffic, s, inView, d2); drawLights(c, sim.traffic, s); }
   if (sc.door) { c.strokeStyle = '#59636b'; c.lineWidth = Math.max(1.5, 0.07 * s); const a = PS(sc.door[0], 0.03), b = PS(sc.door[1], 0.03); c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke(); }
   // a lesson: the route, the marks, your path and where it first drifted
   if (coach) {
@@ -383,6 +387,12 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
   const [gx, gr] = v.glass, gw = v.W / 2 - 0.195, nose = v.WB + v.OVF - 0.143;   // glass and the nose mark, scaled to this car
   c.fillStyle = 'rgba(70,92,116,.5)'; path(c, footprint(x, z, th, [[gx, -gw], [gx, gw], [gr, gw - 0.04], [gr, -gw + 0.04]])); c.fill();
   c.fillStyle = '#f2c230'; path(c, footprint(x, z, th, [[nose, 0], [nose - 0.4, -0.27], [nose - 0.4, 0.27]])); c.fill();
+  if ((sim.ind || sim.hazard) && blinkOn(sim.time)) {   // your indicators (both sides: hazards), at the corners
+    c.fillStyle = '#ffb020';
+    for (const sg of sim.hazard ? [-1, 1] : [sim.ind]) for (const [x0, x1] of [[-v.OVR, -v.OVR + 0.22], [v.WB + v.OVF - 0.24, v.WB + v.OVF - 0.02]]) {
+      path(c, footprint(x, z, th, [[x0, sg * (v.W / 2 - 0.24)], [x1, sg * (v.W / 2 - 0.24)], [x1, sg * (v.W / 2 - 0.02)], [x0, sg * (v.W / 2 - 0.02)]])); c.fill();
+    }
+  }
   const WRECT: Pt[] = [[-v.WR, -v.WW / 2], [v.WR, -v.WW / 2], [v.WR, v.WW / 2], [-v.WR, v.WW / 2]];
   ([[wl[0], fl], [wl[1], fr], [wl[2], rl], [wl[3], rr]] as [Pt, number][]).forEach(([q, a]) => {
     c.fillStyle = Math.abs(a) > 0.01 ? '#f2c230' : '#ebe8df'; path(c, footprint(q[0], q[1], th + a, WRECT)); c.fill();
@@ -401,7 +411,7 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
   // readouts: wheel angles, turning radius, steering wheel; what the path runs into; the scale bar
   const Rout = Math.abs(dl) > 0.004 ? Math.hypot(Math.abs(v.WB / Math.tan(dl)) + v.TRACK / 2, v.WB) : Infinity, wa = sim.wheelAngle;
   const steer = `<div><span>Steering</span>${Math.abs(wa) < 1 ? 'centred' : Math.abs(wa).toFixed(0) + '° ' + (wa < 0 ? 'left' : 'right')}</div>`;
-  const info = drive && driveInfo !== null ? driveInfo + steer : `<div><span>Wheels</span>L ${(fl / DEG).toFixed(1)}° · R ${(fr / DEG).toFixed(1)}°</div><div><span>Turn radius</span>${Rout < 60 ? Rout.toFixed(2) + ' m' : 'straight'}</div>` + steer;
+  const info = drive && driveInfo !== null ? driveInfo + streetInfo(sim) + steer : `<div><span>Wheels</span>L ${(fl / DEG).toFixed(1)}° · R ${(fr / DEG).toFixed(1)}°</div><div><span>Turn radius</span>${Rout < 60 ? Rout.toFixed(2) + ' m' : 'straight'}</div>` + steer;
   if (info !== infoTxt) { infoTxt = info; $('planInfo').innerHTML = info; placeNums(); }
   const what = p.dir > 0 ? 'Forward' : 'Reversing';
   const ptxt = !showPath || drive ? '' : p.hit ? `${what}: ${p.part ? p.part + ' ' : ''}hits ${p.hit.name} in ${p.dist.toFixed(1)} m` : `${what}: clear for ${p.dist.toFixed(1)} m`;
@@ -412,6 +422,85 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
   if (settings.layerKerb !== 'off' && kw && kw.gap < 1.0) drawKerbCloseUp(c, kw);
   const nums = settings.layerNums === 'off' ? '' : numbersHtml(sim, kw);
   if (nums !== numsTxt) { numsTxt = nums; const el = $('planNums'); el.innerHTML = nums; el.hidden = !nums; }
+}
+
+/** Lights and indicators flash: on for 0.45 s of every 0.8 s. */
+const blinkOn = (t: number): boolean => t % 0.8 < 0.45;
+const LIGHT_COL = { green: '#5ed08a', amber: '#f2c230', red: '#ec5b4f' } as const;
+/** On the street, detail level 1: the stop lines at the lights (solid) and the give-way lines across the side roads (dashed). */
+function drawJunctionLines(c: CanvasRenderingContext2D, t: Traffic, s: number, d1: number): void {
+  if (d1 <= 0) return;
+  c.globalAlpha = d1; c.lineCap = 'butt'; c.strokeStyle = 'rgba(235,232,223,.85)';
+  for (const J of t.net.junctions) for (const ap of J.approaches) {
+    if (J.control === 'giveway' && !ap.minor) continue;
+    const lights = J.control === 'lights';
+    c.lineWidth = Math.max(1.5, (lights ? 0.3 : 0.15) * s); c.setLineDash(lights ? [] : [0.6 * s, 0.4 * s]);
+    path(c, ap.line, false); c.stroke();
+    if (!lights) {   // and a triangle in the lane before the line, pointing at you
+      const [a, b] = ap.line, mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2, ux = Math.cos(ap.th), uz = -Math.sin(ap.th), w = 0.6;
+      c.lineWidth = Math.max(1, 0.1 * s); c.setLineDash([]);
+      path(c, [[mx - ux * 1.2 - uz * w, mz - uz * 1.2 + ux * w], [mx - ux * 1.2 + uz * w, mz - uz * 1.2 - ux * w], [mx - ux * 3.2, mz - uz * 3.2]]); c.stroke();
+    }
+  }
+  c.setLineDash([]); c.globalAlpha = 1;
+}
+/** The traffic lights: a lamp by each stop line in the colour it shows, readable zoomed right out. */
+function drawLights(c: CanvasRenderingContext2D, t: Traffic, s: number): void {
+  const r = Math.max(3.5, 0.45 * s);
+  for (const J of t.net.junctions) {
+    if (J.control !== 'lights') continue;
+    for (const ap of J.approaches) {
+      const [sx, sy] = PS(ap.head[0], ap.head[1]);
+      if (sx < -20 || sy < -20 || sx > PV.w + 20 || sy > PV.h + 20) continue;
+      c.beginPath(); c.arc(sx, sy, r + 1.5, 0, 6.3); c.fillStyle = '#0d0e12'; c.fill();
+      c.beginPath(); c.arc(sx, sy, r, 0, 6.3); c.fillStyle = LIGHT_COL[t.lightFor(ap)]; c.fill();
+    }
+  }
+}
+/** The other cars: lighter than the parked ones, a windscreen to show which way they face, brake lights, indicators,
+ *  and zoomed in close, the driver and the speed. */
+function drawTraffic(c: CanvasRenderingContext2D, t: Traffic, s: number, inView: (x0: number, x1: number, z0: number, z1: number) => boolean, d2: number): void {
+  const lit = blinkOn(t.t), labels = d2 * fadeIn(s, 15);
+  c.lineWidth = 1;
+  for (const car of t.cars) {
+    if (!inView(car.x - 6, car.x + 6, car.z - 6, car.z + 6)) continue;
+    const ty = TYPES[car.type], nose = ty.L - ty.OVR, hw = ty.W / 2, P = (pts: Pt[]) => footprint(car.x, car.z, car.h, pts);
+    c.fillStyle = '#5a6574'; c.strokeStyle = '#b4bcc6'; path(c, car.box); c.fill(); c.stroke();
+    c.fillStyle = 'rgba(24,28,36,.8)'; path(c, P([[nose - 0.9, -hw + 0.16], [nose - 1.4, -hw + 0.2], [nose - 1.4, hw - 0.2], [nose - 0.9, hw - 0.16]])); c.fill();
+    if (car.acc < -0.6 || (car.v < 0.05 && car.wait)) {
+      c.fillStyle = '#ff3b30';
+      for (const sg of [-1, 1]) { path(c, P([[-ty.OVR, sg * (hw - 0.06)], [-ty.OVR + 0.18, sg * (hw - 0.06)], [-ty.OVR + 0.18, sg * (hw - 0.42)], [-ty.OVR, sg * (hw - 0.42)]])); c.fill(); }
+    }
+    if (car.ind && lit) {
+      c.fillStyle = '#ffb020';
+      for (const x0 of [-ty.OVR, nose - 0.22]) { path(c, P([[x0, car.ind * (hw - 0.24)], [x0 + 0.22, car.ind * (hw - 0.24)], [x0 + 0.22, car.ind * hw], [x0, car.ind * hw]])); c.fill(); }
+    }
+    if (labels > 0) {
+      const [sx, sy] = PS(car.x + (nose / 2) * Math.cos(car.h), car.z - (nose / 2) * Math.sin(car.h));
+      c.globalAlpha = labels; c.font = `600 ${clamp(0.3 * s, 9, 13).toFixed(1)}px "Barlow Condensed", sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillStyle = '#ebe8df'; c.fillText(`${DRIVERS[car.drv].name} · ${Math.round(car.v * 3.6)}`, sx, sy); c.globalAlpha = 1;
+    }
+  }
+}
+/** On the street, under the street's name: the next traffic light on your way (in your lane, 80 m at most) with how
+ *  far its stop line is, and the faults on this drive so far. */
+function streetInfo(sim: Sim): string {
+  const t = sim.traffic;
+  if (!t) return '';
+  const v = sim.vehicle, ux = Math.cos(sim.th), uz = -Math.sin(sim.th), fx = sim.x + (v.L - v.OVR) * ux, fz = sim.z + (v.L - v.OVR) * uz;
+  let best: { d: number; light: keyof typeof LIGHT_COL } | null = null;
+  for (const J of t.net.junctions) {
+    if (J.control !== 'lights') continue;
+    for (const ap of J.approaches) {
+      const ax = Math.cos(ap.th), az = -Math.sin(ap.th), [a, b] = ap.line;
+      if (ux * ax + uz * az < 0.7) continue;
+      const d = -((fx - a[0]) * ax + (fz - a[1]) * az), wx = b[0] - a[0], wz = b[1] - a[1], q = ((fx - a[0]) * wx + (fz - a[1]) * wz) / (wx * wx + wz * wz);
+      if (d < 0 || d > 80 || q < -0.3 || q > 1.3) continue;
+      if (!best || d < best.d) best = { d, light: t.lightFor(ap) };
+    }
+  }
+  const n = sim.rules?.faults.length ?? 0;
+  return (best ? `<div><span>Lights</span><i class="lt ${best.light}"></i>${Math.round(best.d)} m</div>` : '') + (n ? `<div><span>Faults</span><b class="bad">${n}</b></div>` : '');
 }
 
 type KerbWheel = { gap: number; wheel: Pt[]; nx: number; nz: number; c: number };

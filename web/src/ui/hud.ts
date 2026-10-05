@@ -33,6 +33,12 @@ export function updateHud(sim: Sim): void {
   else { $('movesK').textContent = 'Moves'; mv.textContent = String(sim.moves); $('parV').textContent = par ? `/ ${par}` : ''; mv.className = par && sim.moves > par + 1 ? 'over' : ''; }
   for (const [id, k] of SENSOR_IDS) { const el = $(id), d = sim.pdc[k], r = rangeOf(sim.vehicle, k); el.textContent = d < r ? d.toFixed(2) + ' m' : '–'; el.className = d < r ? cls(d) : ''; }
   $('lF').classList.toggle('armed', sim.lastMoveDir >= 0); $('lR').classList.toggle('armed', sim.lastMoveDir < 0);
+  if (sim.traffic) {   // on the street: the indicator and hazard buttons light up and flash with the lights they work
+    const lit = sim.time % 0.8 < 0.45;
+    for (const [id, on, pressed] of [['btnIndL', sim.ind === -1 || sim.hazard, sim.ind === -1], ['btnIndR', sim.ind === 1 || sim.hazard, sim.ind === 1], ['btnHaz', sim.hazard, sim.hazard]] as const) {
+      const b = $(id); b.classList.toggle('on', on); b.classList.toggle('lit', on && lit); b.setAttribute('aria-pressed', String(pressed));
+    }
+  }
   // the buttons fill as the speed stage rises (Park mode) or as hard as the pedal is pressed (Drive mode)
   $('btnFwd').style.setProperty('--lvl', drive ? sim.input.acc.toFixed(2) : sim.input.fwd ? (Math.abs(tgt) / sim.vehicle.drive.VMAX_F).toFixed(2) : '0');
   $('btnRev').style.setProperty('--lvl', drive ? sim.input.brk.toFixed(2) : sim.input.rev ? (Math.abs(tgt) / sim.vehicle.drive.VMAX_R).toFixed(2) : '0');

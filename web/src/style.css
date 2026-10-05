@@ -30,7 +30,7 @@ body{touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit
 #pdcStop small{display:block;font:600 12px/1 var(--font-num);letter-spacing:.08em;margin-top:5px;color:rgba(255,255,255,.92);font-variant-numeric:tabular-nums}
 #pdcStop.show{opacity:1;animation:pdcBlink .6s steps(1,end) infinite}
 @keyframes pdcBlink{50%{background:rgba(236,91,79,.6)}}
-@media (orientation:landscape){ #pdcWrap{width:clamp(64px,10vw,84px);right:calc(clamp(92px,24vw,130px) + 24px)} }
+@media (orientation:landscape){ #pdcWrap{width:clamp(64px,10vw,84px);right:calc(clamp(92px,24vw,130px) + 24px)} #midCol{margin-right:auto} }   /* landscape: the indicators and horn beside the wheel, off the road ahead and your kerb */
 
 /* ---- top HUD ---- */
 #hud{position:absolute;z-index:1;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 8px) 10px 0;display:flex;gap:8px;align-items:flex-start;pointer-events:none}
@@ -224,6 +224,19 @@ kbd{font:500 12px var(--font-ui);background:rgba(255,255,255,.08);border:1px sol
 .resList li.tip i,.resList li.next i{color:var(--accent)}
 .resList li.lno i{color:var(--bad)}
 .resList li.lok i{color:var(--ok)}
-#btnRewind{pointer-events:auto;align-self:flex-end;margin-bottom:6px;font:600 13px/1 var(--font-num);letter-spacing:.05em;color:var(--fg);background:var(--panel);border:1px solid var(--panel-line);border-radius:999px;padding:10px 14px;cursor:pointer;backdrop-filter:blur(6px);white-space:nowrap}
+#midCol{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:6px;min-width:0}
+#driveBtns{pointer-events:auto;display:grid;grid-template-columns:repeat(2,40px);gap:6px;touch-action:none}
+#driveBtns button{height:38px;border-radius:10px;border:1px solid var(--panel-line);background:var(--panel);color:var(--muted);display:grid;place-items:center;padding:0;cursor:pointer;backdrop-filter:blur(6px);font:700 11px/1 var(--font-num);letter-spacing:.06em;text-transform:uppercase}
+#driveBtns svg{width:20px;height:20px;fill:currentColor}
+#driveBtns .ind.on{color:var(--ok);border-color:rgba(94,208,138,.6)}
+#driveBtns .ind.on.lit{background:rgba(94,208,138,.28)}
+#btnHaz.on{color:var(--bad);border-color:rgba(236,91,79,.6)}
+#btnHaz.on.lit{background:rgba(236,91,79,.3)}
+#btnHorn.on{background:rgba(242,194,48,.3);color:var(--fg);border-color:rgba(242,194,48,.6)}
+#driveBtns button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#planInfo i.lt{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:0}
+#planInfo i.lt.red{background:var(--bad)} #planInfo i.lt.amber{background:var(--accent)} #planInfo i.lt.green{background:var(--ok)}
+#planInfo b.bad{color:var(--bad)}
+#btnRewind{pointer-events:auto;align-self:center;font:600 13px/1 var(--font-num);letter-spacing:.05em;color:var(--fg);background:var(--panel);border:1px solid var(--panel-line);border-radius:999px;padding:10px 14px;cursor:pointer;backdrop-filter:blur(6px);white-space:nowrap}
 #btnRewind:active{background:rgba(255,255,255,.14)}
 #btnRewind:focus-visible{outline:2px solid var(--accent);outline-offset:2px}

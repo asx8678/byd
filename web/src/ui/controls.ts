@@ -1,13 +1,13 @@
 // Touch, mouse and keyboard: the steering wheel, the pedals (hold to move in Park mode; on the street in Drive mode the
-// same two buttons are the accelerator and the brake, pressed harder the higher your finger), the toolbar, Setup,
-// Play and Info.
+// same two buttons are the accelerator and the brake, pressed harder the higher your finger), on the street the
+// indicators, hazard lights and horn, the toolbar, Setup, Play and Info.
 import { clamp, DEG } from '../core/math';
 import type { Sim } from '../core/sim';
 import { initAudio, tone } from './audio';
 import { $, openSheet } from './dom';
 import { lockDeg, saveSettings, settings, type Settings } from './settings';
 
-export interface ControlHooks { reset(): void; settingChanged(key: keyof Settings): void; levels(): void; mode(): void }
+export interface ControlHooks { reset(): void; settingChanged(key: keyof Settings): void; levels(): void; mode(): void; indicator(dir: -1 | 1): void; hazard(): void; horn(on: boolean): void }
 
 /** The pedals as the player holds them: Forward and Reverse in Park mode, the accelerator and the brake (0 to 1) in
  *  Drive mode. The frame loop passes them on to the car each step, unless the coach is holding one back (a lesson's
@@ -87,6 +87,14 @@ export function bindControls(sim: Sim, hooks: ControlHooks): void {
   };
   pedal(top); pedal(bottom);
   $('btnMode').addEventListener('click', () => hooks.mode());
+  // on the street: the indicators and hazard lights (a tap each), and the horn (held)
+  $('btnIndL').addEventListener('click', () => hooks.indicator(-1));
+  $('btnIndR').addEventListener('click', () => hooks.indicator(1));
+  $('btnHaz').addEventListener('click', () => hooks.hazard());
+  const hornBtn = $('btnHorn'), hornOff = () => { hornBtn.classList.remove('on'); hooks.horn(false); };
+  hornBtn.addEventListener('pointerdown', e => { e.preventDefault(); hornBtn.classList.add('on'); hooks.horn(true); try { hornBtn.setPointerCapture(e.pointerId); } catch { /* capture unsupported */ } });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) hornBtn.addEventListener(ev, hornOff);
+  hornBtn.addEventListener('contextmenu', e => e.preventDefault());
 
   // keyboard: arrows steer and drive, space straightens, X resets
   window.addEventListener('keydown', e => {
@@ -98,6 +106,10 @@ export function bindControls(sim: Sim, hooks: ControlHooks): void {
     if (e.key === 'ArrowRight') { inp.kr = true; sim.wheelTarget = null; }
     if (e.key === ' ') { sim.wheelTarget = 0; e.preventDefault(); }
     if (e.key === 'x' || e.key === 'X' || e.key === 'r' || e.key === 'R') hooks.reset();
+    if (!e.repeat && (e.key === 'q' || e.key === 'Q')) hooks.indicator(-1);
+    if (!e.repeat && (e.key === 'e' || e.key === 'E')) hooks.indicator(1);
+    if (!e.repeat && (e.key === 'z' || e.key === 'Z')) hooks.hazard();
+    if (!e.repeat && (e.key === 'h' || e.key === 'H')) hooks.horn(true);
     if (e.key.startsWith('Arrow')) e.preventDefault();
   });
   window.addEventListener('keyup', e => {
@@ -105,6 +117,7 @@ export function bindControls(sim: Sim, hooks: ControlHooks): void {
     if (e.key === 'ArrowDown' || e.key === 's') { bottom.key = false; bottom.keyStale = false; bottom.keyLevel = 0; sync(); }
     if (e.key === 'ArrowLeft') inp.kl = false;
     if (e.key === 'ArrowRight') inp.kr = false;
+    if (e.key === 'h' || e.key === 'H') hooks.horn(false);
   });
 
   // toolbar and sheets

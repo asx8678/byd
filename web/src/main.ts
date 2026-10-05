@@ -20,8 +20,10 @@ import { DEG, clamp, wrapPi, type Pt } from './core/math';
 import { clearStart, fitsBay, moves, planBack, planToBay, sample, type Piece, type Plan, type Pose, type RoutePoint } from './core/planner';
 import { Recorder, STEP, playback, replayTo, restoreState, stateOf as simState } from './core/replay';
 import { starsFor } from './core/score';
+import { Rules } from './core/rules';
 import { PDC_MAX, Sim, type Mode, type ParkedResult, type SimEvent } from './core/sim';
-import { beep, updateBeeper } from './ui/audio';
+import { DENSITY, Traffic, networkOf } from './core/traffic';
+import { beep, horn, updateBeeper } from './ui/audio';
 import { renderCarFacts, renderCarPicker, syncCarPicker } from './ui/cars';
 import { bindCard, renderCard } from './ui/coachCard';
 import { bindControls, pedals, releasePedals, setPedalMode, tickPedals } from './ui/controls';
@@ -107,11 +109,21 @@ const clearPedals = () => { releasePedals(); sim.input.fwd = sim.input.rev = fal
 function setMode(m: Mode): void {
   sim.setMode(m); setPedalMode(sim.mode === 'drive');
   const b = $('btnMode'); b.hidden = !city; b.textContent = sim.mode === 'drive' ? 'Park' : 'Drive'; b.classList.toggle('drive', sim.mode === 'park');
+  $('driveBtns').hidden = !city;
 }
 /** Off the street: Park mode, north up, no speed limit. */
 function leaveCity(): void {
   if (!city) return;
-  city = null; setStreet(null); setDriveInfo(null); setLimit(null); setMode('park'); checker?.terminate(); checker = null; parWorker?.terminate(); parWorker = null;
+  city = null; sim.traffic = null; sim.rules = null; horn(false);
+  setStreet(null); setDriveInfo(null); setLimit(null); setMode('park'); checker?.terminate(); checker = null; parWorker?.terminate(); parWorker = null;
+}
+/** The district's traffic from its layout number (the same every time), as many cars as Setup asks for (none: just the
+ *  lights), clear of where you are; and a fresh drive for the rules. */
+function spawnTraffic(c: CityPlay, at: { x: number; z: number } = c.map.start): void {
+  const net = networkOf(c.map);
+  c.map.scene.net = net;
+  sim.traffic = Traffic.spawn(net, c.map.seed, settings.traffic === 'off' ? 0 : DENSITY[settings.traffic], at);
+  sim.rules = new Rules(net);
 }
 /** The district's free spaces checked in the background, nearest the start first: can the planner park this car there?
  *  Without a worker (or before its answer comes) a space is checked the moment you slow down beside it. A second worker
@@ -230,13 +242,15 @@ function resetCity(): void {
   const c = city!;
   stopReplay(); hideGuide(); hideResult();
   if (c.slot && c.from) {
-    sim.resetAt(c.from.x, c.from.z, c.from.th); setMode('park'); applySettings(); forgetPrediction(); clearPedals();
+    const world = recorder.rec?.start.world;   // the traffic as it was when this try began
+    sim.resetAt(c.from.x, c.from.z, c.from.th); if (world) sim.restoreWorld(world); setMode('park'); applySettings(); forgetPrediction(); clearPedals();
     settledT = 0; tryOver = false; tryRewound = false; beginRecording();
     showBanner('', `Park ${c.slot.kind === 'lot' ? 'in' : 'on'} ${slotPlace(c.slot)} · again`, `${c.slot.kind === 'lot' ? `Bay ${c.slot.at.n}, or any free bay.` : `The ${fmtLen(c.slot.length)} space on your ${kerbSide()}.`}${par ? ` Par: ${par} ${par === 1 ? 'move' : 'moves'}.` : ''}`, null, 5000);
     return;
   }
   const s = c.map.start;
   sim.resetAt(s.x, s.z, s.th); c.slot = null; c.from = null; c.lockRot = null; c.hinted = ''; c.lotHint = '';
+  spawnTraffic(c);
   c.declined = slotNear(c.map, sim.vehicle, s.x, s.z, s.th)?.id ?? '';   // a space beside the start waits until you have driven on
   setMode('drive'); applySettings(); setRoute([]); syncStreet(); forgetPrediction(); clearPedals(); snapView();
   settledT = 0; tryOver = false; tryRewound = false; beginRecording();
@@ -476,6 +490,9 @@ bindControls(sim, {
   reset: resetCar,
   levels: refreshLevels,
   mode: switchMode,
+  indicator: dir => { if (city && !replay) { sim.ind = sim.ind === dir ? 0 : dir; sim.indArmed = false; } },
+  hazard: () => { if (city && !replay) sim.hazard = !sim.hazard; },
+  horn: on => horn(on && !!city),
   settingChanged: key => {
     if (key === 'car' || key === 'ras') {
       const v = chosenCar(); syncCarPicker(v);
@@ -492,6 +509,7 @@ bindControls(sim, {
     }
     if (key === 'drive') { if (city) playCity(false, city.map.spec.id, city.map.seed); return; }   // the same layout, the traffic on the other side
     if (key === 'district') { refreshLevels(); return; }
+    if (key === 'traffic') { if (city && !replay) { spawnTraffic(city, sim); beginRecording(); } return; }   // the new traffic round where you are
     if (key === 'start' || key === 'bay') { if (level || lesson || city) playGarage(); else { garagePar(); resetCar(); } }
     else { applySettings(); if (!replay && (key === 'steer' || key === 'center')) beginRecording(); }   // only these change how the car steps
   },
@@ -572,9 +590,10 @@ function parkedOnStreet(r: ParkedResult, c: CityPlay, slot: Slot): void {
   setTimeout(() => {
     if (!sim.parked || replay || city !== c || c.slot !== slot) return;
     showResult(r, st, {
+      drive: sim.rules ? sim.rules.faults.slice() : null,
       title: `Parked ${slot.kind === 'lot' ? 'in' : 'on'} ${slotPlace(slot)}`, sub: `${c.map.spec.name} · layout ${c.map.seed} · ${slot.kind === 'lot' ? `bay ${slot.at.n}` : `${fmtLen(slot.length)} space`}${par ? ` · par ${par}` : ''}`, par: par || r.moves, limit: limit || r.elapsed, better,
       retry: resetCar, newLayout: () => playCity(true, id),
-      next: () => { hideResult(); c.declined = slot.id; c.slot = null; c.from = null; applySettings(); syncStreet(); showBanner('', 'Drive on', 'Pull out with Forward and Reverse. Above 10 km/h Drive mode takes over, or tap Drive.', null, 5000); },
+      next: () => { hideResult(); c.declined = slot.id; c.slot = null; c.from = null; sim.rules?.clear(); applySettings(); syncStreet(); showBanner('', 'Drive on', 'Pull out with Forward and Reverse. Above 10 km/h Drive mode takes over, or tap Drive.', null, 5000); },
       nextLabel: 'Drive on',
     });
   }, 500);
@@ -612,6 +631,9 @@ function handle(events: SimEvent[]): void {
     } else if (e.type === 'parked') {
       beep(880, 0.12, 0.08); setTimeout(() => beep(1320, 0.18, 0.08), 140);
       if (replay) { const c = parkedCard(e.result); showBanner('good', c.title, c.text, c.stats); }
+    } else if (e.fault.kind === 'red' || e.fault.kind === 'speed') {   // a touch has its own banner already
+      $('flash').classList.add('on'); setTimeout(() => $('flash').classList.remove('on'), 60); beep(320, 0.25, 0.12);
+      showBanner('bad', e.fault.title, e.fault.text + ' It counts against this drive.', null, 3500);
     }
   }
 }
@@ -696,7 +718,7 @@ function tick(now: number): void {
   const lsSig = replay ? '' : drawLesson();
   const rw = $('btnRewind'), canRw = canRewind(); if (rw.hidden === canRw) rw.hidden = !canRw;
   const layers = settings.layerPath + settings.layerPivot + settings.layerSwept + settings.layerKerb + settings.layerNums;
-  const sig = [S.x.toFixed(4), S.z.toFixed(4), S.th.toFixed(5), S.wheelAngle.toFixed(1), S.v.toFixed(3), S.input.fwd, S.input.rev, S.input.acc, S.input.brk, S.mode, settings.planView, !!replay, guide ? guide.at : -1, S.scene.id, lsSig, layers, city?.slot?.id].join('|');
+  const sig = [S.x.toFixed(4), S.z.toFixed(4), S.th.toFixed(5), S.wheelAngle.toFixed(1), S.v.toFixed(3), S.input.fwd, S.input.rev, S.input.acc, S.input.brk, S.mode, settings.planView, !!replay, guide ? guide.at : -1, S.scene.id, lsSig, layers, city?.slot?.id, S.traffic?.t.toFixed(2), S.ind, S.hazard].join('|');   // on the street the traffic and the lights move on
   if (sig === lastSig && now > wakeUntil && now - lastDrawT < 1000 && !viewMoving()) return;
   lastSig = sig; lastDrawT = now;
   updateHud(S); drawPlan(S, now / 1000, dt, screen.dpr);

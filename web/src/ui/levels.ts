@@ -1,6 +1,7 @@
 // The Levels sheet (today's level, your garage, ten levels per template with your best stars) and the
 // result card that comes up when you have parked: stars, what earned them, and where to go next.
 import { TEMPLATES, type TemplateId } from '../core/generator/templates';
+import type { Fault } from '../core/rules';
 import type { Stars } from '../core/score';
 import type { ParkedResult } from '../core/sim';
 import { $, openSheet } from './dom';
@@ -64,6 +65,7 @@ export function bindLevels(h: LevelHooks): void {
 
 export interface ResultInfo {
   title: string; sub: string; par: number; limit: number; better: boolean;
+  drive?: Fault[] | null;   // on the street: the faults on the way to the space
   retry(): void; newLayout: (() => void) | null; next: (() => void) | null; nextLabel: string;
 }
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
@@ -89,7 +91,13 @@ export function showResult(r: ParkedResult, st: Stars, info: ResultInfo): void {
     [st.neat, `Neat: ${neatHow}`],
     [st.efficient, `Efficient: ${r.moves} ${r.moves === 1 ? 'move' : 'moves'} (par ${info.par}, one more allowed), ${mmss(r.elapsed)} of ${mmss(info.limit)}`],
   ];
-  $('resList').replaceChildren(...lines.map(([ok, t]) => { const li = el('li', ok ? 'ok' : 'no'); li.append(el('i', '', ok ? '★' : '☆'), el('span', '', t)); return li; }));
+  const items = lines.map(([ok, t]) => { const li = el('li', ok ? 'ok' : 'no'); li.append(el('i', '', ok ? '★' : '☆'), el('span', '', t)); return li; });
+  if (info.drive) {   // the drive here, judged by the rules of the road (not a star: it is how you got to the space)
+    const f = info.drive, li = el('li', f.length ? 'lno' : 'lok');
+    li.append(el('i', '', f.length ? '✗' : '✓'), el('span', '', f.length ? `On the way, ${f.length} ${f.length === 1 ? 'fault' : 'faults'}: ${f.map(q => q.brief).join('; ')}` : 'On the way: no faults (lights, speed, nothing hit)'));
+    items.push(li);
+  }
+  $('resList').replaceChildren(...items);
   $('resStats').hidden = false;
   $('resStats').replaceChildren(...statsFor(r).map(([k, v]) => { const d = el('div'); d.append(el('span', '', k), el('b', '', v)); return d; }));
   const nb = $('resNew'), nx = $('resNext'), rt = $('resRetry');

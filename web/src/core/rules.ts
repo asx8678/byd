@@ -7,7 +7,8 @@ import type { Pt } from './math';
 import { lightAt, type Network, type Traffic } from './traffic';
 
 export type FaultKind = 'red' | 'speed' | 'crash' | 'touch';
-export interface Fault { kind: FaultKind; t: number; title: string; text: string }
+/** A fault: what it is, when (the simulation's clock), a banner's title and line, and a few words for the card. */
+export interface Fault { kind: FaultKind; t: number; title: string; text: string; brief: string }
 export interface RulesSnap { faults: Fault[]; over: number; under: number; open: number; peak: number; limit: number; front: Pt | null }
 /** Over the limit by more than this (km/h; the speed readout turns red there too), for longer than SPEED_HOLD s, is
  *  speeding; back under it for SPEED_CLEAR s ends that spell. */
@@ -47,11 +48,11 @@ export class Rules {
   /** After a step: the faults your car made in it. `hit` is what it touched in the step (a car in traffic always counts;
    *  anything else only in Drive mode: in Park mode a touch is the parking's own business). */
   step(p: Driven, traffic: Traffic | null, t: number, dt: number, hit: { name: string; traffic: boolean } | null): Fault[] {
-    const out: Fault[] = [], add = (kind: FaultKind, title: string, text: string) => { const f = { kind, t, title, text }; this.faults.push(f); out.push(f); return f; };
+    const out: Fault[] = [], add = (kind: FaultKind, title: string, text: string, brief: string) => { const f = { kind, t, title, text, brief }; this.faults.push(f); out.push(f); return f; };
     // a touch (pressing on against the same thing makes more; one fault for each thing in 3 s)
     if (hit && (hit.traffic || p.drive)) {
       const kind: FaultKind = hit.traffic ? 'crash' : 'touch', text = `The ${hit.name}.`;
-      if (!this.faults.some(f => f.kind === kind && f.text === text && t - f.t < 3)) add(kind, hit.traffic ? 'You hit a car' : 'Touched', text);
+      if (!this.faults.some(f => f.kind === kind && f.text === text && t - f.t < 3)) add(kind, hit.traffic ? 'You hit a car' : 'Touched', text, `${hit.traffic ? 'hit' : 'touched'} the ${hit.name}`);
     }
     // speeding
     const here = this.limitAt(p.x, p.z, p.th);
@@ -59,8 +60,8 @@ export class Rules {
     const kmh = Math.abs(p.v) * 3.6;
     if (this.limit && kmh > this.limit + SPEED_SLACK) {
       this.over += dt; this.under = 0;
-      if (this.open >= 0) { if (kmh > this.peak) { this.peak = kmh; this.faults[this.open].text = speedText(this.peak, this.limit, here?.place); } }
-      else if (this.over >= SPEED_HOLD) { this.peak = kmh; add('speed', 'Speeding', speedText(kmh, this.limit, here?.place)); this.open = this.faults.length - 1; }
+      if (this.open >= 0) { if (kmh > this.peak) { const f = this.faults[this.open]; this.peak = kmh; f.text = speedText(kmh, this.limit, here?.place); f.brief = f.text.slice(0, -1); } }
+      else if (this.over >= SPEED_HOLD) { this.peak = kmh; const text = speedText(kmh, this.limit, here?.place); add('speed', 'Speeding', text, text.slice(0, -1)); this.open = this.faults.length - 1; }
     } else {
       this.over = 0; this.under += dt;
       if (this.under >= SPEED_CLEAR) this.open = -1;
@@ -76,7 +77,7 @@ export class Rules {
         if (!(d0 < 0 && d1 >= 0) || ux * ax + uz * az < 0.5) continue;
         const wx = b[0] - a[0], wz = b[1] - a[1], q = ((f[0] - a[0]) * wx + (f[1] - a[1]) * wz) / (wx * wx + wz * wz);
         if (q < -0.1 || q > 1.1) continue;
-        if (lightAt(J, this.net.els[ap.el].axis, traffic.t) === 'red') add('red', 'Red light', `You went through on red at ${J.name}.`);
+        if (lightAt(J, this.net.els[ap.el].axis, traffic.t) === 'red') add('red', 'Red light', `You went through on red at ${J.name}.`, `a red light at ${J.name}`);
       }
     }
     return out;
