@@ -1,0 +1,122 @@
+{
+  "format": 1,
+  "notes": [
+    "The course: lessons from easy to hard. Each playable lesson is a scene (a generated level or your garage), the route the coach teaches, the words for it and a rule for passing.",
+    "route.start is the rear-axle pose [x, z, heading in radians]; route.pieces are [direction, steering, metres]: direction 1 forward, -1 reverse; steering -1 full lock left, 0 straight, 1 full lock right. They are stored, not planned on the phone, so every device coaches the same route. test/lessons.test.ts checks that the planner (steering full lock or straight) still finds exactly these routes.",
+    "Every claim in explain and tips comes from docs/research/parking-tips.md and lists its sources; where sources disagree, the text says so. tips are keyed by step number and shown with that step's mark.",
+    "scene.kerbGap: in a space along a kerb, the route was planned to finish with the body this far from the kerb (the template also allows 0.2 m); 0.15 puts the tyres about 17 cm out, in the middle of the 30 cm the pass allows.",
+    "pass: angle (degrees off straight), centre (metres off centre), kerb (tyres to the kerb, metres), moves ('par+1'), face ('in' or 'out'). Nothing touched is always required. soon: shown in the list, coming in the next update."
+  ],
+  "sources": {
+    "dvsa-parallel": { "name": "DVSA Safe Driving for Life: how to parallel park", "url": "https://www.safedrivingforlife.info/blog/cars/how-parallel-park-side-road/" },
+    "oregon": { "name": "Oregon driver education playbook", "url": "https://oer.pressbooks.pub/orpcplaybookr3/chapter/__unknown__-41/" },
+    "california": { "name": "California Driver Handbook", "url": "https://www.dmv.ca.gov/portal/handbook/california-driver-handbook/navigating-the-roads-cont1/" },
+    "new-york": { "name": "New York State Driver's Manual, chapter 7", "url": "https://dmv.ny.gov/new-york-state-drivers-manual-and-practice-tests/chapter-7-parallel-parking" },
+    "georgia": { "name": "Georgia DDS driver education, sessions 14–16", "url": "https://dds.georgia.gov/sessions-14-16-0" },
+    "bill-plant": { "name": "Bill Plant Driving School: how to parallel park", "url": "https://www.billplant.co.uk/blog/how-to-parallel-park/" },
+    "johnsons-parallel": { "name": "Johnsons Driving School: parallel parking", "url": "https://www.drivejohnsons.co.uk/learning-centre/how-to-drive-a-car/manoeuvres/parallel-park/" },
+    "montana": { "name": "Montana OPI driver education: parking worksheets", "url": "https://opifiles.mt.gov/portals/182/Page%20Files/Driver%20Education/Curriculum/Module%203%20all%20files/3.5-Parking-Worksheets.pdf" },
+    "pennsylvania": { "name": "Pennsylvania Driver's Manual: parking", "url": "https://www.pa.gov/agencies/dmv/driver-services/pennsylvania-drivers-manual/online-drivers-manual/everyday-driving-skills/parking.html" },
+    "learnerdriving": { "name": "LearnerDriving.com: bay parking", "url": "https://www.learnerdriving.com/bay-parking" },
+    "johnsons-bay": { "name": "Johnsons Driving School: reverse bay parking", "url": "https://drivejohnsons.co.uk/learning-centre/how-to-drive-a-car/manoeuvres/reverse-bay-parking" },
+    "dts-bay": { "name": "Driving Test Success: reverse bay parking", "url": "https://drivingtestsuccess.com/reverse-bay-parking/" },
+    "adac": { "name": "ADAC: richtig einparken", "url": "https://www.adac.de/verkehr/verkehrssicherheit/unterwegs/richtig-einparken/" },
+    "highway-code": { "name": "The Highway Code, rules 159–203", "url": "https://www.gov.uk/guidance/the-highway-code/using-the-road-159-to-203" }
+  },
+  "lessons": [
+    { "id": "first-metres", "n": 1, "title": "First metres", "learn": "Forward, reverse, stopping and steering, round a cone course.", "soon": true },
+    { "id": "how-a-car-turns", "n": 2, "title": "How a car turns", "learn": "The rear wheels cut inside and the front swings out: your turning circle.", "soon": true },
+    {
+      "id": "bay-forward", "n": 3, "title": "Into a bay, forwards",
+      "learn": "Turn when your mirror reaches the bay's near line.",
+      "scene": { "template": "bays-in", "level": 1, "seed": 1 },
+      "route": { "start": [-6.01751, 3.036159, 0.027152], "pieces": [[1, 0, 2.3], [1, -1, 5.9]] },
+      "explain": [
+        { "text": "Handbooks that teach parking forwards use the mirror: from 1.5–2.4 m (5–8 ft) out, turn when your mirror reaches the target bay's own near line, not two bays before.", "sources": ["georgia", "montana"] },
+        { "text": "Here the bay is 2.7 m wide with no cars beside it, so you can watch the rule work. The coach stops you at each mark: set the wheel, then drive on." }
+      ],
+      "tips": { "1": { "text": "Georgia and Montana: turn when your mirror reaches the bay's near line.", "sources": ["georgia", "montana"], "cue": {"part": "your mirror", "mark": "the near line of the green bay"} } },
+      "pass": { "angle": 3 }
+    },
+    {
+      "id": "bay-between", "n": 4, "title": "Between two cars",
+      "learn": "The same turn with a car on each side and a narrower aisle.",
+      "scene": { "template": "bays-in", "level": 4, "seed": 7 },
+      "route": { "start": [-5.717621, 4.828014, 0.027152], "pieces": [[1, 0, 2], [1, -1, 5.9], [1, 0, 1.8]] },
+      "explain": [
+        { "text": "The same rule as the last lesson: turn when your mirror reaches the bay's near line. The bay is 2.57 m wide and the cars either side are parked off centre, so the mark matters more.", "sources": ["georgia", "montana"] },
+        { "text": "The front of your car swings out as you turn.", "sources": ["highway-code"] },
+        { "text": "Going forwards, your inner rear wheel cuts inside the front ones: the thin cyan line on the plan shows where it runs. Keep it clear of the car in the near bay." }
+      ],
+      "tips": { "1": { "text": "Georgia and Montana: turn when your mirror reaches the bay's near line.", "sources": ["georgia", "montana"], "cue": {"part": "your mirror", "mark": "the near line of the green bay"} } },
+      "pass": { "centre": 0.15 }
+    },
+    {
+      "id": "bay-reverse", "n": 5, "title": "Reverse into a bay",
+      "learn": "Full lock when the bay's line is level with your back seat; straighten when the lines look parallel.",
+      "scene": { "template": "bays-back", "level": 2, "seed": 1 },
+      "route": { "start": [-5.878104, 1.837085, -0.027152], "pieces": [[1, 0, 9.6], [-1, -1, 5.9], [-1, 0, 1.8]] },
+      "explain": [
+        { "text": "Why reverse in: Montana calls it far less risky, you drive out forwards instead of reversing out half-blind, and the Highway Code recommends it for driveways (rule 201). Sources disagree for car parks: German multi-storeys often want you nose in.", "sources": ["montana", "learnerdriving", "dts-bay", "highway-code", "adac"] },
+        { "text": "UK driving schools: drive past and stop about two car lengths past the bay. Turn to full lock when the bay's first line is level with your back seat, seen in the rear passenger window; other schools use the door handle or the rear door. Straighten when the lines look parallel in both mirrors.", "sources": ["learnerdriving", "johnsons-bay", "dts-bay"] }
+      ],
+      "tips": {
+        "1": { "text": "UK schools: stop about two car lengths past the bay, then full lock as the bay's first line meets your back seat.", "sources": ["learnerdriving"], "cue": {"part": "your back seat"} },
+        "2": { "text": "Straighten when the bay's lines look parallel in both mirrors.", "sources": ["johnsons-bay"] }
+      },
+      "pass": { "angle": 3 }
+    },
+    {
+      "id": "parallel-big", "n": 6, "title": "Parallel, big space",
+      "learn": "Line up, full lock towards the kerb, then full lock away at the mirror cue.",
+      "scene": { "template": "kerb", "level": 1, "seed": 1, "kerbGap": 0.15 },
+      "route": { "start": [-4.087392, -3.91025, 0.026163], "pieces": [[1, 0, 11.5], [-1, 1, 3.5], [-1, -1, 3.6]] },
+      "explain": [
+        { "text": "This space is about 1.5 car lengths, the size handbooks suggest for beginners.", "sources": ["dvsa-parallel", "oregon"] },
+        { "text": "Line up: stop about 0.6–1 m (2–3 ft) out from the car in front, with your rear bumper level with its rear bumper or a little ahead.", "sources": ["new-york", "georgia", "bill-plant", "california", "dvsa-parallel"] },
+        { "text": "Reverse with the wheel turned towards the kerb. Sources disagree on how far: US handbooks say full or sharp lock, UK schools teach one turn of the wheel. This route uses full lock.", "sources": ["new-york", "georgia", "bill-plant", "johnsons-parallel"] },
+        { "text": "Georgia: when your mirror is in line with the front car's rear bumper, steer quickly the other way (Montana says the kerb-side mirror). Most other sources wait until the front of your car is clear of the car in front.", "sources": ["georgia", "montana", "dvsa-parallel", "pennsylvania"] },
+        { "text": "Finish within 30 cm (1 ft) of the kerb.", "sources": ["new-york", "bill-plant"] }
+      ],
+      "tips": {
+        "1": { "text": "Line up about 0.6–1 m out, your rear bumper level with the front car's or a little ahead.", "sources": ["new-york", "georgia", "california"], "cue": {"part": "your rear bumper", "mark": "the back of the car in front"} },
+        "2": { "text": "Georgia: steer the other way when your mirror is in line with the front car's rear bumper.", "sources": ["georgia", "montana"] },
+        "3": { "text": "Within 30 cm (1 ft) of the kerb.", "sources": ["new-york", "bill-plant"] }
+      },
+      "pass": { "kerb": 0.3 }
+    },
+    {
+      "id": "parallel-tight", "n": 7, "title": "Parallel, tighter",
+      "learn": "The three-phase way: straighten at about 45°, reverse straight, then full lock away.",
+      "scene": { "template": "kerb", "level": 4, "seed": 13, "kerbGap": 0.15 },
+      "route": { "start": [-4.017546, -3.852464, 0.026163], "pieces": [[1, 0, 11.3], [-1, 1, 2.9], [-1, 0, 1.2], [-1, -1, 3]] },
+      "explain": [
+        { "text": "A tighter space: your car's length plus 1.8 m. California's smallest is the car's length plus 3 ft (0.9 m).", "sources": ["california"] },
+        { "text": "Three-phase methods straighten the wheels at about 45°: when your centre door pillar or front door reaches the front car's rear bumper, or when your bonnet points to 2 o'clock.", "sources": ["california", "montana", "pennsylvania", "johnsons-parallel"] },
+        { "text": "Then reverse straight back and steer away once the front of your car is clear of the car in front; this route uses full lock. New York instead says when your front wheels are opposite its back bumper.", "sources": ["dvsa-parallel", "pennsylvania", "new-york"] },
+        { "text": "One correction move is allowed: par plus one." }
+      ],
+      "tips": {
+        "1": { "text": "Line up about 0.6–1 m out, your rear bumper level with the front car's or a little ahead.", "sources": ["new-york", "georgia", "california"], "cue": {"part": "your rear bumper", "mark": "the back of the car in front"} },
+        "2": { "text": "About 45°: your door pillar reaches the front car's rear bumper, or your bonnet points to 2 o'clock.", "sources": ["montana", "johnsons-parallel"] },
+        "3": { "text": "DVSA: steer away once you are sure the front of your car is clear of the parked car.", "sources": ["dvsa-parallel"] },
+        "4": { "text": "Within 30 cm (1 ft) of the kerb.", "sources": ["new-york", "bill-plant"] }
+      },
+      "pass": { "kerb": 0.3, "moves": "par+1" }
+    },
+    { "id": "leaving", "n": 8, "title": "Leaving a tight space", "learn": "Back up to the car behind, wheels away from the kerb, then out without touching.", "soon": true },
+    { "id": "angled", "n": 9, "title": "Angled bays", "learn": "Turn sharply as your steering wheel passes the first line.", "soon": true },
+    {
+      "id": "garage", "n": 10, "title": "Your garage",
+      "learn": "Everything at once: bay 561, nose in, from the left.",
+      "scene": { "garage": "561", "start": "left" },
+      "route": { "start": [-8.6, 6.45, 0], "pieces": [[1, 0, 6], [1, -1, 3.6], [-1, 1, 2.3], [1, 0, 2.8]] },
+      "explain": [
+        { "text": "Your own bay, nose in, coming from the left as you usually do. The Peugeot 208 narrows the end of the aisle, so the route takes three moves: turn in on full lock, back up on full lock the other way, then drive straight in." },
+        { "text": "Mind pillar 560 on the left of the bay and the concrete bench at its head." },
+        { "text": "If you can't see in the real garage, get someone to guide you.", "sources": ["highway-code"] }
+      ],
+      "pass": { "face": "in" }
+    }
+  ]
+}

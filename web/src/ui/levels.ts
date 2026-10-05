@@ -56,6 +56,11 @@ export interface ResultInfo {
 }
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
+/** The measurements under a result: tyres to the kerb in a kerb space, centring and gaps in a bay. */
+export const statsFor = (r: ParkedResult): [string, string][] => r.kind === 'kerb'
+  ? [['Tyres to kerb', fmtD(r.kerbGap)], ['Angle', `${Math.abs(r.angle).toFixed(1)}°`], ['Moves', String(r.moves)], ['Gap ahead', fmtD(r.gapFront)], ['Gap behind', fmtD(r.gapRear)], ['Time', mmss(r.elapsed)]]
+  : parkedCard(r).stats;
+
 /** The result card: the stars, one line per star, the measurements, and Try again / New layout / Next. */
 export function showResult(r: ParkedResult, st: Stars, info: ResultInfo): void {
   const stars = $('resStars');
@@ -72,13 +77,12 @@ export function showResult(r: ParkedResult, st: Stars, info: ResultInfo): void {
     [st.efficient, `Efficient: ${r.moves} ${r.moves === 1 ? 'move' : 'moves'} (par ${info.par}, one more allowed), ${mmss(r.elapsed)} of ${mmss(info.limit)}`],
   ];
   $('resList').replaceChildren(...lines.map(([ok, t]) => { const li = el('li', ok ? 'ok' : 'no'); li.append(el('i', '', ok ? '★' : '☆'), el('span', '', t)); return li; }));
-  const stats: [string, string][] = kerb
-    ? [['Tyres to kerb', fmtD(r.kerbGap)], ['Angle', `${Math.abs(r.angle).toFixed(1)}°`], ['Moves', String(r.moves)], ['Gap ahead', fmtD(r.gapFront)], ['Gap behind', fmtD(r.gapRear)], ['Time', mmss(r.elapsed)]]
-    : parkedCard(r).stats;
-  $('resStats').replaceChildren(...stats.map(([k, v]) => { const d = el('div'); d.append(el('span', '', k), el('b', '', v)); return d; }));
-  const nb = $('resNew'), nx = $('resNext');
-  nb.hidden = !info.newLayout; nx.textContent = info.nextLabel;
-  $('resRetry').onclick = () => info.retry();
+  $('resStats').hidden = false;
+  $('resStats').replaceChildren(...statsFor(r).map(([k, v]) => { const d = el('div'); d.append(el('span', '', k), el('b', '', v)); return d; }));
+  const nb = $('resNew'), nx = $('resNext'), rt = $('resRetry');
+  nb.hidden = !info.newLayout; nb.textContent = 'New layout'; nx.textContent = info.nextLabel;
+  nx.classList.add('primary'); rt.classList.remove('primary'); rt.textContent = 'Try again';
+  rt.onclick = () => info.retry();
   nb.onclick = () => info.newLayout?.();
   nx.onclick = () => (info.next ?? (() => openSheet('sheetLevels')))();
   openSheet('sheetResult');

@@ -39,4 +39,16 @@ One place per file. The world frame has x to the right and z down the plan. A he
 - `areaView`: the bounds of the "Whole area" view.
 - `layoutVersion`: bump it when the layout changes. Saved settings and positions from an older layout are then reset.
 
+## lessons/course.json
+
+The course: ten lessons in order, with the sources they quote. A lesson marked `soon` is listed but not playable yet. A playable one has:
+
+- `scene`: a generated level (`template`, `level`, `seed`, and for a kerb space `kerbGap`, the body's gap to the kerb the route was planned to) or your garage (`garage`: the bay, `start`).
+- `route`: the route the coach teaches, stored so that every device coaches the same one. `start` is the rear-axle pose `[x, z, heading]`; `pieces` are `[direction, steering, metres]`, with direction 1 forward or -1 reverse and steering -1 (full lock left), 0 (straight) or 1 (full lock right). The routes come from the planner with the steering kept to full lock or straight, which is how driving schools teach these manoeuvres and what a coach can name exactly; `test/lessons.test.ts` checks that the planner still finds exactly these routes.
+- `explain`: paragraphs for the lesson card, each with the `sources` it quotes. Every claim comes from `docs/research/parking-tips.md`; where sources disagree, the text says so.
+- `tips`: keyed by step number, shown on the coach card at that step. `cue` (optional) picks the part of the car and the landmark the step's mark is said with, so it matches the handbook's own rule ("your mirror" and "the near line of the green bay").
+- `pass`: what passing takes besides touching nothing: `angle` (degrees off straight), `centre` (metres off centre), `kerb` (tyres to the kerb, metres), `moves` (`"par+1"`), `face` (`in` or `out`).
+
+`sources` maps each id to a name and a link.
+
 `garage-561.json` is the photo-surveyed garage around bay 561. Its `notes` give the survey frame used to check the numbers. Generated levels (`src/core/generator`) are built in this same format, so a level can be saved as a file.

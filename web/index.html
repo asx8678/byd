@@ -43,11 +43,27 @@
         <button id="btnReset" type="button">Reset</button>
         <button id="btnReplay" type="button">Replay</button>
         <button id="btnShow" type="button">Show me</button>
-        <button id="btnLevels" type="button">Levels</button>
+        <button id="btnLevels" type="button">Play</button>
         <button id="btnSettings" type="button">Setup</button>
         <button id="btnInfo" type="button">Info</button>
       </div>
     </div>
+  </div>
+
+  <div id="coach" hidden aria-live="polite">
+    <div class="cHead"><b id="cLesson">Lesson</b><span id="cStep"></span><button id="cSlow" type="button" hidden>Slow motion · off</button></div>
+    <div id="cBody">
+      <p id="cSay"></p>
+      <p id="cUntil"></p>
+      <p id="cSee"></p>
+      <div id="cBar"><i></i><span id="cLeft"></span></div>
+      <p id="cWheel"></p>
+      <p id="cTip"></p>
+    </div>
+    <p id="cBrief" hidden></p>
+    <p id="cNote" hidden></p>
+    <div id="cBtns" hidden><button id="cBack" type="button">Back to the mark</button><button id="cRestart" type="button">Start again</button></div>
+    <button id="cSummon" type="button" hidden>Coach me through this try</button>
   </div>
 
   <div id="pdcWrap"><canvas id="pdcCv" aria-label="Parking sensor status"></canvas><div id="pdcTxt"><span id="pdcTg">Sensors</span><b id="pdcTd">clear</b></div></div>
@@ -87,12 +103,30 @@
   </div>
 
   <div class="sheet" id="sheetLevels" hidden>
-    <h3>Levels <button type="button" data-close="sheetLevels">Close</button></h3>
+    <h3>Play <button type="button" data-close="sheetLevels">Close</button></h3>
+    <div class="seg tabs" id="playTabs"><button data-tab="course" type="button">Course</button><button data-tab="levels" type="button">Levels</button></div>
+    <div id="tabCourse">
+      <div id="crsList"></div>
+      <p class="lvNote">Each lesson teaches one manoeuvre with your car's own numbers: watch it, then drive it with the coach, and the help steps back as you pass: guided, then cue marks only, then practice, then a test where the stars count. Lessons 1, 2, 8 and 9 come in the next update.</p>
+    </div>
+    <div id="tabLevels">
     <div class="lvDaily"><div><span>Today's level</span><b id="lvDailyName"></b></div><button id="lvDailyGo" type="button">Play</button></div>
     <h4>Your garage</h4>
     <button id="lvGarage" class="lvGarage" type="button"><span id="lvGarageName">Bay 561</span><small id="lvGarageStars"></small></button>
     <div id="lvGroups"></div>
     <p class="lvNote">Each level is built on your phone from its number and a layout seed, and the route planner drives it before you see it: par is its number of moves. Stars: nothing touched; neat (within 3° of straight, and centred within 15 cm in a bay or the tyres within 30 cm of the kerb); efficient (par plus one move at most, inside the time).</p>
+    </div>
+  </div>
+
+  <div class="sheet" id="sheetLesson" hidden>
+    <h3><span id="lsTitle">Lesson</span> <button type="button" data-close="sheetLesson">Close</button></h3>
+    <p class="lsLearn" id="lsLearn"></p>
+    <div id="lsBody"></div>
+    <p class="lsPass" id="lsPass"></p>
+    <p class="lsNow" id="lsNow"></p>
+    <div class="resBtns"><button id="lsWatch" type="button">Watch</button><button id="lsDrive" class="primary" type="button">Drive</button></div>
+    <button id="lsTest" class="lsTest" type="button">Already know it? Go straight to the test</button>
+    <div id="lsSourcesWrap"><h4>Sources</h4><ul class="lsSources" id="lsSources"></ul></div>
   </div>
 
   <div class="sheet" id="sheetResult" hidden>
@@ -144,7 +178,9 @@
     <h4>Parking sensors</h4>
     <p>Twelve ultrasonic sensors as on the car: four in each bumper (two centre, two corner angled 35° out) and two per side. Each sees a 60° cone, 1.2 m ahead, 1.5 m behind, 0.6 m to the side, so a pillar beside a door is only heard once a corner sensor catches it, just like the real system. The beeper starts slow at the edge of range, speeds up through 1.0, 0.7 and 0.45 m, and becomes a continuous tone under 30 cm. Front sensors beep a higher note than the rear. Beeps need one tap on the wheel or a pedal first (phones only play sound after a touch). The sensor graphic at the right of the map works like the car's own screen: the bands around the car light up from the outside in, the end that is listening is brighter, a STOP card appears under 30 cm in the direction of travel, and the edge of the screen glows red on the side of the obstacle.</p>
     <h4>What counts as parked</h4>
-    <p>All four corners inside the target bay lines, car stopped, heading within 6° of straight. In your garage nose-in (as in the photos) or reversed both count; the result card shows your centring, angle and the gap to the bench. In a level the bay says which way round, and a space along a kerb counts when the car is between the cars with its tyres within 50 cm of the kerb.</p>
+    <p>All four corners inside the target bay lines, car stopped, heading within 6° of straight. The result is read once the car has stayed still for a second with no pedal held, so a last small nudge still counts. In your garage nose-in (as in the photos) or reversed both count; the result card shows your centring, angle and the gap to the bench. In a level the bay says which way round, and a space along a kerb counts when the car is between the cars with its tyres within 50 cm of the kerb.</p>
+    <h4>Course</h4>
+    <p>Lessons from the first metres to your own bay. Each one is a space and a route for your car, with the handbooks' rule of thumb next to the exact moment for this car: watch the ghost drive it, then drive it yourself. Guided, the coach shows each step and the next mark, waits until the wheel is set (hold it at full lock with one thumb while the other holds the pedal, or switch self-centring off in Setup), keeps you at walking pace and brakes on the mark; then only the marks are shown, then nothing (Show me and the coach on request), then a test where the stars count. Two passes take a level of help away, two misses bring it back in slow motion. After each try your path is drawn over the route and the coach names the first place it drifted more than 30 cm, and why. The routes use full lock or straight wheels only, as driving schools teach, so every step can be named exactly. Sources are the driving handbooks and schools listed on each lesson.</p>
     <h4>Levels</h4>
     <p>Three kinds so far: a row of bays entered nose first, the same reversing in, and parallel parking between two cars at a kerb on your right. Level 1 is roomy; by level 10 the bays are 2.3 m wide with a 5 m aisle, and the parallel space is the car's length plus 80 cm. Neighbours park off-centre, cars appear opposite, a pillar or a lamp post joins in. Kerbs only stop the tyres: the bumpers hang over them, as on a real street. Show me drives the planner's route; part way in, it plans from where you are.</p>
   </div>

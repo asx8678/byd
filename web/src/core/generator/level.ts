@@ -4,7 +4,7 @@
 import { Field } from '../field';
 import { clamp, wrapPi } from '../math';
 import { bayBox } from '../parking';
-import { exactCheck, moves, sample, search, type Piece, type Pose } from '../planner';
+import { exactCheck, moves, sample, search, type Piece, type Pose, type SearchOpts } from '../planner';
 import { makeScene, type Rect, type Scene } from '../scene';
 import type { Vehicle } from '../vehicle';
 import { draft, type Draft, type Knobs, type TemplateId } from './templates';
@@ -33,11 +33,11 @@ export function timeLimit(route: Piece[]): number {
 const inRegion = (e: Draft['entry'], p: Pose) => p.x >= e.x0 && p.x <= e.x1 && p.z >= e.z0 && p.z <= e.z1 && Math.abs(wrapPi(p.th - e.th)) < 8 * Math.PI / 180;
 
 /** Search outward from the parked poses until the car is in the entry region, then turn the route round. */
-export function solve(v: Vehicle, d: Draft, scene: Scene, maxNodes: number): { field: Field; status: 'found' | 'none' | 'gave-up'; route: Piece[]; nodes: number } {
+export function solve(v: Vehicle, d: Draft, scene: Scene, maxNodes: number, extra: SearchOpts = {}): { field: Field; status: 'found' | 'none' | 'gave-up'; route: Piece[]; nodes: number } {
   const [x0, x1, z0, z1] = scene.lot!, e = d.entry;
   const field = new Field(v, scene.obstacles, x0, x1, z0, z1, scene.kerbs);
   const heur = (p: Pose) => Math.hypot(Math.max(e.x0 - p.x, 0, p.x - e.x1), Math.max(e.z0 - p.z, 0, p.z - e.z1)) + 0.5 * v.R_REAR * Math.abs(wrapPi(p.th - e.th));
-  const plan = search(v, field, d.goals, p => inRegion(e, p), heur, { outward: true, shotHeading: e.th, maxNodes });
+  const plan = search(v, field, d.goals, p => inRegion(e, p), heur, { ...extra, outward: true, shotHeading: e.th, maxNodes });
   return { field, status: plan.status, route: plan.pieces, nodes: plan.nodes };
 }
 
@@ -67,7 +67,7 @@ const INTRO: Record<TemplateId, string> = {
 };
 
 /** The whole level in view: the route, the space and a margin, inside the lot. */
-function areaOf(v: Vehicle, scene: Scene, route: Piece[]): Rect {
+export function areaOf(v: Vehicle, scene: Scene, route: Piece[]): Rect {
   let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
   const add = (x: number, z: number) => { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); };
   for (const p of sample(v, route, 0.5)) { add(p.x - 1.2, p.z - 1.2); add(p.x + 1.2, p.z + 1.2); add(p.x + (v.L - v.OVR) * Math.cos(p.th), p.z - (v.L - v.OVR) * Math.sin(p.th)); }

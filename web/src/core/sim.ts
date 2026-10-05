@@ -142,12 +142,23 @@ export class Sim {
   /** All four corners inside the target bay, stopped, within 6° of straight, the way round the bay asks for. */
   private checkParked(): ParkedResult | null {
     if (Math.abs(this.v) > 0.02) return null;
-    const v = this.vehicle, b = this.scene.bays[this.options.bay] ?? this.scene.bays[this.scene.defaultBay];
-    const at = parkedIn(v, b, this.x, this.z, this.th);
+    const b = this.targetBay(), at = parkedIn(this.vehicle, b, this.x, this.z, this.th);
     if (!at) { this.parked = false; return null; }
     if (!facesRight(b, at) || this.parked) return null;
     this.parked = true;
-    const { noseIn } = at, p = placement(v, b, this.scene.kerbs, this.x, this.z, this.th, at);
+    return this.resultAt(b, at);
+  }
+
+  /** How the car sits in the target bay right now, or null when it is not in it the right way round. The parked
+   *  event reports the first stop; this is for reading the result later, once the car has settled. */
+  parkedResult(): ParkedResult | null {
+    const b = this.targetBay(), at = parkedIn(this.vehicle, b, this.x, this.z, this.th);
+    return at && facesRight(b, at) ? this.resultAt(b, at) : null;
+  }
+
+  private targetBay() { return this.scene.bays[this.options.bay] ?? this.scene.bays[this.scene.defaultBay]; }
+  private resultAt(b: ReturnType<Sim['targetBay']>, at: NonNullable<ReturnType<typeof parkedIn>>): ParkedResult {
+    const v = this.vehicle, { noseIn } = at, p = placement(v, b, this.scene.kerbs, this.x, this.z, this.th, at);
     const cs = Math.cos(this.th), cx = this.x + (v.WB / 2) * cs, gl = cx - v.W / 2 - b.x0, gr = b.x1 - cx - v.W / 2;
     return {
       bay: this.options.bay, noseIn, kind: b.kind ?? 'bay',

@@ -147,3 +147,52 @@ table.dim td:nth-child(2){white-space:nowrap}
 kbd{font:500 12px var(--font-ui);background:rgba(255,255,255,.08);border:1px solid var(--panel-line);border-radius:5px;padding:1px 5px}
 @media (max-height:560px){ #viewLabel{display:none} }
 @media (prefers-reduced-motion:reduce){ #wheelSvg{transition:none} #banner{transition:none} #pdcStop.show{animation:none} }
+/* ---- the course: Play sheet tabs, lesson list, lesson card, coach card ---- */
+.seg.tabs{margin:0 0 12px;width:max-content}
+.crsRow{display:flex;align-items:center;gap:10px;width:100%;box-sizing:border-box;margin:0 0 6px;padding:9px 12px;border-radius:10px;background:rgba(255,255,255,.05);border:1px solid var(--panel-line);color:var(--fg);text-align:left;cursor:pointer;font:inherit}
+.crsRow:disabled{opacity:.5;cursor:default}
+.crsRow.cur{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.crsRow:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.crsN{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.08);font:700 15px/1 var(--font-num);font-variant-numeric:tabular-nums}
+.crsT{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.crsT b{font:600 15px/1.15 var(--font-num)}
+.crsT small{font-size:12px;color:var(--muted);line-height:1.3}
+.crsS{flex:none;font:600 11px/1 var(--font-num);font-style:normal;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.crsS.done{color:var(--accent);font:400 14px/1 var(--font-ui);letter-spacing:0}
+.lsLearn{font-weight:500;color:var(--fg)!important}
+#lsBody p{margin:8px 0}
+#lsBody a.src,.lsSources a{color:#9cc3ff;text-decoration:none}
+#lsBody a.src{font-size:11px;vertical-align:super;line-height:0}
+.lsPass{margin-top:10px;color:var(--fg)!important}
+.lsNow{color:var(--accent)!important;font-size:13px!important}
+.lsTest{display:block;margin:10px auto 0;background:none;border:0;color:var(--muted);font:500 13px var(--font-ui);text-decoration:underline;cursor:pointer}
+.lsSources{list-style:none;padding:0!important;font-size:12.5px}
+.lsSources li{font-size:12.5px!important;margin:2px 0}
+#coach{position:absolute;z-index:2;left:8px;max-width:min(calc(100% - 16px),400px);box-sizing:border-box;background:rgba(18,19,24,.9);border:1px solid rgba(242,194,48,.35);border-radius:12px;padding:8px 11px 9px;backdrop-filter:blur(8px);box-shadow:0 6px 20px rgba(0,0,0,.4)}
+#coach p{margin:0}
+.cHead{display:flex;align-items:baseline;gap:8px;font:600 11px/1.2 var(--font-num);letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.cHead b{color:var(--accent);font-weight:700}
+.cHead button{margin-left:auto;font:600 10.5px/1 var(--font-num);letter-spacing:.06em;text-transform:uppercase;color:var(--fg);background:rgba(255,255,255,.08);border:1px solid var(--panel-line);border-radius:999px;padding:4px 8px;cursor:pointer}
+#cSay{margin-top:4px!important;font:600 16px/1.2 var(--font-num);color:var(--fg);text-wrap:balance}
+#cUntil{font-size:13px;color:#d6d3ca;line-height:1.3}
+#cSee{font-size:12px;color:var(--muted);line-height:1.3;margin-top:2px!important}
+#cBar{position:relative;height:16px;margin-top:6px;border-radius:8px;background:rgba(255,255,255,.08);overflow:hidden}
+#cBar i{position:absolute;left:0;top:0;bottom:0;background:rgba(242,194,48,.45)}
+#cBar span{position:relative;display:block;text-align:center;font:600 11.5px/16px var(--font-num);letter-spacing:.04em;font-variant-numeric:tabular-nums}
+#cWheel{margin-top:5px!important;font:600 12.5px/1.2 var(--font-num);letter-spacing:.03em;color:var(--warn)}
+#cWheel.ok{color:var(--ok)}
+#cTip{margin-top:5px!important;padding-top:5px;border-top:1px solid var(--panel-line);font-size:12px;line-height:1.3;color:var(--muted)}
+#cBrief{margin-top:3px!important;font-size:12.5px;color:#d6d3ca}
+#cNote{margin-top:5px!important;font:600 13px/1.2 var(--font-num);color:var(--warn)}
+#cBtns{display:flex;gap:6px;margin-top:7px}
+#cBtns button,#cSummon{flex:1;font:600 12px/1 var(--font-num);letter-spacing:.05em;text-transform:uppercase;color:var(--fg);background:rgba(255,255,255,.08);border:1px solid var(--panel-line);border-radius:999px;padding:8px 10px;cursor:pointer}
+#cBtns button:first-child{background:var(--accent);border-color:var(--accent);color:#1a1300}
+#cSummon{margin-top:6px;width:100%}
+#coach button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.resStars .badge{font:700 15px/1 var(--font-num);letter-spacing:.08em;text-transform:uppercase;padding:7px 10px;border-radius:8px;border:1px solid}
+.resStars .badge.ok{color:var(--ok);border-color:rgba(94,208,138,.55)}
+.resStars .badge.no{color:var(--warn);border-color:rgba(240,165,58,.55)}
+.resList li.tip span{color:var(--fg)}
+.resList li.tip i,.resList li.next i{color:var(--accent)}
+.resList li.lno i{color:var(--bad)}
+.resList li.lok i{color:var(--ok)}

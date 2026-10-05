@@ -1,4 +1,4 @@
-// Touch, mouse and keyboard: the steering wheel, the hold-to-move pedals, the toolbar, Setup, Levels and Info.
+// Touch, mouse and keyboard: the steering wheel, the hold-to-move pedals, the toolbar, Setup, Play and Info.
 import { clamp, DEG } from '../core/math';
 import type { Sim } from '../core/sim';
 import { initAudio, tone } from './audio';
@@ -6,6 +6,10 @@ import { $, openSheet } from './dom';
 import { lockDeg, saveSettings, settings, type Settings } from './settings';
 
 export interface ControlHooks { reset(): void; settingChanged(key: keyof Settings): void; levels(): void }
+
+/** The pedals as the player holds them. The frame loop passes them on to the car each step, unless the coach is
+ *  holding one back (a lesson's guided steps), so what the car sees, and the recording, stay one thing. */
+export const pedals = { fwd: false, rev: false };
 
 export function bindControls(sim: Sim, hooks: ControlHooks): void {
   const inp = sim.input;
@@ -28,8 +32,8 @@ export function bindControls(sim: Sim, hooks: ControlHooks): void {
 
   // pedals: hold to move, release to brake
   const pedal = (el: HTMLElement, key: 'fwd' | 'rev') => {
-    const on = (e: PointerEvent) => { e.preventDefault(); inp[key] = true; el.classList.add('on'); try { el.setPointerCapture(e.pointerId); } catch { /* capture unsupported */ } initAudio(); };
-    const off = () => { inp[key] = false; el.classList.remove('on'); };
+    const on = (e: PointerEvent) => { e.preventDefault(); pedals[key] = true; el.classList.add('on'); try { el.setPointerCapture(e.pointerId); } catch { /* capture unsupported */ } initAudio(); };
+    const off = () => { pedals[key] = false; el.classList.remove('on'); };
     el.addEventListener('pointerdown', on); el.addEventListener('pointerup', off); el.addEventListener('pointercancel', off); el.addEventListener('lostpointercapture', off);
     el.addEventListener('contextmenu', e => e.preventDefault());
   };
@@ -38,8 +42,8 @@ export function bindControls(sim: Sim, hooks: ControlHooks): void {
   // keyboard: arrows steer and drive, space straightens, X resets
   window.addEventListener('keydown', e => {
     if ((e.target as HTMLElement).tagName === 'INPUT') return;
-    if (e.key === 'ArrowUp' || e.key === 'w') { inp.fwd = true; $('btnFwd').classList.add('on'); }
-    if (e.key === 'ArrowDown' || e.key === 's') { inp.rev = true; $('btnRev').classList.add('on'); }
+    if (e.key === 'ArrowUp' || e.key === 'w') { pedals.fwd = true; $('btnFwd').classList.add('on'); }
+    if (e.key === 'ArrowDown' || e.key === 's') { pedals.rev = true; $('btnRev').classList.add('on'); }
     if (e.key === 'ArrowLeft') { inp.kl = true; sim.wheelTarget = null; }
     if (e.key === 'ArrowRight') { inp.kr = true; sim.wheelTarget = null; }
     if (e.key === ' ') { sim.wheelTarget = 0; e.preventDefault(); }
@@ -47,8 +51,8 @@ export function bindControls(sim: Sim, hooks: ControlHooks): void {
     if (e.key.startsWith('Arrow')) e.preventDefault();
   });
   window.addEventListener('keyup', e => {
-    if (e.key === 'ArrowUp' || e.key === 'w') { inp.fwd = false; $('btnFwd').classList.remove('on'); }
-    if (e.key === 'ArrowDown' || e.key === 's') { inp.rev = false; $('btnRev').classList.remove('on'); }
+    if (e.key === 'ArrowUp' || e.key === 'w') { pedals.fwd = false; $('btnFwd').classList.remove('on'); }
+    if (e.key === 'ArrowDown' || e.key === 's') { pedals.rev = false; $('btnRev').classList.remove('on'); }
     if (e.key === 'ArrowLeft') inp.kl = false;
     if (e.key === 'ArrowRight') inp.kr = false;
   });
@@ -57,7 +61,7 @@ export function bindControls(sim: Sim, hooks: ControlHooks): void {
   $('btnReset').addEventListener('click', () => hooks.reset());
   $('btnSettings').addEventListener('click', () => openSheet('sheetSettings', true));
   $('btnInfo').addEventListener('click', () => openSheet('sheetInfo', true));
-  $('btnLevels').addEventListener('click', () => { hooks.levels(); openSheet('sheetLevels', true); });
+  $('btnLevels').addEventListener('click', () => { hooks.levels(); openSheet('sheetLevels', true); });   // the Play sheet: the course and the levels
   document.querySelectorAll<HTMLElement>('[data-close]').forEach(b => b.addEventListener('click', () => { $(b.dataset.close!).hidden = true; }));
   document.querySelectorAll<HTMLElement>('.seg[data-opt]').forEach(seg => {
     const key = seg.dataset.opt as keyof Settings;

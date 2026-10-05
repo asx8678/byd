@@ -3,7 +3,7 @@
 import { ackermann, footprint } from '../core/car';
 import type { Rect } from '../core/scene';
 import { DEG, clamp, type Pt } from '../core/math';
-import type { RoutePoint } from '../core/planner';
+import type { Pose, RoutePoint } from '../core/planner';
 import type { Prediction } from '../core/predict';
 import { SIDES, rangeOf } from '../core/sensors';
 import type { Sim } from '../core/sim';
@@ -17,7 +17,11 @@ let pred: Prediction | null = null, predKey = '', predT = -1, infoTxt = '', pred
 /** Under the HUD and above the wheel and pedals: where the readouts sit and which band the car is centred in. Returns that band. */
 export function layoutPlan(stage: HTMLElement): { top: number; bottom: number; carY: number } | null {
   const c = stage.getBoundingClientRect(), W = c.width, H = c.height; if (!W || !H) return null;
-  const hudB = $('hud').getBoundingClientRect().bottom - c.top + 8;
+  let hudB = $('hud').getBoundingClientRect().bottom - c.top + 8;
+  // in a lesson the coach card sits under the readouts, and the wheel readout makes way for it
+  const card = $('coach');
+  if (!card.hidden) { card.style.top = hudB + 'px'; hudB = card.getBoundingClientRect().bottom - c.top + 6; }
+  $('planInfo').hidden = !card.hidden;
   const ctlT = Math.min($('wheelWrap').getBoundingClientRect().top, $('pedals').getBoundingClientRect().top) - c.top - 8;
   const fb = W > H ? H - 10 : ctlT;   // landscape: the wheel and pedals sit at the sides, so the car can use the full height
   $('planInfo').style.top = $('planBtns').style.top = hudB + 'px'; $('planFoot').style.bottom = Math.max(6, H - ctlT + 4) + 'px';
@@ -31,6 +35,12 @@ export function forgetPrediction(): void { pred = null; }
 export interface Guide { pts: RoutePoint[]; at: number }
 let guide: Guide | null = null;
 export function setGuide(g: Guide | null): void { guide = g; }
+/** A lesson on the floor: the route (guided), the marks still to come (the next one where the car should really stop,
+ *  which follows the car), and after a try your path over the route with the first place it drifted 30 cm. */
+export interface CoachDraw { route: RoutePoint[] | null; marks: Pose[]; from: number; cur: Pose | null; track: Pt[] | null; drift: Pt | null }
+let coach: CoachDraw | null = null;
+export function setCoachDraw(d: CoachDraw | null): void { coach = d; }
+
 /** Jump straight to the target view on the next frame instead of easing there. */
 export function snapView(): void { PV.init = false; }
 
@@ -94,6 +104,30 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
     else { path(c, o.pts); c.fill(); c.stroke(); }
   }
   if (sc.door) { c.strokeStyle = '#59636b'; c.lineWidth = Math.max(1.5, 0.07 * s); const a = PS(sc.door[0], 0.03), b = PS(sc.door[1], 0.03); c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke(); }
+  // a lesson: the route, the marks, your path and where it first drifted
+  if (coach) {
+    const C = coach;
+    if (C.route) {
+      const G = C.route; c.lineCap = 'round'; c.lineWidth = Math.max(1.5, 0.05 * s);
+      for (let i = 1; i < G.length; i++) {
+        const a = PS(G[i - 1].x, G[i - 1].z), b = PS(G[i].x, G[i].z);
+        c.strokeStyle = G[i].dir > 0 ? 'rgba(242,194,48,.55)' : 'rgba(94,208,216,.6)'; c.setLineDash(G[i].dir > 0 ? [] : [6, 5]);
+        c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke();
+      }
+      c.setLineDash([]);
+    }
+    if (C.track && C.track.length > 1) { c.strokeStyle = 'rgba(235,232,223,.85)'; c.lineWidth = Math.max(1.5, 0.05 * s); c.lineCap = 'round'; path(c, C.track, false); c.stroke(); }
+    c.font = `700 ${clamp(0.5 * s, 11, 16).toFixed(1)}px "Barlow Condensed", sans-serif`;
+    C.marks.forEach((m, k) => {
+      if (k < C.from) return;
+      const on = k === C.from, p = on && C.cur ? C.cur : m;
+      c.strokeStyle = on ? 'rgba(242,194,48,.95)' : 'rgba(235,232,223,.4)'; c.lineWidth = on ? 2 : 1; c.setLineDash(on ? [] : [4, 4]);
+      path(c, footprint(p.x, p.z, p.th, v.body)); c.stroke(); c.setLineDash([]);
+      const q = footprint(p.x, p.z, p.th, [[v.WB / 2, 0]])[0], [sx, sy] = PS(q[0], q[1]);
+      c.fillStyle = on ? '#f2c230' : 'rgba(235,232,223,.55)'; c.fillText(String(k + 1), sx, sy);
+    });
+    if (C.drift) { const [sx, sy] = PS(C.drift[0], C.drift[1]); c.strokeStyle = '#ff6b5a'; c.lineWidth = 2.5; c.beginPath(); c.arc(sx, sy, Math.max(10, 0.45 * s), 0, 6.3); c.stroke(); }
+  }
   // Show me: the planned route (forward yellow, reverse dashed cyan), where each move ends, and the ghost car
   if (guide) {
     const G = guide.pts;

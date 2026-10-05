@@ -1,6 +1,6 @@
 # Atto 2 Garage Trainer
 
-Practise parking a BYD Atto 2 nose-first into bay 561, then in generated levels: a row of bays entered nose first, the same reversing in, and parallel parking at a kerb, each from level 1 (roomy) to level 10 (tight). The screen is a plan: it draws the path the car takes at the current steering, an outline of the car every 0.8 m along it and, in red, where it would touch something first. It also has parking sensors with beeps, touch detection, a move counter against par, and a result card with three stars when you're parked.
+Practise parking a BYD Atto 2 nose-first into bay 561, then in generated levels: a row of bays entered nose first, the same reversing in, and parallel parking at a kerb, each from level 1 (roomy) to level 10 (tight). A course of lessons teaches each manoeuvre with a coach: watch the route, drive it guided step by step, then with less and less help, then a test. The screen is a plan: it draws the path the car takes at the current steering, an outline of the car every 0.8 m along it and, in red, where it would touch something first. It also has parking sensors with beeps, touch detection, a move counter against par, and a result card with three stars when you're parked.
 
 It runs in any modern browser on iPhone, Android and PC, and installs to the home screen as an app that works offline.
 
@@ -26,6 +26,7 @@ To install it on a phone, serve `dist/` over HTTPS (for example GitHub Pages), o
 content/       data the game loads; JSON, so a Swift port reads the same files (see content/README.md)
   vehicles/      one file per car: dimensions, outline, mirrors, turning circle, driveline, sensors
   scenes/        one file per place: obstacles, painted lines, bays, starts (garage-561.json is your garage)
+  lessons/       course.json: the lessons, their stored routes, the handbooks' words with sources, pass rules
 src/core/      the game itself, no browser code: easy to test, and the part to port to Swift
   math.ts        DEG, clamp, wrapPi, the Pt type
   vehicle.ts     a car from its file; the steering lock is derived from the turning circle
@@ -46,21 +47,30 @@ src/core/      the game itself, no browser code: easy to test, and the part to p
                  space back to the car (planBack, quicker for parallel parking); Show me, par, levels
   generator/     levels from (template, level, seed): templates.ts builds the scene, level.ts solves it
                  outward from the parked poses, checks it with the exact collision test and measures it
+  coach.ts       a route as steps said with what you see ("until your mirror is 55 cm short of the near
+                 line"); CoachRun, which follows a try (guided: the wheel first, walking pace, brakes on the
+                 mark; marks that follow the car so earlier errors are taken out); and the feedback after a
+                 try (the first 30 cm drift and why, or the switch whose timing moved the finish most)
+  lesson.ts      the course from content/lessons: loading a lesson, pass rules, help that steps back
 src/ui/        the browser side: drawing, controls, sound, settings
   plan.ts        the map (canvas 2D)
   pdcDisplay.ts  sensor graphic, STOP card, red screen-edge glow
   hud.ts         readouts and the banner
   controls.ts    steering wheel, hold-to-move pedals, keyboard, Setup, Levels and Info
-  levels.ts      the Levels sheet and the result card with its stars
+  levels.ts      the Levels tab of the Play sheet and the result card with its stars
+  course.ts      the Course tab, the lesson card and a lesson's result card (localStorage key `atto2-course`)
+  coachCard.ts   the coach card at the top of the screen in a lesson
   progress.ts    best stars, last layouts and what you were playing (localStorage key `atto2-levels`)
   audio.ts       the beeper
   settings.ts    saved choices (localStorage key `atto2-garage`)
 src/main.ts    wiring and the frame loop: the simulation steps at a fixed 60 Hz, drawing is capped at
                30 fps and skipped while nothing changes; Replay plays the current attempt from its start;
-               Show me lets a ghost drive the route that set par, or plans one from where the car is
+               Show me lets a ghost drive the route that set par, or plans one from where the car is;
+               a try's result is read once the car has sat parked for a second; lessons: Watch, tries,
+               the coach between the pedals and the car (applied before each step, so replays stay exact)
 public/        manifest, icons, service worker
 test/          golden test and its recorded fixtures, replay, content, planner and generator tests
-prototype/     the scenario generator prototype (now in src/core/generator; its coach steps come in M4)
+prototype/     the scenario generator prototype (now in src/core: generator/, planner.ts, coach.ts)
 ```
 
 ## The golden test
@@ -84,6 +94,10 @@ The other tests check that:
 - a nose-first bay does not accept a reversed-in car, and the other way round
 - kerbs stop the tyres but not the bumpers, and a drive in a level replays exactly, touches and moves included
 - planBack finds a way in from part way along a level's route
+- every lesson's stored route is still what the planner finds (full lock or straight only), clears everything and passes
+- a driver who does only what the coach shows passes every lesson: guided (also with the wheel 4° off, letting go early or turning the wheel slowly) and with cue marks only (also reacting late)
+- the feedback names an early or late turn, a stop too soon or too far before reversing, a wheel short of full lock or coming off it, an extra move, and (for a parallel park that misses by a little) the switch that caused it, in degrees
+- two passes lower the help, two fails raise it with slow motion, and a pass in the test finishes the lesson
 
 ## Porting to Swift later
 
