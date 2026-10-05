@@ -91,6 +91,10 @@ export function kerb(v: Vehicle, level: number, seed: number): Draft {
   };
 }
 
+/** A kerb level's parked poses with the body `gap` from the kerb (at z = 0). Goals are kept to the millimetre, so the
+ *  match allows a millimetre: half the Smart's width is 0.8315 m. */
+export const goalsAtGap = (v: Vehicle, goals: readonly Pose[], gap: number): Pose[] => goals.filter(g => Math.abs(g.z - (-gap - v.W / 2)) < 1e-3);
+
 /** How much wider than the Atto 2 a car is: the bays are that much wider for it. */
 export const growWidth = (v: Vehicle): number => Math.max(0, v.W - 1.83);
 

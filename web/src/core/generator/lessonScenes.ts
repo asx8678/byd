@@ -4,10 +4,15 @@
 import type { Pose } from '../planner';
 import type { SceneObstacleSpec, SceneSpec } from '../scene';
 import type { Vehicle } from '../vehicle';
-import { draft, mulberry32 } from './templates';
+import { draft, growWidth, mulberry32 } from './templates';
 
 export type LessonSceneId = 'first-metres' | 'turning' | 'leaving' | 'angled';
-export interface LessonScene { spec: SceneSpec; bay: string; start: Pose }
+/** route: for a lesson written for the scene (not planned), its pieces [dir, lvl, length] from the start, for this car. */
+export interface LessonScene { spec: SceneSpec; bay: string; start: Pose; route?: number[][] }
+
+const r2 = (n: number) => Math.round(n * 100) / 100, r6 = (n: number) => Math.round(n * 1e6) / 1e6;
+/** How much longer than the Atto 2 a car is: the lesson bays are that much deeper for it (like the levels' bays). */
+const deeper = (v: Vehicle): number => Math.max(0, v.L - 4.33);
 
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
 const rect = (x0: number, x1: number, z0: number, z1: number): number[][] => [[x0, z0], [x1, z0], [x1, z1], [x0, z1]].map(p => p.map(r3));
@@ -23,21 +28,25 @@ function bayRow(spec: SceneSpec, x0: number, w: number, n: number, back: number,
 
 /**
  * First metres: drive forward to a stop line, back to a blue cone, then on full lock left into a wide bay. The route
- * (stored with the lesson) is F straight 5 m, R straight 3 m, F full lock left 90°, F straight into the bay.
+ * is F straight 5 m, R straight 3 m, F full lock left 90°, F straight into the bay until the rear bumper is 17.5 cm in.
  */
 export function firstMetres(v: Vehicle): LessonScene {
-  const spec = shell('lesson-first-metres', 'Empty car park', [-4, 15, -12.8, 4.2]);
+  const deep = deeper(v), spec = shell('lesson-first-metres', 'Empty car park', [-4, 15, -12.8 - deep, 4.2]);
   const R = v.R_REAR, front = v.WB + v.OVF, m = v.mirrors[1], mirrorX = m ? (m[0][0] + m[1][0]) / 2 : 0.7 * v.WB;
-  const stopX = 5 + front, cx = 2 + R, W = 2.8, back = -11.5;
-  // the stop line, with a cone at each end; the blue cone where the mirror is when the car has backed up 3 m
+  const stopX = 5 + front, cx = 2 + R, W = 2.8 + growWidth(v), back = -11.5 - deep, mouth = -6.5;
+  // the stop line, with a cone at each end; the blue cone where the mirror is when the car has backed up 3 m, on the
+  // left inside the circle the car turns on next, or on the right when that circle is too tight to hold it (the Smart's)
+  const coneZ = Math.hypot(mirrorX, R - 2.4) + 0.15 + 0.3 <= R - v.W / 2 ? -2.4 : 2.4;
   spec.lines.push([stopX, -1.4, stopX, 1.4].map(r3));
-  spec.obstacles.push(cone(stopX, -1.8), cone(stopX, 1.8), cone(2 + mirrorX, -2.4, 'blue cone', '#3b7ddd'), cone(-1.5, -1.6), cone(-1.5, 1.6));
-  spec.landmarks = [{ name: 'the stop line', x: r3(stopX), z: 1.2 }, { name: 'the blue cone', x: r3(2 + mirrorX), z: -2.4 }];
+  spec.obstacles.push(cone(stopX, -1.8), cone(stopX, 1.8), cone(2 + mirrorX, coneZ, 'blue cone', '#3b7ddd'), cone(-1.5, -1.6), cone(-1.5, 1.6));
+  spec.landmarks = [{ name: 'the stop line', x: r3(stopX), z: 1.2 }, { name: 'the blue cone', x: r3(2 + mirrorX), z: coneZ }];
   // a row of wide bays at the top, the target in line with where the turn ends, and a wall behind them
-  bayRow(spec, cx - W / 2 - 2 * W, W, 5, back, -6.5);
-  spec.obstacles.push({ kind: 'poly', pts: rect(-4, 15, -12.8, -12.2), name: 'wall', h: 2.5, cls: 'wall' });
-  spec.bays.target = { x0: r3(cx - W / 2), x1: r3(cx + W / 2), z0: back, z1: -6.5, headZ: back - 0.25, sideTol: 0.05, mouthTol: 0.1, inHeading: Math.PI / 2, face: 'in' };
-  return { spec, bay: 'target', start: { x: 0, z: 0, th: 0 } };
+  bayRow(spec, cx - W / 2 - 2 * W, W, 5, back, mouth);
+  spec.obstacles.push({ kind: 'poly', pts: rect(-4, 15, -12.8 - deep, -12.2 - deep), name: 'wall', h: 2.5, cls: 'wall' });
+  spec.bays.target = { x0: r3(cx - W / 2), x1: r3(cx + W / 2), z0: back, z1: mouth, headZ: back - 0.25, sideTol: 0.05, mouthTol: 0.1, inHeading: Math.PI / 2, face: 'in' };
+  // the quarter turn ends at z = -R; on until the rear bumper is 17.5 cm past the bay's mouth
+  const route = [[1, 0, 5], [-1, 0, 3], [1, -1, r6(Math.PI / 2 * R)], [1, 0, r2(v.OVR - R - mouth + 0.175)]];
+  return { spec, bay: 'target', start: { x: 0, z: 0, th: 0 }, route };
 }
 
 /**
@@ -46,9 +55,10 @@ export function firstMetres(v: Vehicle): LessonScene {
  * The route is F straight 2 m, F full lock left 180°, F straight into the bay.
  */
 export function turning(v: Vehicle): LessonScene {
-  const R = v.R_REAR;
-  const rIn = R - v.TRACK / 2, rOut = v.R_WALL, cx = R, cz = 2, ex = 2 * R, W = 2.8, back = -4, mouth = 1;
-  const spec = shell('lesson-turning', 'Empty car park', [-4, r3(ex + 7), -5.2, r3(cz + rOut + 2.4)]);
+  const R = v.R_REAR, deep = deeper(v);
+  // the inner rear wheel's circle (it sits RA behind the point the car turns about when the rear wheels steer)
+  const rIn = Math.hypot(R - v.TRACK / 2, v.RA), rOut = v.R_WALL, cx = R, cz = 2, ex = 2 * R, W = 2.8 + growWidth(v), back = -4 - deep, mouth = 1;
+  const spec = shell('lesson-turning', 'Empty car park', [-4, r3(ex + 7), -5.2 - deep, r3(cz + rOut + 2.4)]);
   // the swept path, painted as dashed arcs: where the inner rear wheel runs and where the outer front corner swings
   for (const r of [rIn, rOut]) for (let k = 0; k < 24; k++) {
     const a0 = Math.PI * k / 24, a1 = Math.PI * (k + 1) / 24;
@@ -62,9 +72,11 @@ export function turning(v: Vehicle): LessonScene {
   spec.obstacles.push(cone(-1.6, -1.6), cone(1.6, -1.6));
   // the bay the U-turn comes up into, with its neighbours painted, and a wall behind
   bayRow(spec, ex - W / 2 - W, W, 3, back, mouth);
-  spec.obstacles.push({ kind: 'poly', pts: rect(-4, ex + 7, -5.2, -4.6), name: 'wall', h: 2.5, cls: 'wall' });
+  spec.obstacles.push({ kind: 'poly', pts: rect(-4, ex + 7, -5.2 - deep, -4.6 - deep), name: 'wall', h: 2.5, cls: 'wall' });
   spec.bays.target = { x0: r3(ex - W / 2), x1: r3(ex + W / 2), z0: back, z1: mouth, headZ: back - 0.25, sideTol: 0.05, mouthTol: 0.1, inHeading: Math.PI / 2, face: 'in' };
-  return { spec, bay: 'target', start: { x: 0, z: 0, th: -Math.PI / 2 } };
+  // the U-turn ends level with the turn line; on until the rear bumper is 17.3 cm past the bay's mouth
+  const route = [[1, 0, 2], [1, -1, r6(Math.PI * R)], [1, 0, r2(cz - mouth + 0.173 + v.OVR)]];
+  return { spec, bay: 'target', start: { x: 0, z: 0, th: -Math.PI / 2 }, route };
 }
 
 /**
@@ -93,8 +105,8 @@ export function leaving(v: Vehicle, level: number, seed: number): LessonScene {
  * running at 30° across the plan: the car comes up the aisle at heading 30° and turns 60° into the bay. The mouths
  * and back lines slant with the aisle; neighbours are parked in the bays either side, some further along.
  */
-export function angled(v: Vehicle, seed: number, out = 1.2, Wb = 2.6): LessonScene {
-  const rnd = mulberry32(seed * 7907 + 60), D = 6.0, A = 5.2, t30 = Math.tan(Math.PI / 6);
+export function angled(v: Vehicle, seed: number, out = 1.2, Wb0 = 2.6): LessonScene {
+  const Wb = Wb0 + growWidth(v), rnd = mulberry32(seed * 7907 + 60), D = 6.0 + deeper(v), A = 5.2, t30 = Math.tan(Math.PI / 6);
   const mz = (x: number) => -t30 * x;                                         // the line of the mouths
   const ux = Math.cos(Math.PI / 6), uz = -Math.sin(Math.PI / 6), nx = -uz, nz = ux;   // along the aisle, and across it (away from the bays)
   const spec = shell(`lesson-angled-${seed}`, 'Angled bays', [-16, 16, -16, 16]);
@@ -117,7 +129,11 @@ export function angled(v: Vehicle, seed: number, out = 1.2, Wb = 2.6): LessonSce
   spec.bays.target = { x0: r3(x0), x1: r3(x1), z0: head, z1: mouth, headZ: head, sideTol: 0.05, mouthTol: 0.1, inHeading: Math.PI / 2, face: 'in' };
   // come up the aisle `out` m (1.2: Georgia's 3–4 ft) out from the parked cars' ends, a few bays before the target
   const start: Pose = { x: r3(-9 * ux + (out + v.W / 2) * nx), z: r3(-9 * uz + (out + v.W / 2) * nz), th: Math.PI / 6 };
-  return { spec, bay: 'target', start };
+  // one turn: along the aisle until full lock left 60° ends on the bay's centre line, then straight in to the middle of its depth
+  const R = v.R_REAR, box = spec.bays.target, xTurn = -(1 - Math.sin(start.th)) * R, t = (xTurn - start.x) / Math.cos(start.th);
+  const zArc = start.z - t * Math.sin(start.th) - Math.cos(start.th) * R, zEnd = box.headZ + ((box.z1 + 0.1 - box.headZ) - v.L) / 2 + (v.WB + v.OVF);
+  const route = [[1, 0, r6(t)], [1, -1, r6((Math.PI / 2 - start.th) * R)], [1, 0, r6(zArc - zEnd)]];
+  return { spec, bay: 'target', start, route };
 }
 
 export function lessonScene(v: Vehicle, id: LessonSceneId, level = 1, seed = 1): LessonScene {

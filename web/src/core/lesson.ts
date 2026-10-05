@@ -1,7 +1,7 @@
 // The course: lessons as data (content/lessons/course.json), each a scene, a stored route, words with their
 // sources and a rule for passing; and how the help steps back as you pass. Pure logic, like the rest of core/.
 import course from '../../content/lessons/course.json';
-import { GARAGE_561 } from './content';
+import { ATTO2, GARAGE_561 } from './content';
 import { areaOf, timeLimit } from './generator/level';
 import { lessonScene, type LessonSceneId } from './generator/lessonScenes';
 import { draft, type TemplateId } from './generator/templates';
@@ -18,10 +18,13 @@ export interface PassRule { angle?: number; centre?: number; kerb?: number; move
 export interface LessonDef {
   id: string; n: number; title: string; learn: string; soon?: boolean;
   scene?: { template: TemplateId; level: number; seed: number; kerbGap?: number } | { garage: string; start: string } | { build: LessonSceneId; level?: number; seed?: number };
-  /** authored: written for the lesson (a cone course), not found by the planner. */
-  route?: { start: number[]; pieces: number[][]; authored?: boolean };
+  /** authored: written for the lesson (a cone course), not found by the planner. The Atto 2's; the lessons' words are about it. */
+  route?: StoredRoute & { authored?: boolean };
+  /** The same lesson in other cars, by vehicle id (see planLesson): null where the car cannot do it. */
+  routes?: Record<string, StoredRoute | null>;
   explain?: Para[]; tips?: Record<string, Para>; pass?: PassRule;
 }
+export interface StoredRoute { start: number[]; pieces: number[][] }
 export interface Course { format: 1; sources: Record<string, Source>; lessons: LessonDef[] }
 export const COURSE = course as unknown as Course;
 export const lessonById = (id: string): LessonDef | undefined => COURSE.lessons.find(l => l.id === id && !l.soon);
@@ -29,8 +32,16 @@ export const lessonById = (id: string): LessonDef | undefined => COURSE.lessons.
 /** A lesson ready to drive: its scene, the bay, the route the coach teaches, par and the time for the efficiency star. */
 export interface Lesson { def: LessonDef; scene: Scene; bay: string; route: Piece[]; par: number; limit: number }
 
+/** A lesson's stored route for a car: the Atto 2's own, or the one the course file keeps for another car. null when the
+ *  car cannot do the lesson (it does not fit the bay), undefined when the file has none for it. */
+export function routeFor(v: Vehicle, def: LessonDef): StoredRoute | null | undefined {
+  return v.id === ATTO2.id ? def.route : def.routes?.[v.id];
+}
+/** Whether the car can do the lesson. */
+export const lessonFor = (v: Vehicle, def: LessonDef): boolean => !def.soon && !!routeFor(v, def);
+
 /** The route from its stored pieces, driven out from the stored start. */
-export function storedRoute(v: Vehicle, r: NonNullable<LessonDef['route']>): Piece[] {
+export function storedRoute(v: Vehicle, r: StoredRoute): Piece[] {
   const out: Piece[] = [];
   let p: Pose = { x: r.start[0], z: r.start[1], th: r.start[2] };
   for (const [dir, lvl, len] of r.pieces) { const to = drive(v, p, lvl, dir * len); out.push({ dir: dir as 1 | -1, lvl, len, from: p, to }); p = to; }
@@ -38,8 +49,10 @@ export function storedRoute(v: Vehicle, r: NonNullable<LessonDef['route']>): Pie
 }
 
 /** The lesson's scene (a template's first draft for its level and seed, or your garage) with the car at the route's start. */
-export function loadLesson(v: Vehicle, def: LessonDef): Lesson {
-  const route = storedRoute(v, def.route!), s = route[0].from, sc = def.scene!;
+export function loadLesson(v: Vehicle, def: LessonDef, pieces?: Piece[]): Lesson {
+  const stored = routeFor(v, def);
+  if (!pieces && !stored) throw new Error(`lesson ${def.id} has no route for the ${v.id}`);
+  const route = pieces ?? storedRoute(v, stored!), s = route[0].from, sc = def.scene!;
   if ('garage' in sc) return { def, scene: GARAGE_561, bay: sc.garage, route, par: moves(route), limit: timeLimit(route) };
   if ('build' in sc) {
     const B = lessonScene(v, sc.build, sc.level, sc.seed);
@@ -53,6 +66,23 @@ export function loadLesson(v: Vehicle, def: LessonDef): Lesson {
   d.spec.areaView = areaOf(v, makeScene(d.spec), route);
   const scene = makeScene(d.spec);
   return { def, scene, bay: scene.defaultBay, route, par: moves(route), limit: timeLimit(route) };
+}
+
+/** A lesson's words for the car being driven: {car} is its name, {circle} its turning circle and whose figure that is,
+ *  {bay} the width of the lesson's bay in metres (it grows for a bigger car). */
+export function fillText(text: string, v: Vehicle, L: Lesson): string {
+  const b = L.scene.bays[L.bay];
+  return text.replace(/\{(car|circle|bay)\}/g, (_, k: string) => (k === 'car' ? v.short : k === 'circle' ? circleText(v) : String(Math.round((b.x1 - b.x0) * 100) / 100)));
+}
+const whose = (by: string) => (by.endsWith('s') ? `${by}'` : `${by}'s`);
+/** "10.6 m across, kerb to kerb (BYD's figure)", or for a car whose maker gives only a wall-to-wall figure, the kerb
+ *  circle worked out from it and the figure it comes from. */
+function circleText(v: Vehicle): string {
+  const t = v.spec.turning, by = whose(t.by ?? v.spec.name), c = (t.circles ?? []).find(k => (k.rearSteer ?? 0) === v.REAR_DEG);
+  const kerb = t.kerbRadius !== undefined ? 2 * t.kerbRadius : c?.kerbDiameter;
+  if (kerb) return `${kerb} m across, kerb to kerb (${by} figure)`;
+  const about = `about ${(2 * v.R_CC).toFixed(1)} m across, kerb to kerb`;
+  return c?.wallDiameter ? `${about}, worked out from ${by} ${c.wallDiameter} m wall to wall${v.REAR_DEG ? ` with ${v.REAR_DEG}° rear-axle steering` : ''}` : `${about}, worked out from ${by} figures`;
 }
 
 export interface PassLine { ok: boolean; text: string }

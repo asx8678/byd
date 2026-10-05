@@ -1,38 +1,54 @@
-// The course: every lesson's stored route is still the one the planner finds, clears everything and passes;
-// a driver who does only what the coach says (set the wheel, drive, let go when told) passes every lesson, also
-// reacting late, stopping at either end of a mark's window or with the wheel a little off; the feedback after a
-// try names what went wrong; and the help steps back as it should.
+// The course in every car: each lesson's stored route is still the one worked out for that car (the planner, or the
+// route written for the scene), clears everything and passes; a driver who does only what the coach says (set the
+// wheel, drive, let go when told) passes every lesson, also reacting late, stopping at either end of a mark's window or
+// with the wheel a little off; the feedback after a try names what went wrong; and the help steps back as it should.
+// UPDATE_ROUTES=1 writes the other cars' routes into content/lessons/course.json; LESSON_DRIVERS=all runs every
+// driver in every car (by default the other cars get the guided driver and the late one).
+import { writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { CoachRun, MARK, Tracker, feedback, sentence, stepsFor, timingCause, type Step, type TrackPt } from '../src/core/coach';
-import { ATTO2, GARAGE_561 } from '../src/core/content';
-import { solve } from '../src/core/generator/level';
-import { draft } from '../src/core/generator/templates';
-import { COURSE, afterTry, checkPass, freshState, loadLesson, type Lesson, type LessonDef } from '../src/core/lesson';
+import { CoachRun, Tracker, feedback, sentence, stepsFor, timingCause, type TrackPt } from '../src/core/coach';
+import { ATTO2, VEHICLES, vehicleFor } from '../src/core/content';
+import { COURSE, afterTry, checkPass, fillText, freshState, loadLesson, routeFor, type Lesson, type LessonDef } from '../src/core/lesson';
+import { lessonSteps, planLesson, routeNote, stepMap, tipsFor } from '../src/core/lessonRoutes';
 import { DEG } from '../src/core/math';
-import { exactCheck, fieldFor, moves, planToBay, type Piece } from '../src/core/planner';
-import { makeScene } from '../src/core/scene';
+import { exactCheck, fieldFor, moves, type Piece } from '../src/core/planner';
 import { Recorder, STEP, replayTo, restoreState, stateOf } from '../src/core/replay';
-import { Sim, type ParkedResult } from '../src/core/sim';
+import { DRIVERS, failures, lessonSim } from '../src/core/robot';
+import { type ParkedResult, type Sim } from '../src/core/sim';
+import type { Vehicle } from '../src/core/vehicle';
 
-const V = ATTO2, LOCK = [-1, 0, 1];
+const V = ATTO2, CARS = Object.values(VEHICLES);
 const LESSONS = COURSE.lessons.filter(l => !l.soon);
 const fmt = (r: readonly Piece[]) => r.map(p => `${p.dir > 0 ? 'F' : 'R'}${p.lvl}:${p.len.toFixed(2)}`).join(' ');
 const picks = (def: LessonDef) => Object.fromEntries(Object.entries(def.tips ?? {}).map(([k, t]) => [k, t.cue]));
 const stepsOf = (L: Lesson) => stepsFor(V, L.scene, L.bay, L.route, picks(L.def));
-
-function newSim(L: Lesson): Sim {
-  const sim = new Sim(L.scene, V), s = L.route[0].from;
-  sim.options.bay = L.bay; sim.resetAt(s.x, s.z, s.th);
-  return sim;
-}
+const newSim = (L: Lesson): Sim => lessonSim(V, L);
 
 /** The result of parking at the route's end, stopped, after par moves. */
-function parkedAtEnd(L: Lesson): ParkedResult | null {
-  const sim = newSim(L), e = L.route[L.route.length - 1].to;
+function parkedAtEnd(L: Lesson, v: Vehicle = V): ParkedResult | null {
+  const sim = lessonSim(v, L), e = L.route[L.route.length - 1].to;
   sim.place(e.x, e.z, e.th); sim.moves = L.par;
   const ev = sim.step(STEP).find(x => x.type === 'parked');
   return ev?.type === 'parked' ? ev.result : null;
 }
+
+const r6 = (n: number) => Math.round(n * 1e6) / 1e6;
+if (process.env.UPDATE_ROUTES) it('writes the other cars\' routes into course.json', () => {
+  const course = JSON.parse(JSON.stringify(COURSE)) as typeof COURSE;
+  course.lessons = course.lessons.map(def => {
+    if (def.soon || !def.route) return def;
+    const routes: Record<string, { start: number[]; pieces: number[][] } | null> = {};
+    for (const v of CARS) {
+      if (v === V) continue;
+      const r = planLesson(v, def), s = r?.[0].from;
+      routes[v.id] = r && s ? { start: [r6(s.x), r6(s.z), r6(s.th)], pieces: r.map(p => [p.dir, p.lvl, r6(p.len)]) } : null;
+    }
+    const out: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(def)) { if (k === 'routes') continue; out[k] = val; if (k === 'route') out.routes = routes; }
+    return out as unknown as LessonDef;
+  });
+  writeFileSync(new URL('../content/lessons/course.json', import.meta.url), JSON.stringify(course, null, 2) + '\n');
+}, 600000);
 
 describe('lesson routes', () => {
   it('ten lessons to drive, numbered 1 to 10', () => {
@@ -40,31 +56,27 @@ describe('lesson routes', () => {
     expect(COURSE.lessons.map(l => l.n)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     for (const l of COURSE.lessons) for (const p of [...(l.explain ?? []), ...Object.values(l.tips ?? {})]) for (const s of p.sources ?? []) expect(COURSE.sources[s], `${l.id}: ${s}`).toBeDefined();
   });
-  for (const def of LESSONS) {
-    it(`${def.n} ${def.title}: ${def.route!.authored ? 'the written route' : 'the planner still finds the stored route, and it'} passes`, () => {
-      const L = loadLesson(V, def), sc = def.scene!;
-      // the planner with the wheel at full lock or straight, from the same place: the route stored in course.json
-      // (a route written for the lesson, like the cone course, only has to clear everything and pass)
-      let planned: Piece[] = L.route;
-      if (def.route!.authored) { /* written, not planned */ }
-      else if ('garage' in sc) planned = planToBay(V, GARAGE_561, GARAGE_561.starts[sc.start], sc.garage, { lvls: LOCK }).pieces;
-      else if ('build' in sc) planned = planToBay(V, L.scene, L.route[0].from, L.bay, { lvls: LOCK, maxNodes: 60000 }).pieces;
-      else {
-        const d = draft(V, sc.template, sc.level, sc.seed), K = sc.kerbGap;
-        if (K !== undefined) d.goals = d.goals.filter(g => Math.abs(g.z - (-K - V.W / 2)) < 1e-6);   // the kerb is at z = 0
-        d.spec.starts = { start: { x: d.entry.x0, z: (d.entry.z0 + d.entry.z1) / 2, th: d.entry.th } };
-        planned = solve(V, d, makeScene(d.spec), 60000, { lvls: LOCK }).route;
-        const s = planned[0].from, t = L.route[0].from;
-        expect(Math.hypot(s.x - t.x, s.z - t.z) + Math.abs(s.th - t.th)).toBeLessThan(1e-5);
-      }
+  for (const def of LESSONS) for (const v of CARS) {
+    it(`${def.n} ${def.title}, ${v.id}: the stored route is still the one worked out for this car, and it passes`, () => {
+      // the Atto 2's: planned with the wheel at full lock or straight from the same place, or written for the scene;
+      // another car's: the same, keeping the Atto 2's moves where every coached driver can follow them (lessonRoutes.ts)
+      const planned = planLesson(v, def), stored = routeFor(v, def);
+      if (!planned) { expect(stored, 'stored as not for this car').toBeNull(); return; }
+      expect(stored, 'a route stored for this car').toBeTruthy();
+      const L = loadLesson(v, def), s = planned[0].from, t = L.route[0].from;
       expect(fmt(L.route)).toBe(fmt(planned));
-      expect(exactCheck(V, L.scene, fieldFor(V, L.scene), L.route)).toBeNull();
-      expect(newSim(L).touching()).toBeNull();
-      const r = parkedAtEnd(L);
+      expect(Math.hypot(s.x - t.x, s.z - t.z) + Math.abs(s.th - t.th)).toBeLessThan(1e-5);
+      expect(exactCheck(v, L.scene, fieldFor(v, L.scene), L.route)).toBeNull();
+      expect(lessonSim(v, L).touching()).toBeNull();
+      const r = parkedAtEnd(L, v);
       expect(r).not.toBeNull();
       expect(checkPass(r!, def.pass ?? {}, L.par).pass, JSON.stringify(checkPass(r!, def.pass ?? {}, L.par).lines)).toBe(true);
-    });
+    }, 120000);
   }
+  it('the lessons a car cannot do: your garage in the Ram and the S-Class, the tight parallel space in the Ram', () => {
+    const not = CARS.flatMap(v => LESSONS.filter(def => routeFor(v, def) === null).map(def => `${def.id}:${v.id}`)).sort();
+    expect(not).toEqual(['garage:mercedes-s-class-w223@0', 'garage:mercedes-s-class-w223@10', 'garage:mercedes-s-class-w223@4.5', 'garage:ram-1500-dt', 'parallel-tight:ram-1500-dt']);
+  });
 });
 
 describe('steps', () => {
@@ -79,76 +91,70 @@ describe('steps', () => {
     expect(say('parallel-tight')[1]).toBe('Reverse with full lock right, towards the kerb, until the car is at about 45° to the kerb.');
     expect(say('garage')[3]).toMatch(/^Drive forward with the wheels straight until your front bumper is about \d+ cm from the concrete bench\.$/);
   });
-  it('one per piece, ending where the piece ends, arcs on the angle', () => {
-    for (const def of LESSONS) {
-      const L = loadLesson(V, def), S = stepsOf(L);
+  it('one per piece, ending where the piece ends, turns of 10° or more on the angle, in every car', () => {
+    for (const v of CARS) for (const def of LESSONS) {
+      if (!routeFor(v, def)) continue;
+      const L = loadLesson(v, def), S = lessonSteps(v, L);
       expect(S.length).toBe(L.route.length);
-      S.forEach((s, i) => { expect(s.to).toEqual(L.route[i].to); expect(s.byHeading).toBe(L.route[i].lvl !== 0); });
+      S.forEach((s, i) => { expect(s.to).toEqual(L.route[i].to); expect(s.byHeading, `${v.id} ${def.id} ${i + 1}`).toBe(L.route[i].lvl !== 0 && Math.abs(s.turn) >= 10 * DEG); });
+      if (v === V) expect(S.every((s, i) => s.byHeading === (L.route[i].lvl !== 0))).toBe(true);   // all the Atto 2's turns are 10° or more
     }
   });
 });
 
-interface Driver { guided?: boolean; early?: number; late?: number; wheelOff?: number; hands?: number }
-/**
- * A driver who does what the coach shows and nothing else: turn the wheel to what the step wants (holding it
- * there, at `hands` degrees a second), then hold the step's pedal. Guided, the coach lets go of it on the mark;
- * with cue marks only, the driver lets go, `early` metres before the mark or `late` steps after the moment, and
- * keeps to a careful speed. Returns how the try ended.
- */
-function drive(L: Lesson, o: Driver = {}): { r: ParkedResult | null; misses: number; touches: number; track: TrackPt[]; steps: Step[]; sim: Sim } {
-  const guided = o.guided ?? true, sim = newSim(L), steps = stepsOf(L), run = new CoachRun(V, steps, () => sim.options.lockDeg, !guided), tr = new Tracker();
-  const D = V.drive;
-  let pedal = false, letGoIn = -1, misses = 0, touches = 0, r: ParkedResult | null = null, early = -1, still = 0;
-  tr.add(sim);
-  for (let t = 0; t < 60 * 180 && !r; t++) {
-    const st = run.step;
-    if (!guided) run.sync(sim);
-    if (run.phase === 'missed') { misses++; break; }
-    if (st) {   // the hand on the wheel turns it to where the step wants it, and holds it there
-      const want = run.wheelWant() + (st.lvl === 0 ? (o.wheelOff ?? 0) : 0), d = want - sim.wheelAngle;
-      sim.input.wheelHeld = true; sim.wheelAngle += Math.sign(d) * Math.min(Math.abs(d), (o.hands ?? 360) * STEP);
-      if (run.phase === 'wheel') pedal = false;
+describe('the same lessons in other cars', () => {
+  it('keep the tips on the steps they are about', () => {
+    const def = LESSONS.find(l => l.id === 'parallel-tight')!;
+    expect([...stepMap(def, loadLesson(V, def).route)]).toEqual([[1, 1], [2, 2], [3, 3], [4, 4]]);
+    // a route with an extra move: a tip goes where the same two pieces meet, so the mirror rule for turning in off the
+    // straight is left out of the Ram's drive-past-and-back-up route; the last step's tip stays on the last step
+    const four = LESSONS.find(l => l.id === 'bay-between')!, ram = loadLesson(vehicleFor('ram-1500-dt'), four).route;
+    expect(fmt(ram).replace(/:[\d.]+/g, '')).toBe('F0 R1 F-1 F0');
+    expect([...stepMap(four, ram)]).toEqual([[2, 3], [3, 4]]);
+    expect(Object.keys(tipsFor(four, ram))).toEqual([]);
+    // the Smart's three-phase parallel park keeps the line-up tip and the kerb tip
+    const six = LESSONS.find(l => l.id === 'parallel-big')!, smart = loadLesson(vehicleFor('smart-fortwo-c453'), six).route;
+    expect(fmt(smart).replace(/:[\d.]+/g, '')).toBe('F0 R1 R0 R-1');
+    expect(Object.keys(tipsFor(six, smart))).toEqual(['1', '4']);
+  });
+  it('say on the card how the car does it differently', () => {
+    const note = (v: Vehicle, id: string) => { const def = LESSONS.find(l => l.id === id)!; return routeNote(def, v, loadLesson(v, def).route); };
+    for (const def of LESSONS) expect(note(V, def.id)).toBe('');
+    expect(note(vehicleFor('ram-1500-dt'), 'bay-between')).toBe('The Ram 1500 needs 3 moves here where the Atto 2 needs 1: the coach shows each one.');
+    expect(note(vehicleFor('ram-1500-dt'), 'angled')).toMatch(/^The Ram 1500 turns wider, so it comes up the aisle \d\.\d m out from the parked cars rather than 1\.2 m\.$/);
+    expect(note(vehicleFor('smart-fortwo-c453'), 'angled')).toBe('');
+  });
+  it('the Atto 2\'s coach says exactly what it said before other cars came', () => {
+    for (const def of LESSONS) { const L = loadLesson(V, def); expect(lessonSteps(V, L)).toEqual(stepsOf(L)); }
+  });
+  it('name only the parts the car has: a Smart has no back seat', () => {
+    const smart = vehicleFor('smart-fortwo-c453');
+    for (const def of LESSONS) {
+      if (!routeFor(smart, def)) continue;
+      const L = loadLesson(smart, def);
+      for (const st of lessonSteps(smart, L)) expect(sentence(st) + (st.see ?? ''), def.id).not.toMatch(/back seat/);
     }
-    if (st && run.phase === 'drive') {
-      const stopped = Math.abs(sim.v) < 0.02, brake = sim.v * sim.v / (2 * D.BRAKE);
-      if (!pedal && letGoIn < 0 && stopped) pedal = true;   // go (again, after "a little further")
-      if (pedal && letGoIn < 0 && !stopped && early !== run.k && (o.early ?? 0) > 0 && run.left <= brake + o.early!) { pedal = false; early = run.k; }   // once per step
-      if (!guided && pedal && letGoIn < 0 && !stopped && run.left <= brake + 0.05) letGoIn = o.late ?? 0;
-      if (letGoIn >= 0 && letGoIn-- === 0) { pedal = false; letGoIn = -1; }
-    }
-    let fwd = pedal && st?.dir === 1, rev = pedal && st?.dir === -1;
-    if (guided) ({ fwd, rev } = run.gate({ fwd, rev }, sim));
-    else if (Math.abs(sim.v) > (run.left < MARK.zone ? MARK.crawl : MARK.walk)) fwd = rev = false;   // a careful driver's own speed
-    sim.input.fwd = fwd; sim.input.rev = rev;
-    for (const e of sim.step(STEP)) if (e.type === 'touch') touches++;
-    const ev = run.observe(sim); tr.add(sim);
-    // the try ends as the game ends it: guided, when the coach says the last step is done; otherwise once the
-    // car has sat parked for a second
-    still = sim.parked && Math.abs(sim.v) < 0.02 && !fwd && !rev ? still + 1 : 0;
-    if (guided ? ev.some(e => e.type === 'done') : still >= 60) r = sim.parkedResult();
-  }
-  return { r, misses, touches, track: tr.pts, steps, sim };
-}
+  });
+  it('say each car\'s own numbers, and the Atto 2\'s words stay as they were', () => {
+    const text = (v: Vehicle, id: string, k: number) => { const def = LESSONS.find(l => l.id === id)!; return fillText(def.explain![k].text, v, loadLesson(v, def)); };
+    expect(text(V, 'how-a-car-turns', 0)).toBe('On full lock your Atto 2 turns in a circle 10.6 m across, kerb to kerb (BYD\'s figure). The dashed lines on the floor are the path it sweeps on full lock: the inner one is where your inner rear wheel runs, the outer one where your outer front corner swings.');
+    expect(text(V, 'bay-forward', 1)).toBe('Here the bay is 2.7 m wide with no cars beside it, so you can watch the rule work. The coach stops you at each mark: set the wheel, then drive on.');
+    expect(text(V, 'bay-between', 0)).toBe('The same rule as the last lesson: turn when your mirror reaches the bay\'s near line. The bay is 2.57 m wide and the cars either side are parked off centre, so the mark matters more.');
+    expect(text(vehicleFor('ram-1500-dt'), 'how-a-car-turns', 0)).toMatch(/^On full lock your Ram 1500 turns in a circle 14\.08 m across, kerb to kerb \(FCA's figure\)\./);
+    expect(text(vehicleFor('mercedes-s-class-w223', 10), 'how-a-car-turns', 0)).toMatch(/^On full lock your S-Class turns in a circle about 10\.0 m across, kerb to kerb, worked out from Mercedes' 10\.79 m wall to wall with 10° rear-axle steering\./);
+    expect(text(vehicleFor('ram-1500-dt'), 'bay-forward', 1)).toMatch(/^Here the bay is 2\.95 m wide/);
+  });
+});
 
+const ALL = process.env.LESSON_DRIVERS === 'all';
 describe('guided driving', () => {
-  const DRIVERS: [string, Driver][] = [
-    ['guided', {}],
-    ['guided, with the wheel 4° off straight', { wheelOff: 4 }],
-    ['guided, letting go 30 cm before each mark', { early: 0.3 }],
-    ['guided, with slow hands on the wheel', { hands: 120 }],
-    ['cue marks only, letting go on the mark', { guided: false }],
-    ['cue marks only, a tenth of a second late', { guided: false, late: 6 }],
-  ];
-  for (const def of LESSONS) {
-    it(`${def.n} ${def.title}: a driver who follows the coach passes`, () => {
-      const L = loadLesson(V, def), out: string[] = [];
-      for (const [name, o] of DRIVERS) {
-        const { r, misses, touches } = drive(L, o);
-        const res = r ? checkPass(r, def.pass ?? {}, L.par) : null;
-        if (misses || touches || !res?.pass) out.push(`${name}: ${misses ? 'missed a mark' : touches ? `${touches} touches` : !r ? 'never parked' : res!.lines.filter(l => !l.ok).map(l => l.text).join('; ')}`);
-      }
-      expect(out).toEqual([]);
-    });
+  for (const def of LESSONS) for (const v of CARS) {
+    if (!routeFor(v, def)) continue;
+    const drivers = v === V || ALL ? DRIVERS : DRIVERS.filter(([name]) => name === 'guided' || name.endsWith('late'));
+    it(`${def.n} ${def.title}, ${v.id}: a driver who follows the coach passes`, () => {
+      const L = loadLesson(v, def);
+      expect(failures(v, L, lessonSteps(v, L), drivers)).toEqual([]);
+    }, 60000);
   }
   it('the pedals wait for the wheel, only go the step\'s way, and keep to walking pace', () => {
     const L = loadLesson(V, LESSONS.find(l => l.id === 'parallel-big')!), sim = newSim(L), run = new CoachRun(V, stepsOf(L), () => sim.options.lockDeg);

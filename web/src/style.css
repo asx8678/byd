@@ -174,6 +174,7 @@ kbd{font:500 12px var(--font-ui);background:rgba(255,255,255,.08);border:1px sol
 .crsS.done{color:var(--accent);font:400 14px/1 var(--font-ui);letter-spacing:0}
 .lsLearn{font-weight:500;color:var(--fg)!important}
 #lsBody p{margin:8px 0}
+#lsBody p.lsCar{color:var(--accent);font-size:13px}
 #lsBody a.src,.lsSources a{color:#9cc3ff;text-decoration:none}
 #lsBody a.src{font-size:11px;vertical-align:super;line-height:0}
 .lsPass{margin-top:10px;color:var(--fg)!important}

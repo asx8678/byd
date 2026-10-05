@@ -1,6 +1,6 @@
 # Atto 2 Garage Trainer
 
-Practise parking a BYD Atto 2 nose-first into bay 561, then in generated levels, in the Atto 2 or in a Smart fortwo, a Ram 1500 or a Mercedes S-Class with rear-axle steering (10°, 4.5° or off), each turning the circle its maker publishes: a row of bays entered nose first, the same reversing in, and parallel parking at a kerb, each from level 1 (roomy) to level 10 (tight). A course of ten lessons teaches each manoeuvre with a coach: watch the route, drive it guided step by step, then with less and less help, then a test. Learning layers (the path, the turning circles, the swept path of all four corners, the ideal path, a kerb close-up and the numbers) switch on in Setup, and ⟲ 5 s rewinds to try a step again. The screen is a plan: it draws the path the car takes at the current steering, an outline of the car every 0.8 m along it and, in red, where it would touch something first. It also has parking sensors with beeps, touch detection, a move counter against par, and a result card with three stars when you're parked.
+Practise parking a BYD Atto 2 nose-first into bay 561, then in generated levels and a course of lessons, in the Atto 2 or in a Smart fortwo, a Ram 1500 or a Mercedes S-Class with rear-axle steering (10°, 4.5° or off), each turning the circle its maker publishes: a row of bays entered nose first, the same reversing in, and parallel parking at a kerb, each from level 1 (roomy) to level 10 (tight). A course of ten lessons teaches each manoeuvre with a coach: watch the route, drive it guided step by step, then with less and less help, then a test. Learning layers (the path, the turning circles, the swept path of all four corners, the ideal path, a kerb close-up and the numbers) switch on in Setup, and ⟲ 5 s rewinds to try a step again. The screen is a plan: it draws the path the car takes at the current steering, an outline of the car every 0.8 m along it and, in red, where it would touch something first. It also has parking sensors with beeps, touch detection, a move counter against par, and a result card with three stars when you're parked.
 
 It runs in any modern browser on iPhone, Android and PC, and installs to the home screen as an app that works offline.
 
@@ -55,6 +55,9 @@ src/core/      the game itself, no browser code: easy to test, and the part to p
                  mark; marks that follow the car so earlier errors are taken out); and the feedback after a
                  try (the first 30 cm drift and why, or the switch whose timing moved the finish most)
   lesson.ts      the course from content/lessons: loading a lesson, pass rules, help that steps back
+  lessonRoutes.ts each lesson in each car: the route worked out for the car (keeping the Atto 2's moves where
+                 coached drivers can follow them), and the lesson's tips matched to its steps
+  robot.ts       drivers who do only what the coach shows, guided or on cue marks, a little early, late or off
 src/ui/        the browser side: drawing, controls, sound, settings
   plan.ts        the map (canvas 2D)
   pdcDisplay.ts  sensor graphic, STOP card, red screen-edge glow
@@ -101,7 +104,7 @@ The other tests check that:
 - kerbs stop the tyres but not the bumpers, and a drive in a level replays exactly, touches and moves included
 - planBack finds a way in from part way along a level's route
 - every lesson's stored route is still what the planner finds (full lock or straight only), clears everything and passes
-- a driver who does only what the coach shows passes every lesson: guided (also with the wheel 4° off, letting go early or turning the wheel slowly) and with cue marks only (also reacting late)
+- a driver who does only what the coach shows passes every lesson: guided (also with the wheel 4° off, letting go early or turning the wheel slowly) and with cue marks only (also reacting late). In every other car the guided driver and the late one pass every lesson the car can do (`LESSON_DRIVERS=all` runs all six), each car's stored routes are still what `planLesson` gives, the Ram and the S-Class are the only ones that cannot do your garage and the Ram the tight parallel space, a tip stays where the same two moves meet, a Smart's coach never names a back seat, and the lesson words fill in each car's numbers while the Atto 2's read exactly as before
 - the feedback names an early or late turn, a stop too soon or too far before reversing, a wheel short of full lock or coming off it, an extra move, and (for a parallel park that misses by a little) the switch that caused it, in degrees
 - two passes lower the help, two fails raise it with slow motion, and a pass in the test finishes the lesson
 - a U-turn is measured the long way round, and leaving a space only counts once the car is out in the lane, straight

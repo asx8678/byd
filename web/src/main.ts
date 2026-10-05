@@ -1,12 +1,13 @@
 // Atto 2 Garage Trainer: wires the simulation (core/) to the screen (ui/) and runs the frame loop.
 // You play your garage, a generated level or a lesson; all run on the same simulation, which loads the scene.
 import './style.css';
-import { CoachRun, Tracker, feedback, stepsFor, timingCause, type CoachEvent, type CoachSnap, type Feedback, type Step } from './core/coach';
+import { CoachRun, Tracker, feedback, timingCause, type CoachEvent, type CoachSnap, type Feedback, type Step } from './core/coach';
 import { ATTO2, GARAGE_561, VEHICLES, vehicleFor } from './core/content';
 import { generate, parseKey, timeLimit, type Level } from './core/generator/level';
 import type { TemplateId } from './core/generator/templates';
 import type { Vehicle } from './core/vehicle';
-import { COURSE, HELP, afterTry, checkPass, endHint, lessonById, loadLesson, type Lesson, type LessonDef, type LessonState } from './core/lesson';
+import { COURSE, HELP, afterTry, checkPass, endHint, lessonById, lessonFor, loadLesson, type Lesson, type LessonState, type Para } from './core/lesson';
+import { lessonSteps, routeNote, tipsFor } from './core/lessonRoutes';
 import { DEG, clamp, wrapPi, type Pt } from './core/math';
 import { clearStart, fitsBay, moves, planBack, planToBay, sample, type Piece, type Plan, type Pose, type RoutePoint } from './core/planner';
 import { Recorder, STEP, playback, replayTo, restoreState, stateOf as simState } from './core/replay';
@@ -16,7 +17,7 @@ import { beep, updateBeeper } from './ui/audio';
 import { renderCarFacts, renderCarPicker, syncCarPicker } from './ui/cars';
 import { bindCard, renderCard } from './ui/coachCard';
 import { bindControls, pedals } from './ui/controls';
-import { bindCourse, courseTab, renderCourse, setState, showLesson, showLessonResult, stateOf } from './ui/course';
+import { bindCourse, courseTab, notFor, renderCourse, setCourseCar, setState, showLesson, showLessonResult, stateOf } from './ui/course';
 import { $, MAX_DPR, closeSheets, openSheet, screen } from './ui/dom';
 import { parkedCard, touchTitle } from './ui/format';
 import { setPar, showBanner, updateHud } from './ui/hud';
@@ -52,6 +53,7 @@ const clock = () => performance.now() + clockOffset;
 /** A lesson being played: its route as steps, where you are in it, and this try. */
 interface LessonPlay {
   L: Lesson; steps: Step[]; routePts: RoutePoint[]; st: LessonState;
+  tips: Record<string, Para>;   // the lesson's tips on this car's steps
   run: CoachRun | null;    // the coach following this try: guided, or keeping up with the cue marks; null with less help
   tracker: Tracker;        // your path, for the feedback
   fault: string;           // what spoilt this try already ('touch', 'missed'), '' if nothing
@@ -65,11 +67,11 @@ interface LessonPlay {
 }
 let lesson: LessonPlay | null = null;
 
-/** The car chosen in Setup. Lessons are taught in the Atto 2 for now; the garage and the levels use this one. */
+/** The car chosen in Setup: the garage, the levels and the lessons all use it. */
 const chosenCar = (): Vehicle => vehicleFor(settings.car, parseFloat(settings.ras));
 /** Drive v from the next reset on, with its facts in Info. Stars are the chosen car's: only the garage and levels keep them. */
 function useCar(v: Vehicle): void {
-  setStarsCar(chosenCar().id); renderCarFacts(v); syncCarPicker(chosenCar());
+  setStarsCar(chosenCar().id); setCourseCar(chosenCar().id); renderCarFacts(v); syncCarPicker(chosenCar());
   if (sim.vehicle === v) return;
   sim.setVehicle(v); forgetPrediction(); hideGuide();
 }
@@ -142,27 +144,29 @@ function playGarage(): void {
 }
 const refreshLevels = () => {
   const v = chosenCar();
-  renderLevels(level ? level.key : lesson ? '' : 'garage', garageName(), garageSlot()); renderCourse(lesson ? lesson.L.def.id : null);
+  renderLevels(level ? level.key : lesson ? '' : 'garage', garageName(), garageSlot()); renderCourse(lesson ? lesson.L.def.id : null, v);
   $('lvCar').textContent = v === ATTO2 ? '' : `Built for the ${v.short}: the bays grow for a car bigger than the Atto 2, the aisles and kerb spaces stay as they are.`; $('lvCar').hidden = v === ATTO2;
-  $('crsCar').textContent = `The lessons' routes and marks are worked out for the Atto 2, so they use it for now; the ${v.short} stays yours in the garage and the levels.`; $('crsCar').hidden = v === ATTO2;
+  $('crsCar').textContent = `Worked out for the ${v.short}: its own routes, marks and numbers, and its own progress. A lesson it cannot do here is greyed out.`; $('crsCar').hidden = v === ATTO2;
 };
 const newSeed = () => 1 + Math.floor(Math.random() * 99999);
 bindLevels({ playLevel, playGarage });
 
 // ---- lessons ----
 
-const picksOf = (def: LessonDef) => Object.fromEntries(Object.entries(def.tips ?? {}).map(([k, t]) => [k, t.cue]));
-/** Into a lesson: its scene, its route, where you are in it; then the lesson card, or straight into a try. */
-function enterLesson(id: string, then: 'card' | 'drive' = 'card'): void {
-  const def = lessonById(id); if (!def) return;
+/** Into a lesson in the chosen car: its scene, its route, where you are in it; then the lesson card, or straight into a
+ *  try. False when the lesson is not for this car. */
+function enterLesson(id: string, then: 'card' | 'drive' = 'card'): boolean {
+  const def = lessonById(id), v = chosenCar(); if (!def) return false;
+  if (!lessonFor(v, def)) { showBanner('bad', `Lesson ${def.n} is not for the ${v.short}`, notFor(def, v, true), null, 5000); return false; }
   stopReplay(); hideGuide(); closeSheets();
-  useCar(ATTO2);   // the lessons' routes and marks are worked out for the Atto 2; lessons in each car come next
-  const L = loadLesson(sim.vehicle, def);
+  useCar(v);
+  const L = loadLesson(v, def);
   level = null;
-  lesson = { L, steps: stepsFor(sim.vehicle, L.scene, L.bay, L.route, picksOf(def)), routePts: sample(sim.vehicle, L.route, 0.1), st: stateOf(id), run: null, tracker: new Tracker(), fault: '', fb: null, summoned: false, watching: false, over: false, track: null, drift: null, rewound: false, mark0: { coach: null, track: 0 } };
+  lesson = { L, steps: lessonSteps(v, L), tips: tipsFor(def, L.route), routePts: sample(v, L.route, 0.1), st: stateOf(id), run: null, tracker: new Tracker(), fault: '', fb: null, summoned: false, watching: false, over: false, track: null, drift: null, rewound: false, mark0: { coach: null, track: 0 } };
   sim.load(L.scene); setRoute(L.route); setPlaying(`lesson:${id}`);
   snapView(); startTry(); refreshLevels();
   if (then === 'card') lessonCard();
+  return true;
 }
 function lessonCard(): void {
   const ls = lesson; if (!ls) return;
@@ -170,7 +174,7 @@ function lessonCard(): void {
     watch: () => { closeSheets(); startWatch(); },
     drive: () => { closeSheets(); startTry(); },
     test: () => { ls.st = { ...ls.st, help: 3, passes: 0, fails: 0, slow: false }; setState(ls.L.def.id, ls.st); closeSheets(); startTry(); },
-  });
+  }, sim.vehicle, ls.L, routeNote(ls.L.def, sim.vehicle, ls.L.route));
 }
 /** A new try from the lesson's start, with as much help as you are at. */
 function startTry(): void {
@@ -247,7 +251,7 @@ function finishTry(r: ParkedResult | null): void {
   state.focus = fb?.step ?? 0;
   ls.st = state; setState(def.id, state);
   ls.track = ls.tracker.pts.map((p): Pt => [p.x, p.z]); ls.drift = fb?.at ?? null;
-  const next = COURSE.lessons.find(l => !l.soon && l.n > def.n);
+  const next = COURSE.lessons.find(l => l.n > def.n && lessonFor(sim.vehicle, l));
   const changeText = change === 'less' ? (state.help === 3 ? 'Two passes: next is the test, with no help.' : `Two passes: next try with ${HELP[state.help].name.toLowerCase()}: ${HELP[state.help].what}.`)
     : change === 'more' ? `Two misses: back to ${HELP[state.help].name.toLowerCase()}, in slow motion.` : change === 'slow' ? 'Two misses: slow motion is on.'
     : change === 'done' ? 'Lesson complete.' : null;
@@ -270,7 +274,11 @@ bindControls(sim, {
   settingChanged: key => {
     if (key === 'car' || key === 'ras') {
       const v = chosenCar(); syncCarPicker(v);
-      if (lesson) { showBanner('', `Lessons use the Atto 2 for now`, `The ${v.short} is yours in the garage and the levels. ${carNote(v)}`, null, 5000); return; }
+      if (lesson) {   // the same lesson in the new car, or back to the garage when it is not for this car
+        const id = lesson.L.def.id;
+        if (!enterLesson(id, 'card')) playGarage();
+        return;
+      }
       useCar(v);
       if (level) playLevel(level.template, level.level, level.seed);
       else { garagePar(); resetCar(); if (fitsBay(v, GARAGE_561, settings.bay)) showBanner('', `Now driving the ${v.short}`, carNote(v) + (par ? ` Par in bay ${settings.bay}: ${par} ${par === 1 ? 'move' : 'moves'}.` : ''), null, 6000); }
@@ -419,7 +427,7 @@ function drawLesson(): string {
     marks: ls.steps.map(s => s.to), from: ls.watching ? Math.max(0, watchK) : marksOn && (h <= 1 || ls.summoned) ? run!.k : ls.steps.length,
     cur: marksOn && run && !ls.watching ? run.markPose(sim) : null, track: ls.over ? ls.track : null, drift: ls.over ? ls.drift : null,
   });
-  renderCard({ def: ls.L.def, help: ls.st.help, steps: ls.steps, run: ls.over ? null : run, summoned: ls.summoned && coachOn, watching: watchK, over: ls.over, slow: ls.st.slow, lockDeg: sim.options.lockDeg, wheel: sim.wheelAngle, v: sim.v });
+  renderCard({ def: ls.L.def, help: ls.st.help, steps: ls.steps, tips: ls.tips, run: ls.over ? null : run, summoned: ls.summoned && coachOn, watching: watchK, over: ls.over, slow: ls.st.slow, lockDeg: sim.options.lockDeg, wheel: sim.wheelAngle, v: sim.v });
   const ch = $('coach').hidden ? 0 : $('coach').offsetHeight;
   if (ch !== cardH) { cardH = ch; layout(); }
   return [run?.k, run?.phase, run?.left.toFixed(2), run?.hint, run?.note, ls.over, watchK, h, ls.summoned].join(',');
@@ -473,7 +481,7 @@ const hot = (window as unknown as { claude?: { hot?: Hot } }).claude?.hot;
 function start(saved: Saved = {}): void {
   const play = saved.play ?? progress.play;
   useCar(chosenCar());
-  if (play.startsWith('lesson:') && lessonById(play.slice(7))) enterLesson(play.slice(7), 'drive');   // a lesson starts its try over
+  if (play.startsWith('lesson:') && lessonById(play.slice(7)) && lessonFor(chosenCar(), lessonById(play.slice(7))!)) enterLesson(play.slice(7), 'drive');   // a lesson starts its try over
   else {
     const key = parseKey(play), L = key ? generate(sim.vehicle, key.template, key.level, key.seed) : null;
     if (L) { level = L; sim.load(L.scene); setRoute(L.route); } else garagePar();

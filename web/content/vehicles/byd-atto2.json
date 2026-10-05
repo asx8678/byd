@@ -10,7 +10,7 @@
   ],
   "notes": "Rear-axle frame: x forward from the rear axle, z to the right, metres. The steering lock is derived from the turning radius: rear-axle radius = sqrt(R^2 - WB^2) - track/2.",
   "dims": { "length": 4.33, "width": 1.83, "height": 1.675, "wheelbase": 2.62, "track": 1.57, "overhangFront": 0.883, "overhangRear": 0.827, "wheelRadius": 0.334, "wheelWidth": 0.215, "mass": 1580 },
-  "turning": { "kerbRadius": 5.3 },
+  "turning": { "by": "BYD", "kerbRadius": 5.3 },
   "outline": { "half": [[3.503, 0.52], [3.40, 0.76], [3.123, 0.878], [2.80, 0.912], [0, 0.915], [-0.58, 0.858], [-0.76, 0.76], [-0.827, 0.62]] },
   "mirrors": { "height": 1.12, "box": [1.77, 0.90, 1.98, 1.04] },
   "planCorners": [[3.40, -0.76], [3.40, 0.76], [-0.76, -0.76], [-0.76, 0.76]],

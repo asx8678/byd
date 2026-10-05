@@ -17,13 +17,14 @@ export interface VehicleSpec {
   estimates?: string[];                                            // figures no source gave: the app says they are estimates
   dims: { length: number; width: number; widthMirrors?: number; height: number; wheelbase: number; track: number; overhangFront: number; overhangRear: number; wheelRadius: number; wheelWidth: number; mass: number };
   /** The steering lock is worked out from the turning circle: the Atto 2's kerb radius, or the published circles. */
-  turning: { kerbRadius?: number; circles?: Circle[]; turnsLockToLock?: number };
+  turning: { by?: string; kerbRadius?: number; circles?: Circle[]; turnsLockToLock?: number };   // by: who published them
   /** Rear-axle steering: the rear wheels' angle at full lock for each setting (degrees, 0 = switched off). */
   rearSteer?: { options: number[]; default: number };
   outline: { half: number[][] };                                  // one side, front to back; mirrored for the other
   mirrors: { height: number; box: number[] } | null;               // [x0, z0, x1, z1] of the right mirror; the left is mirrored
   planCorners: number[][];                                         // FL, FR, RL, RR on the rounded corners, for drawn tracks
   glass?: number[];                                                // where the windows run on the plan, front and back (x)
+  seats?: number;                                                  // 2 for a two-seater: no back seat for the coach to name
   drive: { creepForward: number; maxForward: number; rampForward: number; creepReverse: number; maxReverse: number; rampReverse: number; holdTime: number; accel: number; brake: number };
   parkingSensors: { layout: string; ranges: { front: number; rear: number; side: number }; coneDeg: number; bands: Record<Side, number[]>; cornerZ?: number; sideZ?: number } | null;
 }

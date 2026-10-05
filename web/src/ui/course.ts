@@ -1,7 +1,8 @@
 // The course in the Play sheet: the ten lessons with where you are in each; the lesson card (what you learn, the
 // handbooks' words with their sources, what passing takes); and the result card after a try in a lesson.
 // Where you are in each lesson is kept in this browser (localStorage key `atto2-course`).
-import { COURSE, HELP, freshState, type LessonDef, type LessonState, type PassLine, type PassRule } from '../core/lesson';
+import { COURSE, HELP, fillText, freshState, lessonFor, type Lesson, type LessonDef, type LessonState, type PassLine, type PassRule } from '../core/lesson';
+import type { Vehicle } from '../core/vehicle';
 import type { Stars } from '../core/score';
 import type { ParkedResult } from '../core/sim';
 import { $, openSheet } from './dom';
@@ -13,8 +14,18 @@ const saved: Saved = { lessons: {}, tab: 'course' };
 try { Object.assign(saved, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch { /* private mode or blocked storage */ }
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch { /* not saved */ } };
 
-export const stateOf = (id: string): LessonState => ({ ...freshState(), ...saved.lessons[id] });
-export function setState(id: string, s: LessonState): void { saved.lessons[id] = s; save(); }
+/** Where you are is kept per car: the Atto 2's under the lesson's own id (as before there were other cars), the others'
+ *  with the car's id in front. */
+let carKey = '';
+export function setCourseCar(id: string): void { carKey = id === 'byd-atto2' ? '' : id + '|'; }
+export const stateOf = (id: string): LessonState => ({ ...freshState(), ...saved.lessons[carKey + id] });
+export function setState(id: string, s: LessonState): void { saved.lessons[carKey + id] = s; save(); }
+/** Why a lesson is not for this car, in a few words (the course list) or a sentence (when it is asked for). */
+export function notFor(def: LessonDef, v: Vehicle, long = false): string {
+  const sc = def.scene;
+  if (sc && 'garage' in sc) return long ? `The ${v.short} is ${(v.L + 1e-9).toFixed(2)} m long: it does not fit bay ${sc.garage}.` : `Too big for ${sc.garage}`;
+  return long ? `In a space this tight the ${v.short} needs moves the coach cannot mark reliably, so this lesson is not for it.` : 'Too tight here';
+}
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''): HTMLElementTagNameMap[K] => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
 const starText = (n: number) => '★'.repeat(n) + '☆'.repeat(3 - n);
@@ -38,16 +49,16 @@ export function statusText(s: LessonState): string {
 export interface CourseHooks { open(id: string): void; tab(t: 'course' | 'levels'): void }
 let hooks: CourseHooks;
 
-/** The Play sheet's tabs and the course list; `current` is the lesson being played, if any. */
-export function renderCourse(current: string | null): void {
+/** The Play sheet's tabs and the course list for car v; `current` is the lesson being played, if any. */
+export function renderCourse(current: string | null, v: Vehicle): void {
   const tab = saved.tab;
   $('tabCourse').hidden = tab !== 'course'; $('tabLevels').hidden = tab !== 'levels';
   document.querySelectorAll<HTMLElement>('#playTabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   $('crsList').replaceChildren(...COURSE.lessons.map(l => {
-    const b = el('button', 'crsRow'), s = stateOf(l.id), started = !!saved.lessons[l.id];
-    b.type = 'button'; b.dataset.id = l.id; b.disabled = !!l.soon;
+    const b = el('button', 'crsRow'), s = stateOf(l.id), started = !!saved.lessons[carKey + l.id], ok = lessonFor(v, l);
+    b.type = 'button'; b.dataset.id = l.id; b.disabled = !!l.soon || !ok;
     const t = el('span', 'crsT'); t.append(el('b', '', l.title), el('small', '', l.learn));
-    b.append(el('b', 'crsN', String(l.n)), t, el('em', s.done ? 'crsS done' : 'crsS', l.soon ? 'Next update' : started ? statusText(s) : 'Start'));
+    b.append(el('b', 'crsN', String(l.n)), t, el('em', s.done && ok ? 'crsS done' : 'crsS', l.soon ? 'Next update' : !ok ? notFor(l, v) : started ? statusText(s) : 'Start'));
     if (l.id === current) b.classList.add('cur');
     return b;
   }));
@@ -64,17 +75,18 @@ export function bindCourse(h: CourseHooks): void {
 /** Show the course tab next time the Play sheet is drawn. */
 export function courseTab(): void { saved.tab = 'course'; save(); }
 
-/** The lesson card: what you learn and why, with the sources, what passing takes, where you are, and how to start. */
-export function showLesson(def: LessonDef, s: LessonState, go: { watch(): void; drive(): void; test(): void }): void {
+/** The lesson card: what you learn and why, with the sources, what passing takes, where you are, and how to start.
+ *  The words are filled in for the car (v) and the lesson as loaded for it (L); note says how its route differs. */
+export function showLesson(def: LessonDef, s: LessonState, go: { watch(): void; drive(): void; test(): void }, v: Vehicle, L: Lesson, note: string): void {
   $('lsTitle').textContent = `Lesson ${def.n} · ${def.title}`;
   $('lsLearn').textContent = def.learn;
   // sources numbered in the order this lesson first uses them
   const order: string[] = [], num = (id: string) => { if (!order.includes(id)) order.push(id); return order.indexOf(id) + 1; };
   $('lsBody').replaceChildren(...(def.explain ?? []).map(p => {
-    const para = el('p', '', p.text);
+    const para = el('p', '', fillText(p.text, v, L));
     for (const id of p.sources ?? []) { const a = el('a', 'src', `[${num(id)}]`); a.href = COURSE.sources[id].url; a.target = '_blank'; a.rel = 'noopener'; para.append(' ', a); }
     return para;
-  }));
+  }), ...(note ? [el('p', 'lsCar', note)] : []));
   $('lsPass').textContent = passText(def.pass);
   const h = HELP[s.help];
   $('lsNow').textContent = s.done ? `Done, best ${starText(Math.max(0, s.best))}. Take the test again any time.`

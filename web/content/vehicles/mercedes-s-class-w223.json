@@ -17,7 +17,7 @@
     "the mirrors' place and height, the tyres and the kerb weight"
   ],
   "dims": { "length": 5.304, "width": 1.920, "widthMirrors": 2.123, "height": 1.504, "wheelbase": 3.216, "track": 1.655, "overhangFront": 0.892, "overhangRear": 1.196, "wheelRadius": 0.356, "wheelWidth": 0.255, "mass": 2250 },
-  "turning": { "circles": [{ "rearSteer": 4.5, "wallDiameter": 11.89 }, { "rearSteer": 10, "wallDiameter": 10.79 }] },
+  "turning": { "by": "Mercedes", "circles": [{ "rearSteer": 4.5, "wallDiameter": 11.89 }, { "rearSteer": 10, "wallDiameter": 10.79 }] },
   "rearSteer": { "options": [10, 4.5, 0], "default": 10 },
   "outline": { "half": [[4.108, 0.45], [4.05, 0.70], [3.91, 0.865], [3.64, 0.945], [2.60, 0.96], [-0.70, 0.96], [-1.08, 0.88], [-1.196, 0.58]] },
   "mirrors": { "height": 1.0, "box": [2.05, 0.90, 2.30, 1.0615] },

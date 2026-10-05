@@ -16,11 +16,12 @@
     "the tyres (from the 165/65 R15 fronts) and the kerb weight"
   ],
   "dims": { "length": 2.695, "width": 1.663, "widthMirrors": 1.893, "height": 1.555, "wheelbase": 1.873, "track": 1.469, "overhangFront": 0.424, "overhangRear": 0.398, "wheelRadius": 0.298, "wheelWidth": 0.165, "mass": 900 },
-  "turning": { "circles": [{ "kerbDiameter": 6.95, "wallDiameter": 7.30 }] },
+  "turning": { "by": "Daimler", "circles": [{ "kerbDiameter": 6.95, "wallDiameter": 7.30 }] },
   "outline": { "half": [[2.297, 0.40], [2.262, 0.60], [2.155, 0.755], [1.96, 0.822], [1.20, 0.8315], [-0.22, 0.8315], [-0.345, 0.77], [-0.398, 0.56]] },
   "mirrors": { "height": 1.0, "box": [1.50, 0.80, 1.68, 0.9465] },
   "planCorners": [[2.155, -0.755], [2.155, 0.755], [-0.345, -0.77], [-0.345, 0.77]],
   "glass": [1.8, -0.25],
+  "seats": 2,
   "drive": { "creepForward": 1.2, "maxForward": 5.5, "rampForward": 1.1, "creepReverse": 0.9, "maxReverse": 2.8, "rampReverse": 0.6, "holdTime": 1.0, "accel": 2.0, "brake": 3.5 },
   "parkingSensors": {
     "layout": "4-rear",

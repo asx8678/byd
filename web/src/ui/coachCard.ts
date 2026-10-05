@@ -1,11 +1,12 @@
 // The coach card at the top of the screen in a lesson: the step, what to do and when to stop, how far to the mark,
 // where the wheel should be, and the handbook's tip for that moment; or one line once the help has stepped back.
 import { sentence, type CoachRun, type Step } from '../core/coach';
-import { HELP, type Help, type LessonDef } from '../core/lesson';
+import { HELP, type Help, type LessonDef, type Para } from '../core/lesson';
 import { $ } from './dom';
 
 export interface CardView {
   def: LessonDef; help: Help; steps: readonly Step[];
+  tips: Record<string, Para>;   // the lesson's tips by this route's step numbers (another car's route can differ)
   run: CoachRun | null;      // the coach following this try (guided, or keeping up with cue marks)
   summoned: boolean;         // help on request: the coach was asked for in this try
   watching: number;          // the step the ghost is on while watching (-1 when not)
@@ -45,7 +46,7 @@ export function renderCard(c: CardView | null): void {
   const frac = st && left >= 0 ? Math.min(1, Math.max(0, 1 - left / st.len)) : 0;
   const leftTxt = left < 0 ? '' : left <= 0.15 && Math.abs(c.v) < 0.02 ? 'On the mark' : `${fmtLeft(left)} to the mark`;
   const note = run ? (run.hint || run.note) : '';
-  const tip = st ? c.def.tips?.[String(st.n)]?.text ?? '' : '';
+  const tip = st ? c.tips[String(st.n)]?.text ?? '' : '';
   const brief = c.over ? 'This try is over: Try again (or Reset) for the next one.' : !full ? (c.help === 1 ? (run?.phase === 'missed' ? 'Off the marks: finish as you can, then see what to work on.' : 'Stop on each mark: the outline on the plan shows where.')
     : c.help === 2 ? 'Show me and the coach are there if you need them.' : 'No help: the stars count.') : '';
   const sig = [c.def.id, mode, stepTxt, full, wheel, missed, leftTxt, frac.toFixed(2), note, brief, c.slow, c.help, k].join('|');

@@ -48,7 +48,7 @@ function parts(v: Vehicle, side: 1 | -1): { name: string; x: number; z: number; 
     { name: 'your back seat', x: v.RA + 0.45, z: side * v.W / 2 },
     { name: 'your rear wheel', x: v.RA, z: side * v.TRACK / 2 },
     { name: 'your rear bumper', x: -v.OVR, z: 0 },
-  ];
+  ].filter(P => P.name !== 'your back seat' || (v.spec.seats ?? 5) > 2);   // a two-seater has none
 }
 
 /** The end of a parked car's outline nearest a point: the middle of its short side that faces it. */

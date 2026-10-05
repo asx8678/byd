@@ -15,7 +15,7 @@
     "the kerb weight"
   ],
   "dims": { "length": 5.916, "width": 2.084, "widthMirrors": 2.48, "height": 1.971, "wheelbase": 3.672, "track": 1.741, "overhangFront": 1.0, "overhangRear": 1.244, "wheelRadius": 0.405, "wheelWidth": 0.275, "mass": 2400 },
-  "turning": { "circles": [{ "kerbDiameter": 14.08 }], "turnsLockToLock": 3.1 },
+  "turning": { "by": "FCA", "circles": [{ "kerbDiameter": 14.08 }], "turnsLockToLock": 3.1 },
   "outline": { "half": [[4.672, 0.62], [4.63, 0.86], [4.52, 0.985], [4.30, 1.035], [3.30, 1.042], [-0.90, 1.042], [-1.19, 0.985], [-1.244, 0.85]] },
   "mirrors": { "height": 1.32, "box": [2.30, 1.0, 2.58, 1.24] },
   "planCorners": [[4.52, -0.985], [4.52, 0.985], [-1.19, -0.985], [-1.19, 0.985]],
