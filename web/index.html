@@ -21,6 +21,7 @@
     <canvas id="planCv"></canvas>
     <div id="planInfo"></div>
     <div id="planBtns"><button id="planMode" type="button">Whole area</button></div>
+    <div id="planNums" hidden></div>
     <div id="planFoot"><span id="planPred"></span><span id="planScale"></span></div>
   </section>
   <div id="flash"></div>
@@ -85,6 +86,7 @@
       <div id="steerInfo"><b id="steerTurns">0.0</b> turns</div>
       <button id="btnCenter" type="button">Straighten</button>
     </div>
+    <button id="btnRewind" type="button" hidden aria-label="Rewind 5 seconds">⟲ 5 s</button>
     <div id="pedals">
       <button class="pedal fwd" id="btnFwd" type="button" aria-label="Drive forward (hold)">▲<small>Forward</small></button>
       <button class="pedal rev" id="btnRev" type="button" aria-label="Reverse (hold)">▼<small>Reverse</small></button>
@@ -98,6 +100,13 @@
     <div class="opt"><label>Steering lock-to-lock</label><div class="seg" data-opt="steer"><button data-v="2.5" type="button">2.5</button><button data-v="2.7" type="button">2.7</button><button data-v="3.0" type="button">3.0</button><button data-v="1" type="button">1 (quick)</button></div></div>
     <div class="opt"><label>Steering self-centres when rolling</label><div class="seg" data-opt="center"><button data-v="on" type="button">On</button><button data-v="off" type="button">Off</button></div></div>
     <div class="opt"><label>Parking sensors (beeps and display)</label><div class="seg" data-opt="pdc"><button data-v="on" type="button">On</button><button data-v="off" type="button">Off</button></div></div>
+    <h4>Learning layers</h4>
+    <div class="opt"><label>Path ahead at this steering</label><div class="seg" data-opt="layerPath"><button data-v="on" type="button">On</button><button data-v="off" type="button">Off</button></div></div>
+    <div class="opt"><label>Turning centre and circles</label><div class="seg" data-opt="layerPivot"><button data-v="on" type="button">On</button><button data-v="off" type="button">Off</button></div></div>
+    <div class="opt"><label>Swept path of all four corners</label><div class="seg" data-opt="layerSwept"><button data-v="on" type="button">On</button><button data-v="off" type="button">Off</button></div></div>
+    <div class="opt"><label>Ideal path and its marks (garage and levels)</label><div class="seg" data-opt="layerGhost"><button data-v="on" type="button">On</button><button data-v="off" type="button">Off</button></div></div>
+    <div class="opt"><label>Kerb close-up near a kerb</label><div class="seg" data-opt="layerKerb"><button data-v="on" type="button">On</button><button data-v="off" type="button">Off</button></div></div>
+    <div class="opt"><label>Numbers: angle to the space, gaps</label><div class="seg" data-opt="layerNums"><button data-v="on" type="button">On</button><button data-v="off" type="button">Off</button></div></div>
     <h4>Controls</h4>
     <p>Hold <b>Forward</b> or <b>Reverse</b> to move: a short press creeps at about 4 km/h, keep holding and the car accelerates up to 20 km/h (10 km/h in reverse), the button fills up as the speed stage rises; release and the car brakes. Drag the wheel round like a real steering wheel. The screen is a map of the bays, north up: it draws the path the car takes at the current steering, an outline of the car every 0.8 m along it and, in red, where it would touch something first; Whole area zooms out to the bays and the aisle, Follow car keeps the car in the middle. Keyboard: <kbd>←</kbd> <kbd>→</kbd> steer, <kbd>↑</kbd> <kbd>↓</kbd> drive, <kbd>Space</kbd> straighten, <kbd>X</kbd> reset.</p>
   </div>
@@ -107,7 +116,7 @@
     <div class="seg tabs" id="playTabs"><button data-tab="course" type="button">Course</button><button data-tab="levels" type="button">Levels</button></div>
     <div id="tabCourse">
       <div id="crsList"></div>
-      <p class="lvNote">Each lesson teaches one manoeuvre with your car's own numbers: watch it, then drive it with the coach, and the help steps back as you pass: guided, then cue marks only, then practice, then a test where the stars count. Lessons 1, 2, 8 and 9 come in the next update.</p>
+      <p class="lvNote">Each lesson teaches one manoeuvre with your car's own numbers: watch it, then drive it with the coach, and the help steps back as you pass: guided, then cue marks only, then practice, then a test where the stars count. ⟲ 5 s takes you back to try a bit again (that try is then practice).</p>
     </div>
     <div id="tabLevels">
     <div class="lvDaily"><div><span>Today's level</span><b id="lvDailyName"></b></div><button id="lvDailyGo" type="button">Play</button></div>
@@ -180,7 +189,9 @@
     <h4>What counts as parked</h4>
     <p>All four corners inside the target bay lines, car stopped, heading within 6° of straight. The result is read once the car has stayed still for a second with no pedal held, so a last small nudge still counts. In your garage nose-in (as in the photos) or reversed both count; the result card shows your centring, angle and the gap to the bench. In a level the bay says which way round, and a space along a kerb counts when the car is between the cars with its tyres within 50 cm of the kerb.</p>
     <h4>Course</h4>
-    <p>Lessons from the first metres to your own bay. Each one is a space and a route for your car, with the handbooks' rule of thumb next to the exact moment for this car: watch the ghost drive it, then drive it yourself. Guided, the coach shows each step and the next mark, waits until the wheel is set (hold it at full lock with one thumb while the other holds the pedal, or switch self-centring off in Setup), keeps you at walking pace and brakes on the mark; then only the marks are shown, then nothing (Show me and the coach on request), then a test where the stars count. Two passes take a level of help away, two misses bring it back in slow motion. After each try your path is drawn over the route and the coach names the first place it drifted more than 30 cm, and why. The routes use full lock or straight wheels only, as driving schools teach, so every step can be named exactly. Sources are the driving handbooks and schools listed on each lesson.</p>
+    <p>Ten lessons, from the first metres (a cone course) and how a car turns (a U-turn inside its painted swept path), through bays forwards, between cars, reversing in, parallel parking two ways, leaving a tight space and angled bays, to your own bay. Each one is a space and a route for your car, with the handbooks' rule of thumb next to the exact moment for this car: watch the ghost drive it, then drive it yourself. Guided, the coach shows each step and the next mark, waits until the wheel is set (hold it at full lock with one thumb while the other holds the pedal, or switch self-centring off in Setup), keeps you at walking pace and brakes on the mark; then only the marks are shown, then nothing (Show me and the coach on request), then a test where the stars count. Two passes take a level of help away, two misses bring it back in slow motion. After each try your path is drawn over the route and the coach names the first place it drifted more than 30 cm, and why. The routes use full lock or straight wheels only, as driving schools teach, so every step can be named exactly. Sources are the driving handbooks and schools listed on each lesson. The ⟲ 5 s button goes back five seconds so you can try a step again, anywhere except a lesson's test; a try with a rewind is practice, so it counts neither way and its stars are not saved.</p>
+    <h4>Learning layers</h4>
+    <p>Switch them in Setup. The path ahead shows where the car goes at the current steering and where it would touch first; the turning centre and circles show the point the car turns about, the circle the outer front corner sweeps and the circle the inner rear wheel runs on; the swept path draws all four corners' tracks; the ideal path draws the route that set par and where each move ends (in lessons the help level decides); the kerb close-up is a box at the bottom left, like a mirror tilted down, with the wheel nearest the kerb and its gap; the numbers give the car's angle to the space, the gap to the kerb and the gaps either side.</p>
     <h4>Levels</h4>
     <p>Three kinds so far: a row of bays entered nose first, the same reversing in, and parallel parking between two cars at a kerb on your right. Level 1 is roomy; by level 10 the bays are 2.3 m wide with a 5 m aisle, and the parallel space is the car's length plus 80 cm. Neighbours park off-centre, cars appear opposite, a pillar or a lamp post joins in. Kerbs only stop the tyres: the bumpers hang over them, as on a real street. Show me drives the planner's route; part way in, it plans from where you are.</p>
   </div>

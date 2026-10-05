@@ -22,8 +22,9 @@ export interface Bay {
   inHeading: number;                                // heading when parked nose-in (radians); reversed in is the opposite
   /** Which way round counts: nose in, reversed in ('out'), or either (the default). */
   face?: 'in' | 'out' | 'either';
-  /** 'kerb' for a space along a kerb: the result gives the tyres' gap to the kerb. */
-  kind?: 'bay' | 'kerb';
+  /** 'kerb' for a space along a kerb: the result gives the tyres' gap to the kerb. 'exit' for a stretch of lane to
+   *  drive out into (leaving a space): parked there means in it and straight. */
+  kind?: 'bay' | 'kerb' | 'exit';
   /** Where all four corners must be, [x0, x1, z0, z1]. By default the lines widened by the tolerances, back to headZ. */
   box?: Rect;
   /** Rear-axle poses that count as well parked, for the route planner. By default worked out from the lines. */
@@ -43,6 +44,8 @@ export interface SceneSpec {
   dashes?: number[][];
   /** Kerbs from a to b, with the pavement on the right of a → b, depth metres deep. */
   kerbs?: { name: string; a: number[]; b: number[]; depth?: number }[];
+  /** Things a coach can line the car up with, besides the bay lines and parked cars it finds itself. */
+  landmarks?: { name: string; x: number; z: number }[];
   marks?: { text: (string | number)[][]; manhole?: number[] };
   floors?: number[][]; pit?: number[]; door?: number[];
   obstacles: SceneObstacleSpec[];
@@ -57,6 +60,7 @@ export interface Scene {
   readonly starts: Readonly<Record<string, Start>>; readonly defaultStart: string;
   readonly lines: readonly [number, number, number, number][];
   readonly dashes: readonly [number, number, number, number][];
+  readonly landmarks: readonly { name: string; x: number; z: number }[];
   readonly marks: { text: [string, number, number][]; manhole: Rect | null };
   readonly floors: readonly Rect[]; readonly pit: Rect | null; readonly door: [number, number] | null;
   readonly areaView: Rect; readonly lot: Rect | null;
@@ -90,7 +94,7 @@ export function makeScene(s: SceneSpec): Scene {
   return {
     id: s.id, name: s.name, layoutVersion: s.layoutVersion, obstacles, kerbs,
     bays: s.bays, defaultBay: s.defaultBay, starts, defaultStart: s.defaultStart,
-    lines: s.lines.map(seg), dashes: (s.dashes ?? []).map(seg),
+    lines: s.lines.map(seg), dashes: (s.dashes ?? []).map(seg), landmarks: (s.landmarks ?? []).map(l => ({ name: l.name, x: l.x, z: l.z })),
     marks: { text: (s.marks?.text ?? []).map(t => [String(t[0]), Number(t[1]), Number(t[2])] as [string, number, number]), manhole: rect(s.marks?.manhole) },
     floors: (s.floors ?? []).map(f => rect(f)!), pit: rect(s.pit), door: s.door ? [s.door[0], s.door[1]] : null,
     areaView: rect(s.areaView)!, lot: rect(s.lot),

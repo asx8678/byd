@@ -31,10 +31,12 @@ One place per file. The world frame has x to the right and z down the plan. A he
   - `sideTol` and `mouthTol`: tolerances over the side lines and out of the mouth.
   - `inHeading`: the nose-in heading. Reversed-in parking is the opposite heading.
   - `face` (optional): `in`, `out` (reversed in) or `either`, the default.
-  - `kind` (optional): `kerb` for a space along a kerb; the result then gives the tyres' gap to the kerb.
+  - `kind` (optional): `kerb` for a space along a kerb; the result then gives the tyres' gap to the kerb. `exit` for a stretch of lane to drive out into after leaving a space: parked there means inside it and straight.
   - `box` (optional): `[x0, x1, z0, z1]`, where all four corners must be. By default the lines widened by the tolerances, back to `headZ`.
   - `goals` (optional): rear-axle poses that count as well parked, for the route planner.
 - `starts`: rear-axle poses with a label. `defaultStart` and `defaultBay` pick the defaults.
+- `landmarks` (optional): named points a coach can line the car up with (a stop line, a cone), besides the bay lines and parked cars it finds itself.
+- Obstacles may carry a `fill` colour; the plan draws them in it (the blue tanks, the blue cone).
 - `lines`, `dashes`, `marks`, `floors`, `pit`, `door`: what is drawn (`dashes` are white lane markings).
 - `areaView`: the bounds of the "Whole area" view.
 - `layoutVersion`: bump it when the layout changes. Saved settings and positions from an older layout are then reset.
@@ -43,8 +45,8 @@ One place per file. The world frame has x to the right and z down the plan. A he
 
 The course: ten lessons in order, with the sources they quote. A lesson marked `soon` is listed but not playable yet. A playable one has:
 
-- `scene`: a generated level (`template`, `level`, `seed`, and for a kerb space `kerbGap`, the body's gap to the kerb the route was planned to) or your garage (`garage`: the bay, `start`).
-- `route`: the route the coach teaches, stored so that every device coaches the same one. `start` is the rear-axle pose `[x, z, heading]`; `pieces` are `[direction, steering, metres]`, with direction 1 forward or -1 reverse and steering -1 (full lock left), 0 (straight) or 1 (full lock right). The routes come from the planner with the steering kept to full lock or straight, which is how driving schools teach these manoeuvres and what a coach can name exactly; `test/lessons.test.ts` checks that the planner still finds exactly these routes.
+- `scene`: a generated level (`template`, `level`, `seed`, and for a kerb space `kerbGap`, the body's gap to the kerb the route was planned to), your garage (`garage`: the bay, `start`), or a scene built for the lesson (`build`: `first-metres`, `turning`, `leaving` with `level` and `seed`, or `angled` with `seed`; see `src/core/generator/lessonScenes.ts`).
+- `route`: the route the coach teaches, stored so that every device coaches the same one. `start` is the rear-axle pose `[x, z, heading]`; `pieces` are `[direction, steering, metres]`, with direction 1 forward or -1 reverse and steering -1 (full lock left), 0 (straight) or 1 (full lock right). The routes come from the planner with the steering kept to full lock or straight, which is how driving schools teach these manoeuvres and what a coach can name exactly; `test/lessons.test.ts` checks that the planner still finds exactly these routes. A route marked `authored` was written for the lesson instead (the cone course, the U-turn, the one-turn angled entry); the test checks that it clears everything and passes.
 - `explain`: paragraphs for the lesson card, each with the `sources` it quotes. Every claim comes from `docs/research/parking-tips.md`; where sources disagree, the text says so.
 - `tips`: keyed by step number, shown on the coach card at that step. `cue` (optional) picks the part of the car and the landmark the step's mark is said with, so it matches the handbook's own rule ("your mirror" and "the near line of the green bay").
 - `pass`: what passing takes besides touching nothing: `angle` (degrees off straight), `centre` (metres off centre), `kerb` (tyres to the kerb, metres), `moves` (`"par+1"`), `face` (`in` or `out`).

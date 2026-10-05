@@ -10,10 +10,20 @@ export interface Settings {
   center: 'on' | 'off';   // steering self-centres when rolling
   planView: 'car' | 'area';
   layout: number;         // garage layout version these settings were made for
+  // learning layers drawn on the plan
+  layerPath: 'on' | 'off';    // the path at the current steering, with where it would touch first
+  layerPivot: 'on' | 'off';   // the turning centre and circles
+  layerSwept: 'on' | 'off';   // the swept path of all four corners
+  layerGhost: 'on' | 'off';   // the ideal path and its marks, in the garage and levels (lessons follow their help)
+  layerKerb: 'on' | 'off';    // a close-up of the wheel nearest a kerb
+  layerNums: 'on' | 'off';    // angle to the space, gap to the kerb and either side
 }
 
 const KEY = 'atto2-garage';
-export const settings: Settings = { start: 'left', bay: '561', steer: '2.7', pdc: 'on', center: 'on', planView: 'car', layout: 0 };
+export const settings: Settings = {
+  start: 'left', bay: '561', steer: '2.7', pdc: 'on', center: 'on', planView: 'car', layout: 0,
+  layerPath: 'on', layerPivot: 'on', layerSwept: 'off', layerGhost: 'off', layerKerb: 'on', layerNums: 'on',
+};
 try { Object.assign(settings, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch { /* private mode or blocked storage: defaults */ }
 if ((settings.steer as string) === 'real') settings.steer = '2.7';
 if ((settings.steer as string) === 'quick') settings.steer = '1';

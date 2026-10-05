@@ -1,8 +1,9 @@
 // The plan: a north-up map of the bays that fills the screen, with the path the car takes at the current steering,
 // an outline of the car every 0.8 m along it and, in red, where it would touch something first.
 import { ackermann, footprint } from '../core/car';
+import { wheelsOf } from '../core/collision';
 import type { Rect } from '../core/scene';
-import { DEG, clamp, type Pt } from '../core/math';
+import { DEG, clamp, wrapPi, type Pt } from '../core/math';
 import type { Pose, RoutePoint } from '../core/planner';
 import type { Prediction } from '../core/predict';
 import { SIDES, rangeOf } from '../core/sensors';
@@ -11,8 +12,8 @@ import { $, fitCanvas } from './dom';
 import { settings } from './settings';
 
 const planCv = $<HTMLCanvasElement>('planCv'), ctx = planCv.getContext('2d')!;
-const PV = { cx: 0, cz: 4, s: 24, w: 0, h: 0, oy: 0, band: 0, init: false };   // view centre (m), scale (px/m), size, the car's screen row, the free band's height
-let pred: Prediction | null = null, predKey = '', predT = -1, infoTxt = '', predTxt = '', scaleW = -1;
+const PV = { cx: 0, cz: 4, s: 24, w: 0, h: 0, oy: 0, band: 0, foot: 0, init: false };   // view centre (m), scale (px/m), size, the car's screen row, the free band's height
+let pred: Prediction | null = null, predKey = '', predT = -1, infoTxt = '', predTxt = '', scaleW = -1, numsTxt = '';
 
 /** Under the HUD and above the wheel and pedals: where the readouts sit and which band the car is centred in. Returns that band. */
 export function layoutPlan(stage: HTMLElement): { top: number; bottom: number; carY: number } | null {
@@ -25,11 +26,17 @@ export function layoutPlan(stage: HTMLElement): { top: number; bottom: number; c
   const ctlT = Math.min($('wheelWrap').getBoundingClientRect().top, $('pedals').getBoundingClientRect().top) - c.top - 8;
   const fb = W > H ? H - 10 : ctlT;   // landscape: the wheel and pedals sit at the sides, so the car can use the full height
   $('planInfo').style.top = $('planBtns').style.top = hudB + 'px'; $('planFoot').style.bottom = Math.max(6, H - ctlT + 4) + 'px';
-  PV.oy = clamp((hudB + 70 + fb - 30) / 2, 0, H); PV.band = Math.max(120, fb - hudB - 100);
+  PV.oy = clamp((hudB + 70 + fb - 30) / 2, 0, H); PV.band = Math.max(120, fb - hudB - 100); PV.foot = ctlT - 30;
+  placeNums();
   return { top: hudB, bottom: ctlT, carY: PV.oy };
 }
 
 export function forgetPrediction(): void { pred = null; }
+/** The numbers sit just under the wheel readout, or where it would be when the coach card has taken its place. */
+function placeNums(): void {
+  const pi = $('planInfo'), top = pi.hidden ? parseFloat(pi.style.top) || 0 : pi.offsetTop + pi.offsetHeight + 4;
+  $('planNums').style.top = top + 'px';
+}
 
 /** Show me: a planned route drawn on the floor, and a ghost car at point `at` along it. */
 export interface Guide { pts: RoutePoint[]; at: number }
@@ -99,7 +106,7 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
       continue;
     }
     const low = o.cls === 'low';
-    c.fillStyle = low ? '#b9832a' : o.cls === 'lowwall' ? '#8e9498' : '#c9ccc8'; c.strokeStyle = low ? '#f2c230' : '#6d747a';
+    c.fillStyle = o.fill || (low ? '#b9832a' : o.cls === 'lowwall' ? '#8e9498' : '#c9ccc8'); c.strokeStyle = o.fill ? '#ebe8df' : low ? '#f2c230' : '#6d747a';
     if (o.kind === 'circle') { const [sx, sy] = PS(o.x, o.z); c.beginPath(); c.arc(sx, sy, o.r * s, 0, 6.3); c.fill(); c.stroke(); }
     else { path(c, o.pts); c.fill(); c.stroke(); }
   }
@@ -148,24 +155,32 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
   const dir: 1 | -1 = sim.input.rev ? -1 : sim.input.fwd ? 1 : sim.lastMoveDir;
   const key = `${x.toFixed(3)},${z.toFixed(3)},${th.toFixed(4)},${sim.wheelAngle.toFixed(1)},${dir}`;
   if (!pred || pred.dir !== dir || (key !== predKey && now - predT > 0.05)) { pred = sim.predict(dir); predKey = key; predT = now; }
-  const p = pred;
-  c.lineCap = 'round'; c.strokeStyle = 'rgba(242,194,48,.26)'; c.lineWidth = 1;
-  for (const g of p.ghosts) { path(c, footprint(g[0], g[1], g[2], v.body)); c.stroke(); }
-  c.setLineDash([4, 4]); c.strokeStyle = 'rgba(143,184,255,.7)'; path(c, p.tracks.rearAxle, false); c.stroke(); c.setLineDash([]);
-  c.lineWidth = 2; c.strokeStyle = p.hit ? '#ff6b5a' : '#f2c230';
-  for (const t of p.dir > 0 ? [p.tracks.fl, p.tracks.fr] : [p.tracks.rl, p.tracks.rr]) { path(c, t, false); c.stroke(); }
-  c.lineWidth = 1.5; c.strokeStyle = 'rgba(94,208,216,.9)'; path(c, p.tracks.swing, false); c.stroke();
-  if (p.hit) { c.strokeStyle = '#ff4f4f'; c.lineWidth = 2; c.setLineDash([5, 3]); path(c, footprint(p.end[0], p.end[1], p.end[2], v.body)); c.stroke(); c.setLineDash([]); }
+  const p = pred, showPath = settings.layerPath !== 'off';
+  c.lineCap = 'round';
+  if (settings.layerSwept === 'on') {   // learning layer: the swept path of all four corners
+    c.lineWidth = 1.5; c.strokeStyle = 'rgba(214,160,255,.75)';
+    for (const tr of [p.tracks.fl, p.tracks.fr, p.tracks.rl, p.tracks.rr]) { path(c, tr, false); c.stroke(); }
+  }
+  if (showPath) {
+    c.strokeStyle = 'rgba(242,194,48,.26)'; c.lineWidth = 1;
+    for (const g of p.ghosts) { path(c, footprint(g[0], g[1], g[2], v.body)); c.stroke(); }
+    c.setLineDash([4, 4]); c.strokeStyle = 'rgba(143,184,255,.7)'; path(c, p.tracks.rearAxle, false); c.stroke(); c.setLineDash([]);
+    c.lineWidth = 2; c.strokeStyle = p.hit ? '#ff6b5a' : '#f2c230';
+    for (const tr of p.dir > 0 ? [p.tracks.fl, p.tracks.fr] : [p.tracks.rl, p.tracks.rr]) { path(c, tr, false); c.stroke(); }
+    c.lineWidth = 1.5; c.strokeStyle = 'rgba(94,208,216,.9)'; path(c, p.tracks.swing, false); c.stroke();
+    if (p.hit) { c.strokeStyle = '#ff4f4f'; c.lineWidth = 2; c.setLineDash([5, 3]); path(c, footprint(p.end[0], p.end[1], p.end[2], v.body)); c.stroke(); c.setLineDash([]); }
+  }
   // turning centre, the lines from it to the wheels (Ackermann) and the circle the outer front corner sweeps
   const dl = -sim.steerDeg * DEG, [fl, fr] = ackermann(v, dl);
   const wl = footprint(x, z, th, [[v.WB, -v.TRACK / 2], [v.WB, v.TRACK / 2], [0, -v.TRACK / 2], [0, v.TRACK / 2]]);
-  if (Math.abs(dl) > 0.004) {
+  if (Math.abs(dl) > 0.004 && settings.layerPivot !== 'off') {   // learning layer: the pivot and the turning circles
     const Rc = v.WB / Math.tan(dl);
     if (Math.abs(Rc) < 30) {
       const icr = footprint(x, z, th, [[0, -Rc]])[0], [ix, iy] = PS(icr[0], icr[1]), oc = footprint(x, z, th, [[3.40, Rc > 0 ? 0.76 : -0.76]])[0];
       c.setLineDash([3, 4]); c.strokeStyle = 'rgba(200,215,225,.5)'; c.lineWidth = 1;
       for (const wp of wl) { const [sx, sy] = PS(wp[0], wp[1]); c.beginPath(); c.moveTo(ix, iy); c.lineTo(sx, sy); c.stroke(); }
-      c.strokeStyle = 'rgba(255,138,61,.38)'; c.beginPath(); c.arc(ix, iy, Math.hypot(oc[0] - icr[0], oc[1] - icr[1]) * s, 0, 6.3); c.stroke(); c.setLineDash([]);
+      c.strokeStyle = 'rgba(255,138,61,.38)'; c.beginPath(); c.arc(ix, iy, Math.hypot(oc[0] - icr[0], oc[1] - icr[1]) * s, 0, 6.3); c.stroke();
+      c.strokeStyle = 'rgba(94,208,216,.35)'; c.beginPath(); c.arc(ix, iy, (Math.abs(Rc) - v.TRACK / 2) * s, 0, 6.3); c.stroke(); c.setLineDash([]);   // the inner rear wheel's circle
       c.fillStyle = '#ebe8df'; c.beginPath(); c.arc(ix, iy, 3, 0, 6.3); c.fill();
     }
   }
@@ -202,10 +217,55 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
   // readouts: wheel angles, turning radius, steering wheel; what the path runs into; the scale bar
   const Rout = Math.abs(dl) > 0.004 ? Math.hypot(Math.abs(v.WB / Math.tan(dl)) + v.TRACK / 2, v.WB) : Infinity, wa = sim.wheelAngle;
   const info = `<div><span>Wheels</span>L ${(fl / DEG).toFixed(1)}° · R ${(fr / DEG).toFixed(1)}°</div><div><span>Turn radius</span>${Rout < 60 ? Rout.toFixed(2) + ' m' : 'straight'}</div><div><span>Steering</span>${Math.abs(wa) < 1 ? 'centred' : Math.abs(wa).toFixed(0) + '° ' + (wa < 0 ? 'left' : 'right')}</div>`;
-  if (info !== infoTxt) { infoTxt = info; $('planInfo').innerHTML = info; }
+  if (info !== infoTxt) { infoTxt = info; $('planInfo').innerHTML = info; placeNums(); }
   const what = p.dir > 0 ? 'Forward' : 'Reversing';
-  const ptxt = p.hit ? `${what}: ${p.part ? p.part + ' ' : ''}hits ${p.hit.name} in ${p.dist.toFixed(1)} m` : `${what}: clear for ${p.dist.toFixed(1)} m`;
+  const ptxt = !showPath ? '' : p.hit ? `${what}: ${p.part ? p.part + ' ' : ''}hits ${p.hit.name} in ${p.dist.toFixed(1)} m` : `${what}: clear for ${p.dist.toFixed(1)} m`;
   if (ptxt !== predTxt) { predTxt = ptxt; const el = $('planPred'); el.textContent = ptxt; el.className = p.hit && p.dist < 1 ? 'bad' : ''; }
   const sw = Math.round(s); if (sw !== scaleW) { scaleW = sw; $('planScale').innerHTML = `<i style="width:${sw}px"></i>1 m`; }
+  // learning layers: the kerb close-up, and the numbers (angle to the space, gaps)
+  const kw = nearestKerbWheel(sim);
+  if (settings.layerKerb !== 'off' && kw && kw.gap < 1.0) drawKerbCloseUp(c, kw);
+  const nums = settings.layerNums === 'off' ? '' : numbersHtml(sim, kw);
+  if (nums !== numsTxt) { numsTxt = nums; const el = $('planNums'); el.innerHTML = nums; el.hidden = !nums; }
+}
+
+type KerbWheel = { gap: number; wheel: Pt[]; nx: number; nz: number; c: number };
+/** The wheel nearest a kerb, and its gap to it (m, from the tyre's outside edge). */
+function nearestKerbWheel(sim: Sim): KerbWheel | null {
+  let best: KerbWheel | null = null;
+  for (const k of sim.scene.kerbs) for (const w of wheelsOf(sim.vehicle)) {
+    const pts = footprint(sim.x, sim.z, sim.th, w.pts), gap = Math.min(...pts.map(q => k.c - (k.nx * q[0] + k.nz * q[1])));
+    if (!best || gap < best.gap) best = { gap, wheel: pts, nx: k.nx, nz: k.nz, c: k.c };
+  }
+  return best;
+}
+/** A box at the bottom left: the wheel nearest the kerb seen close up, with the kerb below it, like a mirror tilted down. */
+function drawKerbCloseUp(c: CanvasRenderingContext2D, kw: KerbWheel): void {
+  const W = 132, H = 84, x0 = 8, y0 = Math.max(80, PV.foot - H - 6), sc = 140;
+  const cx = kw.wheel.reduce((a, q) => a + q[0], 0) / 4, cz = kw.wheel.reduce((a, q) => a + q[1], 0) / 4;
+  // inset axes: along the kerb to the right, towards the kerb downwards
+  const ax = -kw.nz, az = kw.nx, map = (q: Pt): Pt => [x0 + W / 2 + ((q[0] - cx) * ax + (q[1] - cz) * az) * sc, y0 + H * 0.38 + ((q[0] - cx) * kw.nx + (q[1] - cz) * kw.nz) * sc];
+  c.save();
+  c.fillStyle = 'rgba(12,13,17,.92)'; c.strokeStyle = 'rgba(235,232,223,.35)'; c.lineWidth = 1;
+  c.beginPath(); c.roundRect(x0, y0, W, H, 8); c.fill(); c.stroke(); c.clip();
+  // the kerb: its edge line and the pavement beyond it
+  const k0 = cx + kw.nx * (kw.c - (kw.nx * cx + kw.nz * cz)), k1 = cz + kw.nz * (kw.c - (kw.nx * cx + kw.nz * cz));
+  const e0 = map([k0 - ax * 2, k1 - az * 2]), e1 = map([k0 + ax * 2, k1 + az * 2]);
+  c.fillStyle = '#2a2d34'; c.fillRect(x0, e0[1], W, H); c.strokeStyle = '#8e939c'; c.lineWidth = 3; c.beginPath(); c.moveTo(e0[0], e0[1]); c.lineTo(e1[0], e1[1]); c.stroke();
+  // the car's side and the wheel
+  c.fillStyle = '#ebe8df'; c.beginPath(); kw.wheel.map(map).forEach((q, i) => (i ? c.lineTo(q[0], q[1]) : c.moveTo(q[0], q[1]))); c.closePath(); c.fill();
+  c.fillStyle = kw.gap < 0.1 ? '#ec5b4f' : kw.gap < 0.3 ? '#5ed08a' : '#f2c230'; c.font = '600 13px "Barlow Condensed", sans-serif'; c.textAlign = 'left'; c.textBaseline = 'top';
+  c.fillText(`Kerb ${Math.max(0, Math.round(kw.gap * 100))} cm`, x0 + 7, y0 + 5);
+  c.restore();
+}
+/** The numbers layer: the car's angle to the space, the gap to a kerb, and the gaps either side. */
+function numbersHtml(sim: Sim, kw: KerbWheel | null): string {
+  const b = sim.scene.bays[sim.options.bay] ?? sim.scene.bays[sim.scene.defaultBay], out: string[] = [];
+  const a = (h: number) => Math.abs(wrapPi(sim.th - h)) / DEG;
+  const ang = b.face === 'in' ? a(b.inHeading) : b.face === 'out' ? a(b.inHeading + Math.PI) : Math.min(a(b.inHeading), a(b.inHeading + Math.PI));
+  out.push(`<span>${b.kind === 'kerb' || b.kind === 'exit' ? 'To kerb' : 'To bay'}</span><b>${ang.toFixed(0)}°</b>`);
+  if (kw && kw.gap < 2) out.push(`<span>Kerb</span><b>${Math.max(0, Math.round(kw.gap * 100))} cm</b>`);
+  for (const [k, label] of [['left', 'Left'], ['right', 'Right']] as const) if (sim.gaps[k] < 3) out.push(`<span>${label}</span><b>${sim.gaps[k] < 1 ? Math.round(sim.gaps[k] * 100) + ' cm' : sim.gaps[k].toFixed(2) + ' m'}</b>`);
+  return out.join('');
 }
 

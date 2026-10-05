@@ -8,9 +8,10 @@ import { ATTO2, GARAGE_561 } from '../src/core/content';
 import { solve } from '../src/core/generator/level';
 import { draft } from '../src/core/generator/templates';
 import { COURSE, afterTry, checkPass, freshState, loadLesson, type Lesson, type LessonDef } from '../src/core/lesson';
+import { DEG } from '../src/core/math';
 import { exactCheck, fieldFor, moves, planToBay, type Piece } from '../src/core/planner';
 import { makeScene } from '../src/core/scene';
-import { STEP } from '../src/core/replay';
+import { Recorder, STEP, replayTo, restoreState, stateOf } from '../src/core/replay';
 import { Sim, type ParkedResult } from '../src/core/sim';
 
 const V = ATTO2, LOCK = [-1, 0, 1];
@@ -34,17 +35,20 @@ function parkedAtEnd(L: Lesson): ParkedResult | null {
 }
 
 describe('lesson routes', () => {
-  it('six lessons to drive, four still to come, numbered 1 to 10', () => {
-    expect(LESSONS.map(l => l.n)).toEqual([3, 4, 5, 6, 7, 10]);
+  it('ten lessons to drive, numbered 1 to 10', () => {
+    expect(LESSONS.map(l => l.n)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     expect(COURSE.lessons.map(l => l.n)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     for (const l of COURSE.lessons) for (const p of [...(l.explain ?? []), ...Object.values(l.tips ?? {})]) for (const s of p.sources ?? []) expect(COURSE.sources[s], `${l.id}: ${s}`).toBeDefined();
   });
   for (const def of LESSONS) {
-    it(`${def.n} ${def.title}: the planner still finds the stored route, and it passes`, () => {
+    it(`${def.n} ${def.title}: ${def.route!.authored ? 'the written route' : 'the planner still finds the stored route, and it'} passes`, () => {
       const L = loadLesson(V, def), sc = def.scene!;
       // the planner with the wheel at full lock or straight, from the same place: the route stored in course.json
-      let planned: Piece[];
-      if ('garage' in sc) planned = planToBay(V, GARAGE_561, GARAGE_561.starts[sc.start], sc.garage, { lvls: LOCK }).pieces;
+      // (a route written for the lesson, like the cone course, only has to clear everything and pass)
+      let planned: Piece[] = L.route;
+      if (def.route!.authored) { /* written, not planned */ }
+      else if ('garage' in sc) planned = planToBay(V, GARAGE_561, GARAGE_561.starts[sc.start], sc.garage, { lvls: LOCK }).pieces;
+      else if ('build' in sc) planned = planToBay(V, L.scene, L.route[0].from, L.bay, { lvls: LOCK, maxNodes: 60000 }).pieces;
       else {
         const d = draft(V, sc.template, sc.level, sc.seed), K = sc.kerbGap;
         if (K !== undefined) d.goals = d.goals.filter(g => Math.abs(g.z - (-K - V.W / 2)) < 1e-6);   // the kerb is at z = 0
@@ -249,4 +253,53 @@ describe('help that steps back', () => {
     expect(checkPass({ ...r, hits: 1 }, { kerb: 0.3 }, L.par).lines[0]).toEqual({ ok: false, text: '1 touch: a pass needs a clean run' });
     expect(moves(L.route)).toBe(L.par);
   });
+});
+
+describe('the coach on long turns and in a lane', () => {
+  it('a U-turn is measured the long way round: at its start the mark is the whole 180° arc away', () => {
+    const L = loadLesson(V, LESSONS.find(l => l.id === 'how-a-car-turns')!), S = stepsOf(L), sim = newSim(L), run = new CoachRun(V, S, () => sim.options.lockDeg);
+    const p = S[1].from; sim.place(p.x, p.z, p.th); run.k = 1; run.phase = 'drive'; run.observe(sim);
+    expect(Math.abs(S[1].turn) / DEG).toBeGreaterThan(179);
+    expect(run.left).toBeCloseTo(S[1].len, 2);
+  });
+  it('leaving: parked in the space does not count; out in the lane, straight, does', () => {
+    const L = loadLesson(V, LESSONS.find(l => l.id === 'leaving')!), sim = newSim(L);
+    expect(L.bay).toBe('exit'); expect(sim.step(STEP).some(e => e.type === 'parked')).toBe(false);
+    const r = parkedAtEnd(L)!;
+    expect(r.kind).toBe('exit'); expect(Math.abs(r.angle)).toBeLessThan(3);
+  });
+});
+
+describe('rewind', () => {
+  /** A guided try driven by a hand that only does what the coach shows, step by step, with everything recorded. */
+  function rig(L: Lesson) {
+    const sim = newSim(L), S = stepsOf(L), rec = new Recorder();
+    const r = { sim, S, rec, run: new CoachRun(V, S, () => sim.options.lockDeg), tr: new Tracker(), steps: (n: number) => {
+      for (let i = 0; i < n; i++) {
+        const run = r.run, st = run.step;
+        if (st) { const d = run.wheelWant() - sim.wheelAngle; sim.input.wheelHeld = true; sim.wheelAngle += Math.sign(d) * Math.min(Math.abs(d), 360 * STEP); }
+        const g = run.gate({ fwd: run.phase === 'drive' && st?.dir === 1, rev: run.phase === 'drive' && st?.dir === -1 }, sim);
+        sim.input.fwd = g.fwd; sim.input.rev = g.rev;
+        rec.before(sim); sim.step(STEP); rec.after(sim); r.tr.add(sim); run.observe(sim);
+      }
+    } };
+    rec.begin(sim); r.tr.add(sim);
+    return r;
+  }
+  const look = (r: ReturnType<typeof rig>) => ({ x: r.sim.x, z: r.sim.z, th: r.sim.th, v: r.sim.v, wheel: r.sim.wheelAngle, moves: r.sim.moves, k: r.run.k, phase: r.run.phase, track: r.tr.pts.length });
+  for (const id of ['parallel-big', 'garage']) {
+    it(`${id}: going back 5 s and driving on again ends exactly where never going back does`, () => {
+      const L = loadLesson(V, LESSONS.find(l => l.id === id)!);
+      const a = rig(L); a.steps(1500);
+      const b = rig(L); b.steps(1200);
+      // back 300 steps: replay the recording to there, rebuilding the coach and the path as it goes
+      const n = b.rec.rec!.steps - 300, run = new CoachRun(V, b.S, () => b.sim.options.lockDeg), tr = new Tracker();
+      const p = replayTo(b.rec.rec!, L.scene, V, n, s => run.sync(s), s => { tr.add(s); run.observe(s); });
+      restoreState(b.sim, stateOf(p)); b.rec.truncate(n, b.sim);
+      Object.assign(b, { run, tr });
+      b.steps(600);
+      expect(look(b)).toEqual(look(a));
+      expect(b.rec.rec!.steps).toBe(1500);
+    });
+  }
 });

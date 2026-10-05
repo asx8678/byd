@@ -8,7 +8,7 @@ export interface Stars { clean: boolean; neat: boolean; efficient: boolean; coun
 
 export function starsFor(r: ParkedResult, par: number, timeLimit: number): Stars {
   const clean = r.hits === 0;
-  const neat = Math.abs(r.angle) <= NEAT.angle && (r.kind === 'kerb' ? r.kerbGap <= NEAT.kerb : Math.abs(r.offCentre) <= NEAT.centre);
+  const neat = Math.abs(r.angle) <= NEAT.angle && (r.kind === 'kerb' ? r.kerbGap <= NEAT.kerb : r.kind === 'exit' || Math.abs(r.offCentre) <= NEAT.centre);
   const efficient = r.moves <= par + 1 && r.elapsed <= timeLimit;
   return { clean, neat, efficient, count: +clean + +neat + +efficient };
 }

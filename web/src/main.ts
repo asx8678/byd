@@ -1,14 +1,14 @@
 // Atto 2 Garage Trainer: wires the simulation (core/) to the screen (ui/) and runs the frame loop.
 // You play your garage, a generated level or a lesson; all run on the same simulation, which loads the scene.
 import './style.css';
-import { CoachRun, Tracker, feedback, stepsFor, timingCause, type CoachEvent, type Feedback, type Step } from './core/coach';
+import { CoachRun, Tracker, feedback, stepsFor, timingCause, type CoachEvent, type CoachSnap, type Feedback, type Step } from './core/coach';
 import { GARAGE_561 } from './core/content';
 import { generate, parseKey, timeLimit, type Level } from './core/generator/level';
 import type { TemplateId } from './core/generator/templates';
 import { COURSE, HELP, afterTry, checkPass, endHint, lessonById, loadLesson, type Lesson, type LessonDef, type LessonState } from './core/lesson';
 import { DEG, clamp, wrapPi, type Pt } from './core/math';
 import { moves, planBack, planToBay, sample, type Piece, type Plan, type Pose, type RoutePoint } from './core/planner';
-import { Recorder, STEP, playback } from './core/replay';
+import { Recorder, STEP, playback, replayTo, restoreState, stateOf as simState } from './core/replay';
 import { starsFor } from './core/score';
 import { Sim, type ParkedResult, type SimEvent } from './core/sim';
 import { beep, updateBeeper } from './ui/audio';
@@ -39,6 +39,10 @@ let guide: (Guide & { times: number[]; t0: number; watch: boolean }) | null = nu
 // a try ends once the car has sat parked, still, for a moment: then its result is read from where it settled
 const SETTLE = 1.0;
 let settledT = 0, tryOver = false;
+// Rewind: back 5 s by replaying this try's recording to then. A try with a rewind is practice (no stars saved, a lesson
+// try counts neither way).
+const REWIND = 300;
+let tryRewound = false;
 // the game's clock (ms); browser checks run the frame loop by hand and move it on (pump, harness builds only)
 let clockOffset = 0;
 const clock = () => performance.now() + clockOffset;
@@ -54,6 +58,8 @@ interface LessonPlay {
   watching: boolean;       // the ghost is showing the route
   over: boolean;           // this try has its result
   track: Pt[] | null; drift: Pt | null;   // after a try: your path, and where it first drifted 30 cm
+  rewound: boolean;        // this try went back in time: practice
+  mark0: { coach: CoachSnap | null; track: number };   // the coach and the path when the recording last began, for rewinding
 }
 let lesson: LessonPlay | null = null;
 
@@ -73,6 +79,11 @@ function afterPaint(f: () => void): void {
   requestAnimationFrame(() => setTimeout(go, 0)); setTimeout(go, 150);
 }
 
+/** Start recording from the car as it is; in a lesson, remember the coach and the path too, for a rewind. */
+function beginRecording(): void {
+  recorder.begin(sim);
+  if (lesson) lesson.mark0 = { coach: lesson.run?.snapshot() ?? null, track: lesson.tracker.pts.length };
+}
 function setRoute(route: Piece[]): void { parRoute = route; par = route.length ? moves(route) : 0; limit = route.length ? timeLimit(route) : 0; setPar(par); }
 function garagePar(): void {
   const s = GARAGE_561.starts[settings.start] ?? GARAGE_561.starts[GARAGE_561.defaultStart], p = planToBay(sim.vehicle, GARAGE_561, s, settings.bay);
@@ -82,8 +93,8 @@ function garagePar(): void {
 function resetCar(): void {
   if (lesson) { startTry(); return; }
   stopReplay(); hideGuide(); hideResult(); applySettings();
-  sim.reset(level ? 'start' : settings.start); forgetPrediction(); recorder.begin(sim); clearPedals();
-  settledT = 0; tryOver = false;
+  sim.reset(level ? 'start' : settings.start); forgetPrediction(); beginRecording(); clearPedals();
+  settledT = 0; tryOver = false; tryRewound = false;
   const parText = par ? ` Par: ${par} ${par === 1 ? 'move' : 'moves'}.` : '';
   if (level) { showBanner('', levelName(level), sim.scene.starts.start.label + parText, null, 7000); return; }
   const from = (sim.scene.starts[settings.start] ?? sim.scene.starts[sim.scene.defaultStart]).label;
@@ -120,7 +131,7 @@ function enterLesson(id: string, then: 'card' | 'drive' = 'card'): void {
   stopReplay(); hideGuide(); closeSheets();
   const L = loadLesson(sim.vehicle, def);
   level = null;
-  lesson = { L, steps: stepsFor(sim.vehicle, L.scene, L.bay, L.route, picksOf(def)), routePts: sample(sim.vehicle, L.route, 0.1), st: stateOf(id), run: null, tracker: new Tracker(), fault: '', fb: null, summoned: false, watching: false, over: false, track: null, drift: null };
+  lesson = { L, steps: stepsFor(sim.vehicle, L.scene, L.bay, L.route, picksOf(def)), routePts: sample(sim.vehicle, L.route, 0.1), st: stateOf(id), run: null, tracker: new Tracker(), fault: '', fb: null, summoned: false, watching: false, over: false, track: null, drift: null, rewound: false, mark0: { coach: null, track: 0 } };
   sim.load(L.scene); setRoute(L.route); setPlaying(`lesson:${id}`);
   snapView(); startTry(); refreshLevels();
   if (then === 'card') lessonCard();
@@ -136,11 +147,12 @@ function lessonCard(): void {
 /** A new try from the lesson's start, with as much help as you are at. */
 function startTry(): void {
   const ls = lesson!; stopReplay(); hideGuide(); hideResult(); applySettings();
-  const s = ls.L.route[0].from; sim.resetAt(s.x, s.z, s.th); forgetPrediction(); recorder.begin(sim); clearPedals();
-  settledT = 0; tryOver = false;
-  Object.assign(ls, { fault: '', fb: null, summoned: false, watching: false, over: false, track: null, drift: null });
+  const s = ls.L.route[0].from; sim.resetAt(s.x, s.z, s.th); forgetPrediction(); clearPedals();
+  settledT = 0; tryOver = false; tryRewound = false;
+  Object.assign(ls, { fault: '', fb: null, summoned: false, watching: false, over: false, track: null, drift: null, rewound: false });
   ls.tracker.reset(); ls.tracker.add(sim);
   ls.run = ls.st.help <= 1 ? new CoachRun(sim.vehicle, ls.steps, () => sim.options.lockDeg, ls.st.help === 1) : null;
+  beginRecording();
   const h = ls.st.help, def = ls.L.def;
   const how = h === 0 ? 'Set the wheel as the card says, then hold the pedal: the coach keeps you at walking pace and stops you on each mark.'
     : h === 1 ? 'Only the marks now: stop on each one yourself, then set the wheel for the next.'
@@ -166,13 +178,13 @@ function backToMark(): void {
   const ls = lesson, run = ls?.run; if (!ls || !run) return;
   const { pose, wheel } = run.backToMark();
   sim.place(pose.x, pose.z, pose.th); sim.v = 0; sim.wheelAngle = wheel; sim.wheelTarget = null; sim.inContact = false;
-  clearPedals(); forgetPrediction(); recorder.begin(sim); ls.tracker.reset(); ls.tracker.add(sim);
+  clearPedals(); forgetPrediction(); ls.tracker.reset(); ls.tracker.add(sim); beginRecording();
   showBanner('', 'Back on the mark', 'This try no longer counts as a pass. Carry on for practice, or start again.', null, 3500);
 }
 bindCard({
   back: backToMark,
   restart: () => startTry(),
-  summon: () => { const ls = lesson; if (!ls) return; ls.summoned = true; ls.run = new CoachRun(sim.vehicle, ls.steps, () => sim.options.lockDeg, true); ls.run.jumpTo(sim); },
+  summon: () => { const ls = lesson; if (!ls) return; ls.summoned = true; ls.run = new CoachRun(sim.vehicle, ls.steps, () => sim.options.lockDeg, true); ls.run.jumpTo(sim); beginRecording(); },
   slow: () => { const ls = lesson; if (!ls) return; ls.st = { ...ls.st, slow: false }; setState(ls.L.def.id, ls.st); },
 });
 bindCourse({ open: id => enterLesson(id, 'card'), tab: () => refreshLevels() });
@@ -195,13 +207,13 @@ function finishTry(r: ParkedResult | null): void {
   const def = ls.L.def, rule = def.pass ?? {}, triedAt = ls.st.help, test = triedAt === 3;
   const chk = r ? checkPass(r, rule, ls.L.par) : { pass: false, lines: [{ ok: false, text: 'Not in the space' }] };
   if (ls.fault === 'missed') chk.lines.push({ ok: false, text: 'The coach had to stop you at a mark' });
-  const pass = chk.pass && !ls.fault;
+  const pass = chk.pass && !ls.fault, practice = ls.rewound;
   // what to work on: the first place the try left the route by 30 cm and why; failing without that (or with no clear
   // why), the switch whose timing moved the finish most; failing that, what the result missed
   let fb = pass ? null : (ls.fb ?? feedback(sim.vehicle, ls.L.route, ls.steps, ls.tracker.pts));
   if (fb && (!fb.at || fb.text.startsWith('You drifted'))) fb = timingCause(sim.vehicle, ls.L.route, ls.steps, ls.tracker.pts) ?? (fb.at ? fb : { ...fb, text: (r && endHint(r, rule, ls.L.par)) ?? fb.text });
   const stars = test && r ? starsFor(r, ls.L.par, ls.L.limit) : null;
-  const { state, change } = afterTry(ls.st, pass);
+  const { state, change } = practice ? { state: { ...ls.st }, change: null } : afterTry(ls.st, pass);
   const better = !!stars && pass && stars.count > state.best;
   if (better) state.best = stars!.count;
   state.focus = fb?.step ?? 0;
@@ -215,8 +227,8 @@ function finishTry(r: ParkedResult | null): void {
   setTimeout(() => {
     if (lesson !== ls || !ls.over) return;
     showLessonResult(r, {
-      title: change === 'done' ? `Lesson ${def.n} complete` : pass ? 'Pass' : 'Not a pass yet', sub: `Lesson ${def.n} · ${def.title} · ${HELP[triedAt].name}`,
-      pass, test, stars, better, lines: chk.lines, feedback: fb?.text ?? null, change: changeText,
+      title: practice ? 'Practice try (rewound)' : change === 'done' ? `Lesson ${def.n} complete` : pass ? 'Pass' : 'Not a pass yet', sub: `Lesson ${def.n} · ${def.title} · ${HELP[triedAt].name}`,
+      pass, test, stars, better, lines: chk.lines, feedback: fb?.text ?? null, change: practice ? 'A try with a rewind is practice: it counts neither way.' : changeText,
       retry: () => startTry(), watch: () => { hideResult(); startWatch(); }, course: () => { courseTab(); refreshLevels(); openSheet('sheetLevels'); },
       next: state.done && next ? () => enterLesson(next.id, 'card') : null,
     });
@@ -228,7 +240,7 @@ bindControls(sim, {
   levels: refreshLevels,
   settingChanged: key => {
     if (key === 'start' || key === 'bay') { if (level || lesson) playGarage(); else { garagePar(); resetCar(); } }
-    else { applySettings(); if (!replay) recorder.begin(sim); }
+    else { applySettings(); if (!replay && (key === 'steer' || key === 'center')) beginRecording(); }   // only these change how the car steps
   },
 });
 
@@ -282,8 +294,8 @@ btnReplay.addEventListener('click', () => { if (replay) { stopReplay(); showBann
 /** Parked and settled: the stars, a new best if it is one, and the result card with where to go next. */
 function parked(r: ParkedResult): void {
   const st = starsFor(r, par || r.moves, limit || Infinity), L = level;
-  const better = recordStars(L ? `${L.template}:${L.level}` : garageSlot(), st.count) && st.count > 0;
-  showBanner('good', `Parked · ${'★'.repeat(st.count)}${'☆'.repeat(3 - st.count)}`, st.count === 3 ? 'Three stars: clean, neat and efficient.' : 'The card below says what each star needs.', null, 3000);
+  const better = !tryRewound && recordStars(L ? `${L.template}:${L.level}` : garageSlot(), st.count) && st.count > 0;
+  showBanner('good', `Parked · ${'★'.repeat(st.count)}${'☆'.repeat(3 - st.count)}`, tryRewound ? 'After a rewind: stars shown, not saved.' : st.count === 3 ? 'Three stars: clean, neat and efficient.' : 'The card below says what each star needs.', null, 3000);
   setTimeout(() => {
     if (!sim.parked || replay) return;   // drove off again, or started a replay
     showResult(r, st, L ? {
@@ -296,6 +308,29 @@ function parked(r: ParkedResult): void {
     });
   }, 500);
 }
+
+const canRewind = (): boolean => {
+  const rec = recorder.rec;
+  return !!rec && rec.steps >= 30 && !replay && !tryOver && !(lesson && (lesson.over || lesson.watching || lesson.st.help === 3));
+};
+/** Back 5 s: replay this try's recording to then on a second simulation, rebuilding the coach and your path as it
+ *  goes (exactly as they were), and carry on from there. */
+function rewind(): void {
+  if (!canRewind()) return;
+  const rec = recorder.rec!, n = Math.max(0, rec.steps - REWIND), ls = lesson;
+  let run: CoachRun | null = null;
+  if (ls) {
+    run = ls.run ? new CoachRun(sim.vehicle, ls.steps, () => sim.options.lockDeg, ls.run.passive) : null;
+    if (run && ls.mark0.coach) run.restore(ls.mark0.coach);
+    ls.tracker.pts.length = Math.min(ls.tracker.pts.length, ls.mark0.track);
+  }
+  const p = replayTo(rec, sim.scene, sim.vehicle, n, s => run?.sync(s), s => { ls?.tracker.add(s); run?.observe(s); });
+  restoreState(sim, simState(p)); clearPedals(); recorder.truncate(n, sim); forgetPrediction();
+  if (ls) { ls.run = run; ls.rewound = true; }
+  tryRewound = true; settledT = 0;
+  showBanner('', 'Back 5 seconds', ls ? 'Try that bit again. A try with a rewind is practice: it counts neither way.' : 'Try that bit again. Stars after a rewind are shown but not saved.', null, 3500);
+}
+$('btnRewind').addEventListener('click', rewind);
 
 function handle(events: SimEvent[]): void {
   for (const e of events) {
@@ -329,10 +364,17 @@ function layout(): void { layoutPdc(layoutPlan(stage)); }
 function resize(): void { screen.dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR); layout(); snapView(); }
 window.addEventListener('resize', resize); window.addEventListener('orientationchange', () => setTimeout(resize, 200));
 
-/** The lesson on the screen: the card, and the route, marks and your path on the plan. */
+/** The lesson on the screen: the card, and the route, marks and your path on the plan. Outside lessons, the ideal
+ *  path layer: the route that set par and where each of its moves ends. */
+let ghostOf: Piece[] | null = null;
 function drawLesson(): string {
   const ls = lesson;
-  if (!ls) return '';
+  if (!ls) {
+    const want = settings.layerGhost === 'on' && parRoute.length ? parRoute : null;
+    if (want !== ghostOf) { ghostOf = want; setCoachDraw(want ? { route: sample(sim.vehicle, want, 0.1), marks: want.map(p => p.to), from: 0, cur: null, track: null, drift: null } : null); }
+    return want ? 'ghost' : '';
+  }
+  ghostOf = null;
   const run = ls.run, h = ls.st.help, coachOn = !!run && (!run.passive || ls.summoned), marksOn = !!run && run.phase !== 'missed' && run.phase !== 'done' && !ls.over;
   const watchK = ls.watching && guide ? guide.pts[Math.min(guide.at, guide.pts.length - 1)].i : -1;
   setCoachDraw({
@@ -379,7 +421,9 @@ function tick(now: number): void {
   }
   updateBeeper(S, now / 1000); updatePdcDisplay(S, now / 1000, screen.dpr);
   const lsSig = replay ? '' : drawLesson();
-  const sig = [S.x.toFixed(4), S.z.toFixed(4), S.th.toFixed(5), S.wheelAngle.toFixed(1), S.v.toFixed(3), S.input.fwd, S.input.rev, settings.planView, !!replay, guide ? guide.at : -1, S.scene.id, lsSig].join('|');
+  const rw = $('btnRewind'), canRw = canRewind(); if (rw.hidden === canRw) rw.hidden = !canRw;
+  const layers = settings.layerPath + settings.layerPivot + settings.layerSwept + settings.layerKerb + settings.layerNums;
+  const sig = [S.x.toFixed(4), S.z.toFixed(4), S.th.toFixed(5), S.wheelAngle.toFixed(1), S.v.toFixed(3), S.input.fwd, S.input.rev, settings.planView, !!replay, guide ? guide.at : -1, S.scene.id, lsSig, layers].join('|');
   if (sig === lastSig && now > wakeUntil && now - lastDrawT < 1000) return;
   lastSig = sig; lastDrawT = now;
   updateHud(S); drawPlan(S, now / 1000, dt, screen.dpr);
@@ -398,7 +442,7 @@ function start(saved: Saved = {}): void {
     resetCar(); refreshLevels();
     if (typeof saved.x === 'number' && typeof saved.z === 'number' && typeof saved.th === 'number' && saved.scene === sim.scene.id && saved.layout === sim.scene.layoutVersion && !sim.touching(saved.x, saved.z, saved.th)) {
       sim.place(saved.x, saved.z, saved.th); sim.wheelAngle = saved.wheelAngle || 0; sim.hits = saved.hits || 0; sim.elapsed = saved.elapsed || 0; sim.moves = saved.moves || 0;
-      recorder.begin(sim);
+      beginRecording();
     }
   }
   resize(); setTimeout(layout, 300); setTimeout(layout, 1500);

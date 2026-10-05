@@ -59,6 +59,7 @@ const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).
 /** The measurements under a result: tyres to the kerb in a kerb space, centring and gaps in a bay. */
 export const statsFor = (r: ParkedResult): [string, string][] => r.kind === 'kerb'
   ? [['Tyres to kerb', fmtD(r.kerbGap)], ['Angle', `${Math.abs(r.angle).toFixed(1)}°`], ['Moves', String(r.moves)], ['Gap ahead', fmtD(r.gapFront)], ['Gap behind', fmtD(r.gapRear)], ['Time', mmss(r.elapsed)]]
+  : r.kind === 'exit' ? [['Angle', `${Math.abs(r.angle).toFixed(1)}°`], ['Moves', String(r.moves)], ['Touches', String(r.hits)], ['Gap ahead', fmtD(r.gapFront)], ['Gap behind', fmtD(r.gapRear)], ['Time', mmss(r.elapsed)]]
   : parkedCard(r).stats;
 
 /** The result card: the stars, one line per star, the measurements, and Try again / New layout / Next. */

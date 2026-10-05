@@ -22,7 +22,7 @@ export interface Recording {
   format: 1; scene: string; vehicle: string; dt: number;
   start: StartState; options: SimOptions; steps: number; events: RecEvent[];
 }
-const stateOf = (s: Sim): StartState => ({
+export const stateOf = (s: Sim): StartState => ({
   x: s.x, z: s.z, th: s.th, v: s.v, wheelAngle: s.wheelAngle, wheelTarget: s.wheelTarget, holdT: s.holdT, time: s.time, lastDriveT: s.lastDriveT,
   hits: s.hits, elapsed: s.elapsed, started: s.started, parked: s.parked, inContact: s.inContact, lastMoveDir: s.lastMoveDir, moves: s.moves, moveSign: s.moveSign, input: { ...s.input },
 });
@@ -50,6 +50,37 @@ export class Recorder {
     if (!this.rec) return;
     this.rec.steps++; this.last = snap(sim);
   }
+  /** Rewind: keep only the first n steps, and carry on recording from the car as it now is (put back to step n). */
+  truncate(n: number, sim: Sim): void {
+    if (!this.rec) return;
+    this.rec.steps = n; this.rec.events = this.rec.events.filter(e => e[0] < n); this.last = snap(sim);
+  }
+}
+
+/** Put a simulation into a recorded state (the car, its timers and counters, and what is held). */
+export function restoreState(sim: Sim, st: StartState): void {
+  const { input, ...rest } = st;
+  Object.assign(sim, rest); Object.assign(sim.input, input);
+}
+
+/**
+ * Play a recording's first n steps on a fresh simulation, calling before(sim) once each step's inputs are applied
+ * and after(sim) once it has stepped: what a coach or a path tracker needs to be rebuilt along with the car.
+ */
+export function replayTo(rec: Recording, scene: Scene, vehicle: Vehicle, n: number, before?: (sim: Sim) => void, after?: (sim: Sim) => void): Sim {
+  const sim = new Sim(scene, vehicle);
+  Object.assign(sim.options, rec.options); restoreState(sim, rec.start);
+  for (let i = 0, e = 0; i < Math.min(n, rec.steps); i++) {
+    for (; e < rec.events.length && rec.events[e][0] === i; e++) {
+      const [, k, val] = rec.events[e];
+      if (k === 'wheel') sim.wheelAngle = val as number;
+      else if (k === 'target') sim.wheelTarget = val as number | null;
+      else if (k === 'held') sim.input.wheelHeld = val as boolean;
+      else sim.input[k] = val as boolean;
+    }
+    before?.(sim); sim.step(rec.dt); after?.(sim);
+  }
+  return sim;
 }
 
 /** A fresh simulation set up at the recording's start, and a function that plays it one step at a time. */

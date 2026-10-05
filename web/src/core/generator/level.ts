@@ -67,11 +67,11 @@ const INTRO: Record<TemplateId, string> = {
 };
 
 /** The whole level in view: the route, the space and a margin, inside the lot. */
-export function areaOf(v: Vehicle, scene: Scene, route: Piece[]): Rect {
+export function areaOf(v: Vehicle, scene: Scene, route: Piece[], bay = scene.defaultBay): Rect {
   let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
   const add = (x: number, z: number) => { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); };
   for (const p of sample(v, route, 0.5)) { add(p.x - 1.2, p.z - 1.2); add(p.x + 1.2, p.z + 1.2); add(p.x + (v.L - v.OVR) * Math.cos(p.th), p.z - (v.L - v.OVR) * Math.sin(p.th)); }
-  const bx = bayBox(scene.bays[scene.defaultBay]); add(bx[0], bx[2]); add(bx[1], bx[3]);
+  const bx = bayBox(scene.bays[bay]); add(bx[0], bx[2]); add(bx[1], bx[3]);
   const [lx0, lx1, lz0, lz1] = scene.lot!;
   return [Math.max(lx0, x0 - 1.5), Math.min(lx1, x1 + 1.5), Math.max(lz0, z0 - 1.5), Math.min(lz1, z1 + 1.5)];
 }

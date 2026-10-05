@@ -3,6 +3,7 @@
 import course from '../../content/lessons/course.json';
 import { GARAGE_561 } from './content';
 import { areaOf, timeLimit } from './generator/level';
+import { lessonScene, type LessonSceneId } from './generator/lessonScenes';
 import { draft, type TemplateId } from './generator/templates';
 import { drive, moves, type Piece, type Pose } from './planner';
 import { makeScene, type Scene } from './scene';
@@ -16,8 +17,9 @@ export interface Para { text: string; sources?: string[]; cue?: { part?: string;
 export interface PassRule { angle?: number; centre?: number; kerb?: number; moves?: 'par+1'; face?: 'in' | 'out' }
 export interface LessonDef {
   id: string; n: number; title: string; learn: string; soon?: boolean;
-  scene?: { template: TemplateId; level: number; seed: number; kerbGap?: number } | { garage: string; start: string };
-  route?: { start: number[]; pieces: number[][] };
+  scene?: { template: TemplateId; level: number; seed: number; kerbGap?: number } | { garage: string; start: string } | { build: LessonSceneId; level?: number; seed?: number };
+  /** authored: written for the lesson (a cone course), not found by the planner. */
+  route?: { start: number[]; pieces: number[][]; authored?: boolean };
   explain?: Para[]; tips?: Record<string, Para>; pass?: PassRule;
 }
 export interface Course { format: 1; sources: Record<string, Source>; lessons: LessonDef[] }
@@ -39,6 +41,13 @@ export function storedRoute(v: Vehicle, r: NonNullable<LessonDef['route']>): Pie
 export function loadLesson(v: Vehicle, def: LessonDef): Lesson {
   const route = storedRoute(v, def.route!), s = route[0].from, sc = def.scene!;
   if ('garage' in sc) return { def, scene: GARAGE_561, bay: sc.garage, route, par: moves(route), limit: timeLimit(route) };
+  if ('build' in sc) {
+    const B = lessonScene(v, sc.build, sc.level, sc.seed);
+    B.spec.starts = { start: { x: s.x, z: s.z, th: s.th, label: def.learn } };
+    B.spec.areaView = areaOf(v, makeScene(B.spec), route, B.bay);
+    const scene = makeScene(B.spec);
+    return { def, scene, bay: B.bay, route, par: moves(route), limit: timeLimit(route) };
+  }
   const d = draft(v, sc.template, sc.level, sc.seed);
   d.spec.starts = { start: { x: s.x, z: s.z, th: s.th, label: def.learn } };
   d.spec.areaView = areaOf(v, makeScene(d.spec), route);

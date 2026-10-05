@@ -65,6 +65,9 @@ body{touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit
 #planPred{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:rgba(12,13,17,.78);padding:3px 7px;border-radius:6px}
 #planPred.bad{color:#ff8a7a}
 #planScale{flex:none;color:var(--muted);white-space:nowrap;text-shadow:0 1px 2px #000}
+#planNums{position:absolute;left:6px;background:rgba(12,13,17,.8);padding:4px 8px;border-radius:8px;font:600 12.5px/1.3 var(--font-num);font-variant-numeric:tabular-nums;white-space:nowrap;pointer-events:none;max-width:calc(100% - 120px);overflow:hidden;text-overflow:ellipsis}
+#planNums span{font:600 10px/1 var(--font-num);letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin:0 4px 0 0}
+#planNums b{font-weight:600;margin-right:9px}
 #planScale i{display:inline-block;height:0;border-bottom:2px solid var(--muted);margin-right:5px;vertical-align:middle}
 
 /* ---- bottom controls ---- */
@@ -196,3 +199,6 @@ kbd{font:500 12px var(--font-ui);background:rgba(255,255,255,.08);border:1px sol
 .resList li.tip i,.resList li.next i{color:var(--accent)}
 .resList li.lno i{color:var(--bad)}
 .resList li.lok i{color:var(--ok)}
+#btnRewind{pointer-events:auto;align-self:flex-end;margin-bottom:6px;font:600 13px/1 var(--font-num);letter-spacing:.05em;color:var(--fg);background:var(--panel);border:1px solid var(--panel-line);border-radius:999px;padding:10px 14px;cursor:pointer;backdrop-filter:blur(6px);white-space:nowrap}
+#btnRewind:active{background:rgba(255,255,255,.14)}
+#btnRewind:focus-visible{outline:2px solid var(--accent);outline-offset:2px}

@@ -1,6 +1,6 @@
 # Atto 2 Garage Trainer
 
-Practise parking a BYD Atto 2 nose-first into bay 561, then in generated levels: a row of bays entered nose first, the same reversing in, and parallel parking at a kerb, each from level 1 (roomy) to level 10 (tight). A course of lessons teaches each manoeuvre with a coach: watch the route, drive it guided step by step, then with less and less help, then a test. The screen is a plan: it draws the path the car takes at the current steering, an outline of the car every 0.8 m along it and, in red, where it would touch something first. It also has parking sensors with beeps, touch detection, a move counter against par, and a result card with three stars when you're parked.
+Practise parking a BYD Atto 2 nose-first into bay 561, then in generated levels: a row of bays entered nose first, the same reversing in, and parallel parking at a kerb, each from level 1 (roomy) to level 10 (tight). A course of ten lessons teaches each manoeuvre with a coach: watch the route, drive it guided step by step, then with less and less help, then a test. Learning layers (the path, the turning circles, the swept path of all four corners, the ideal path, a kerb close-up and the numbers) switch on in Setup, and ⟲ 5 s rewinds to try a step again. The screen is a plan: it draws the path the car takes at the current steering, an outline of the car every 0.8 m along it and, in red, where it would touch something first. It also has parking sensors with beeps, touch detection, a move counter against par, and a result card with three stars when you're parked.
 
 It runs in any modern browser on iPhone, Android and PC, and installs to the home screen as an app that works offline.
 
@@ -41,12 +41,14 @@ src/core/      the game itself, no browser code: easy to test, and the part to p
   sim.ts         Sim(scene, car): state, input, step(dt) → events (touch, parked)
   parking.ts     when a car counts as parked in a bay, and how neatly (shared by Sim, the planner and the stars)
   score.ts       three stars: nothing touched, neat, efficient (par + 1 moves, inside the time)
-  replay.ts      fixed 60 Hz steps; recording an attempt and playing it back
+  replay.ts      fixed 60 Hz steps; recording an attempt and playing it back; replaying to a step (rewind)
   field.ts       a 5 cm raster and distance field of the scene, for fast collision checks while planning
   planner.ts     route search (hybrid A*): into a bay from the car (planToBay), or outward from the
                  space back to the car (planBack, quicker for parallel parking); Show me, par, levels
   generator/     levels from (template, level, seed): templates.ts builds the scene, level.ts solves it
-                 outward from the parked poses, checks it with the exact collision test and measures it
+                 outward from the parked poses, checks it with the exact collision test and measures it;
+                 lessonScenes.ts builds the lessons' own scenes (cone course, swept-path U-turn, leaving a
+                 tight space with an exit lane, 60° angled bays)
   coach.ts       a route as steps said with what you see ("until your mirror is 55 cm short of the near
                  line"); CoachRun, which follows a try (guided: the wheel first, walking pace, brakes on the
                  mark; marks that follow the car so earlier errors are taken out); and the feedback after a
@@ -98,6 +100,8 @@ The other tests check that:
 - a driver who does only what the coach shows passes every lesson: guided (also with the wheel 4° off, letting go early or turning the wheel slowly) and with cue marks only (also reacting late)
 - the feedback names an early or late turn, a stop too soon or too far before reversing, a wheel short of full lock or coming off it, an extra move, and (for a parallel park that misses by a little) the switch that caused it, in degrees
 - two passes lower the help, two fails raise it with slow motion, and a pass in the test finishes the lesson
+- a U-turn is measured the long way round, and leaving a space only counts once the car is out in the lane, straight
+- going back 5 s and driving on again ends exactly where never going back does, coach and path included
 
 ## Porting to Swift later
 

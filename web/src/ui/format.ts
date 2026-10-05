@@ -7,7 +7,7 @@ export const steerText = (sd: number): string => Math.abs(sd) < 0.5 ? '0°' : Ma
 export function parkedCard(r: ParkedResult): { title: string; text: string; stats: [string, string][] } {
   const m = Math.floor(r.elapsed / 60), s = Math.floor(r.elapsed % 60);
   return {
-    title: `Parked in ${r.bay}` + (r.noseIn ? '' : ' (reversed in)'),
+    title: r.kind === 'exit' ? 'Out of the space' : `Parked in ${r.bay}` + (r.noseIn ? '' : ' (reversed in)'),
     text: r.hits ? `${r.hits} touch${r.hits > 1 ? 'es' : ''} on the way in. Try again for a clean run.` : 'Clean run, nothing touched.',
     stats: [
       ['Off centre', `${Math.abs(r.offCentre * 100).toFixed(0)} cm ${r.offCentre > 0 ? 'right' : 'left'}`], ['Angle', `${Math.abs(r.angle).toFixed(1)}°`], ['Gap to wall', fmtD(r.gapWall)],

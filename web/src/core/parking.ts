@@ -42,11 +42,12 @@ export interface Placement { offCentre: number; angle: number; kerbGap: number }
 export function placement(v: Vehicle, b: Bay, kerbs: readonly Kerb[], x: number, z: number, th: number, at: InBay): Placement {
   const cs = Math.cos(th), cx = x + (v.WB / 2) * cs;
   return {
-    offCentre: (at.noseIn ? 1 : -1) * (cx - (b.x0 + b.x1) / 2), angle: (at.noseIn ? at.errIn : at.errOut) / DEG,
+    offCentre: b.kind === 'exit' ? 0 : (at.noseIn ? 1 : -1) * (cx - (b.x0 + b.x1) / 2), angle: (at.noseIn ? at.errIn : at.errOut) / DEG,
     kerbGap: b.kind === 'kerb' ? tyreGap(v, kerbs, x, z, th) : Infinity,
   };
 }
 
-/** Neatly parked: within 3° of straight, and centred within 15 cm in a bay or the tyres within 30 cm of the kerb. */
+/** Neatly parked: within 3° of straight, and centred within 15 cm in a bay or the tyres within 30 cm of the kerb
+ *  (out in the lane after leaving a space, straight is enough). */
 export const NEAT = { angle: 3, centre: 0.15, kerb: 0.30 };
-export const isNeat = (b: Bay, p: Placement): boolean => Math.abs(p.angle) <= NEAT.angle && (b.kind === 'kerb' ? p.kerbGap <= NEAT.kerb : Math.abs(p.offCentre) <= NEAT.centre);
+export const isNeat = (b: Bay, p: Placement): boolean => Math.abs(p.angle) <= NEAT.angle && (b.kind === 'kerb' ? p.kerbGap <= NEAT.kerb : b.kind === 'exit' || Math.abs(p.offCentre) <= NEAT.centre);

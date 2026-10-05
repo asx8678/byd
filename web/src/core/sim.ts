@@ -18,7 +18,7 @@ export interface SimInput {
 
 export interface ParkedResult {
   bay: string; noseIn: boolean;
-  kind: 'bay' | 'kerb';
+  kind: 'bay' | 'kerb' | 'exit';
   offCentre: number;               // m, + to the right as you sit in the car
   angle: number;                   // degrees off straight
   gapWall: number; gapLeft: number; gapRight: number;   // m

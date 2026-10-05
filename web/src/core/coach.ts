@@ -5,7 +5,7 @@
 import { footprint } from './car';
 import { collides } from './collision';
 import { DEG, wrapPi, type Pt } from './math';
-import { tyreGap } from './parking';
+import { bayBox, tyreGap } from './parking';
 import { drive, sample, type Piece, type Pose } from './planner';
 import type { Obstacle, Scene } from './scene';
 import type { Sim } from './sim';
@@ -34,10 +34,13 @@ const unit = (th: number, d = 1): Pt => [d * Math.cos(th), -d * Math.sin(th)];
 /** Curvature of the rear axle's path, 1/m, + turning left (heading grows) when driving forward. */
 export const curvature = (v: Vehicle, lvl: number): number => Math.tan(-lvl * v.MAXSTEER * DEG) / v.WB;
 
-/** The parts of the car a driver lines up with things outside, in the rear-axle frame (x forward, z right). */
-function parts(v: Vehicle, side: 1 | -1): { name: string; x: number; z: number }[] {
+/** The parts of the car a driver lines up with things outside, in the rear-axle frame (x forward, z right).
+ *  Some only when a lesson asks for them by name (a handbook's own words): the front seat, the steering wheel. */
+function parts(v: Vehicle, side: 1 | -1): { name: string; x: number; z: number; asked?: boolean }[] {
   const m = v.mirrors[1], mx = m ? (m[0][0] + m[1][0]) / 2 : 0.7 * v.WB, mz = m ? (m[0][1] + m[2][1]) / 2 : v.W / 2;
   return [
+    { name: 'your front seat', x: 0.47 * v.WB, z: side * 0.37, asked: true },
+    { name: 'your steering wheel', x: 0.6 * v.WB, z: 0, asked: true },
     { name: 'your front bumper', x: v.WB + v.OVF, z: 0 },
     { name: 'your front wheel', x: v.WB, z: side * v.TRACK / 2 },
     { name: 'your mirror', x: mx, z: side * mz },
@@ -58,36 +61,39 @@ function endNear(o: Obstacle, x: number, z: number): Pt | null {
 
 /**
  * What there is to line up with: the target bay's side lines where they meet the aisle (near and far as you
- * arrive) and the lines of the bays either side, or for a space along a kerb the ends of the cars either side of it.
+ * arrive) and the lines of the bays either side; the ends of the cars either side of any space along a kerb (the end
+ * facing that space); and whatever the scene names itself.
  */
 export function landmarksOf(scene: Scene, bayId: string, approach: Pose): Landmark[] {
-  const b = scene.bays[bayId], out: Landmark[] = [];
-  if (b.kind === 'kerb') {
-    const cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2;
+  const b = scene.bays[bayId], out: Landmark[] = [...scene.landmarks];
+  for (const k of Object.values(scene.bays)) {
+    if (k.kind !== 'kerb') continue;
+    const cx = (k.x0 + k.x1) / 2, cz = (k.z0 + k.z1) / 2;
     for (const o of scene.obstacles) {
       const name = o.name === 'car in front of the space' ? 'the back of the car in front' : o.name === 'car behind the space' ? 'the front of the car behind' : '';
       const e = name ? endNear(o, cx, cz) : null;
       if (e) out.push({ name, x: e[0], z: e[1] });
     }
-  } else {
-    // bays open towards +z: the side lines meet the aisle at z1, the back line is z0
-    const [ux, uz] = unit(approach.th), ends: Pt[] = [[b.x0, b.z1], [b.x1, b.z1]];
-    ends.sort((p, q) => (p[0] * ux + p[1] * uz) - (q[0] * ux + q[1] * uz));
-    out.push({ name: 'the near line of the green bay', x: ends[0][0], z: ends[0][1] }, { name: 'the far line of the green bay', x: ends[1][0], z: ends[1][1] });
-    // the next painted line out on each side, where it meets the aisle
-    const W = b.x1 - b.x0, along = (x: number, z: number) => x * ux + z * uz, n0 = along(ends[0][0], ends[0][1]), n1 = along(ends[1][0], ends[1][1]);
-    let before: Pt | null = null, after: Pt | null = null;
-    for (const [x0, z0, x1, z1] of scene.lines) {
-      if (Math.abs(x0 - x1) > 0.05) continue;
-      const m: Pt | null = Math.abs(z0 - b.z1) < 0.15 ? [x0, z0] : Math.abs(z1 - b.z1) < 0.15 ? [x1, z1] : null;
-      if (!m) continue;
-      const a = along(m[0], m[1]);
-      if (a < n0 - 0.3 && a > n0 - 1.6 * W && (!before || a > along(before[0], before[1]))) before = m;
-      if (a > n1 + 0.3 && a < n1 + 1.6 * W && (!after || a < along(after[0], after[1]))) after = m;
-    }
-    if (before) out.push({ name: 'the line before the green bay', x: before[0], z: before[1] });
-    if (after) out.push({ name: 'the line after the green bay', x: after[0], z: after[1] });
   }
+  if ((b.kind ?? 'bay') !== 'bay') return out;
+  // bays open towards +z: a side line meets the aisle at its end with the larger z (the mouth can slant: angled bays)
+  const vertical = scene.lines.filter(([x0, , x1]) => Math.abs(x0 - x1) < 0.05).map(([x0, z0, x1, z1]): Pt => (z0 > z1 ? [x0, z0] : [x1, z1]));
+  const mouthEnd = (x: number): Pt => vertical.find(m => Math.abs(m[0] - x) < 0.05 && Math.abs(m[1] - b.z1) < 2) ?? [x, b.z1];
+  const [ux, uz] = unit(approach.th), ends = [mouthEnd(b.x0), mouthEnd(b.x1)];
+  ends.sort((p, q) => (p[0] * ux + p[1] * uz) - (q[0] * ux + q[1] * uz));
+  out.push({ name: 'the near line of the green bay', x: ends[0][0], z: ends[0][1] }, { name: 'the far line of the green bay', x: ends[1][0], z: ends[1][1] });
+  // the next painted line out on each side, where it meets the line of the mouths
+  const W = b.x1 - b.x0, along = (p: Pt) => p[0] * ux + p[1] * uz, n0 = along(ends[0]), n1 = along(ends[1]);
+  const slope = (ends[1][1] - ends[0][1]) / ((ends[1][0] - ends[0][0]) || 1), onMouths = (m: Pt) => Math.abs(m[1] - (ends[0][1] + slope * (m[0] - ends[0][0]))) < 0.3;
+  let before: Pt | null = null, after: Pt | null = null;
+  for (const m of vertical) {
+    if (!onMouths(m)) continue;
+    const a = along(m);
+    if (a < n0 - 0.3 && a > n0 - 1.6 * W && (!before || a > along(before))) before = m;
+    if (a > n1 + 0.3 && a < n1 + 1.6 * W && (!after || a < along(after))) after = m;
+  }
+  if (before) out.push({ name: 'the line before the green bay', x: before[0], z: before[1] });
+  if (after) out.push({ name: 'the line after the green bay', x: after[0], z: after[1] });
   return out;
 }
 
@@ -104,7 +110,7 @@ export function alignment(v: Vehicle, marks: readonly Landmark[], p: Pose, dir: 
     if (pick.mark && L.name !== pick.mark) continue;
     const side = (L.x - p.x) * rx + (L.z - p.z) * rz >= 0 ? 1 : -1;
     for (const P of parts(v, side)) {
-      if (pick.part && P.name !== pick.part) continue;
+      if ((pick.part && P.name !== pick.part) || (P.asked && pick.part !== P.name)) continue;
       const [px, pz] = footprint(p.x, p.z, p.th, [[P.x, P.z]])[0];
       const ahead = dir * ((L.x - px) * ux + (L.z - pz) * uz), lateral = Math.abs((L.x - px) * rx + (L.z - pz) * rz);
       if (lateral > 4 || (best && Math.abs(ahead) >= Math.abs(best.ahead))) continue;
@@ -137,32 +143,49 @@ const wheelWords = (lvl: number, kerbSide: number): string => {
  * on how far the car is from the back line, the kerb or whatever is ahead.
  */
 export function stepsFor(v: Vehicle, scene: Scene, bayId: string, route: readonly Piece[], picks: Record<string, CuePick | undefined> = {}): Step[] {
-  const b = scene.bays[bayId], kerb = b.kind === 'kerb', start = route[0].from, lane = start.th;
+  const b = scene.bays[bayId], kerb = b.kind === 'kerb', exit = b.kind === 'exit', start = route[0].from, lane = start.th;
   const marks = landmarksOf(scene, bayId, start);
-  // which side the kerb is on as you arrive (+1 right): steering towards it or away is how handbooks say it
-  const [ux, uz] = unit(start.th), kerbSide = kerb ? (((b.x0 + b.x1) / 2 - start.x) * -uz + ((b.z0 + b.z1) / 2 - start.z) * ux >= 0 ? 1 : -1) : 0;
-  const across = kerb ? 'the kerb' : 'the aisle';
+  // which side the nearest kerb is on at the start (+1 right): steering towards it or away is how handbooks say it
+  let kerbSide = 0, near = 6;
+  for (const k of scene.kerbs) {
+    const d = k.c - (k.nx * start.x + k.nz * start.z);
+    if (d >= 0 && d < near) { near = d; kerbSide = k.nx * Math.sin(start.th) + k.nz * Math.cos(start.th) >= 0 ? 1 : -1; }
+  }
+  const across = kerbSide ? 'the kerb' : 'the aisle';
+  const [bx0, bx1, bz0, bz1] = bayBox(b);
   let s = 0;
   return route.map((p, i): Step => {
     const last = i === route.length - 1, turn = p.dir * p.len * curvature(v, p.lvl), byHeading = Math.abs(turn) >= 10 * DEG;
     const say = `${p.dir > 0 ? 'Drive forward' : 'Reverse'} ${wheelWords(p.lvl, kerbSide)}`;   // said with `until` after it: see sentence()
     const e = p.to, a = alignment(v, marks, e, p.dir, picks[i + 1]) ?? alignment(v, marks, e, p.dir), lead = p.dir > 0 ? v.WB + v.OVF : -v.OVR;
-    const straightIn = Math.min(Math.abs(wrapPi(e.th - b.inHeading)), Math.abs(wrapPi(e.th - b.inHeading - Math.PI))) < 3 * DEG;
+    // pointing along the bay: "straight in the bay" once the car's middle is in it, before that "pointing into it"
+    const lined = Math.min(Math.abs(wrapPi(e.th - b.inHeading)), Math.abs(wrapPi(e.th - b.inHeading - Math.PI))) < 3 * DEG;
+    const mid = footprint(e.x, e.z, e.th, [[v.WB / 2, 0]])[0], inside = mid[0] > bx0 - 0.3 && mid[0] < bx1 + 0.3 && mid[1] > bz0 - 0.3 && mid[1] < bz1 + 0.3;
     const ang = Math.abs(wrapPi(e.th - lane)) / DEG, toLane = Math.round(Math.min(ang, 180 - ang) / 5) * 5;
-    const angleWords = kerb ? (toLane === 0 ? 'until the car is straight' : `until the car is at about ${toLane}° to the kerb`)
-      : straightIn ? 'until the car is straight in the bay' : `until the car is at about ${toLane}° to ${across}`;
+    const angleWords = kerb || exit ? (toLane === 0 ? (exit ? 'until the car is straight in the lane' : 'until the car is straight') : `until the car is at about ${toLane}° to ${across}`)
+      : lined ? (inside ? 'until the car is straight in the bay' : 'until the car points straight into the green bay') : `until the car is at about ${toLane}° to ${across}`;
     let until: string, see = '';
     if (last) {
       const ahead = nearestAhead(v, scene, e, p.dir, 0.5);
-      if (kerb) until = `${byHeading ? angleWords : 'until you have stopped'}, tyres about ${fmt(tyreGap(v, scene.kerbs, e.x, e.z, e.th))} from the kerb`;
+      if (exit) until = byHeading ? angleWords : 'until the car is well clear of the space, in the middle of the lane';
+      else if (kerb) until = `${byHeading ? angleWords : 'until you have stopped'}, tyres about ${fmt(tyreGap(v, scene.kerbs, e.x, e.z, e.th))} from the kerb`;
       else {
-        const end = footprint(e.x, e.z, e.th, [[lead, 0]])[0], gap = Math.abs(end[1] - b.z0);
+        // the painted back line under the bumper (it slants in angled bays), else the bay's own
+        let backZ = b.z0, best = 1.5;
+        const end = footprint(e.x, e.z, e.th, [[lead, 0]])[0];
+        for (const [x0, z0, x1, z1] of scene.lines) {
+          if (Math.abs(x1 - x0) < 0.05 || end[0] < Math.min(x0, x1) || end[0] > Math.max(x0, x1)) continue;
+          const z = z0 + (z1 - z0) * (end[0] - x0) / (x1 - x0);
+          if (Math.abs(z - b.z0) < best) { best = Math.abs(z - b.z0); backZ = z; }
+        }
+        const gap = Math.abs(end[1] - backZ);
         const where = `your ${p.dir > 0 ? 'front' : 'rear'} bumper ${byHeading ? '' : 'is '}about ${ahead ? `${fmt(ahead.d)} from ${withThe(ahead.name)}` : `${fmt(gap)} from the back line`}`;
         until = byHeading ? `${angleWords}, ${where}` : `until ${where}`;
       }
     } else if (byHeading) {
       until = angleWords;
-      if (a && Math.abs(a.ahead) <= 0.3) see = a.text;
+      // what you see at the mark: the lesson's own pair (a handbook's) even when it is not level, else a close one
+      if (a && Math.abs(a.ahead) <= (picks[i + 1] ? 3 : 0.3)) see = a.text;
     } else {
       const next = route[i + 1], ahead = next.dir !== p.dir ? nearestAhead(v, scene, e, p.dir) : null;
       until = ahead ? `until you are about ${fmt(ahead.d)} from ${withThe(ahead.name)}` : a && Math.abs(a.ahead) < 1.5 ? `until ${a.text}` : `for about ${fmt(p.len)}`;
@@ -185,7 +208,7 @@ export function finishFrom(v: Vehicle, steps: readonly Step[], k: number, Q: Pos
   for (let j = k + 1; j < steps.length; j++) {
     const s = steps[j];
     if (s.byHeading) {
-      const len = wrapPi(s.to.th - Q.th) / (s.dir * curvature(v, s.lvl));
+      const len = (s.to.th - Q.th) / (s.dir * curvature(v, s.lvl));   // headings never wrap here: a U-turn is 180°, not -180°
       if (len < -0.05) return null;
       Q = drive(v, Q, s.lvl, s.dir * Math.max(0, len));
     } else if (!s.last) Q = drive(v, Q, s.lvl, s.dir * s.len);
@@ -209,6 +232,7 @@ const WHEEL_TOL = (lvl: number) => (lvl === 0 || Math.abs(lvl) === 1 ? 5 : 15);
 export const MARK = { short: 0.15, past: 0.25, off: 0.6, walk: 1.4, crawl: 0.6, zone: 1.0 };
 
 export type CoachPhase = 'wheel' | 'drive' | 'missed' | 'done';
+export interface CoachSnap { k: number; phase: CoachPhase; left: number; off: number; note: string; pastBy: number; missedBy: number; moved: boolean }
 export type CoachEvent = { type: 'mark'; n: number; past: number } | { type: 'missed'; n: number; by: number; why: 'past' | 'off' } | { type: 'done' };
 
 /**
@@ -325,7 +349,7 @@ export class CoachRun {
   /** Metres still to go to the end of a step: along the line on a straight, from the angle still to turn on an arc;
    *  for a step whose end matters, to the point where switching lands the rest of the route on the planned line. */
   private leftOf(st: Step, sim: Sim): number {
-    const planned = st.byHeading ? wrapPi(st.to.th - sim.th) * Math.sign(st.turn) / Math.abs(curvature(this.v, st.lvl))
+    const planned = st.byHeading ? (st.to.th - sim.th) * Math.sign(st.turn) / Math.abs(curvature(this.v, st.lvl))
       : (() => { const [ux, uz] = unit(st.from.th, st.dir); return (st.to.x - sim.x) * ux + (st.to.z - sim.z) * uz; })();
     if (!this.adapt[this.k]) return planned;
     const P: Pose = { x: sim.x, z: sim.z, th: sim.th };
@@ -338,6 +362,10 @@ export class CoachRun {
     }
     return best;
   }
+
+  /** Where the coach is, to put back after a rewind. */
+  snapshot(): CoachSnap { return { k: this.k, phase: this.phase, left: this.left, off: this.off, note: this.note, pastBy: this.pastBy, missedBy: this.missedBy, moved: this.moved }; }
+  restore(s: CoachSnap): void { Object.assign(this, { k: s.k, phase: s.phase, left: s.left, off: s.off, note: s.note, pastBy: s.pastBy, missedBy: s.missedBy, moved: s.moved }); this.hint = ''; this.release = false; }
 
   /** Pick up from wherever the car is (help asked for part way through a try): the step whose path is nearest. */
   jumpTo(sim: Sim): void {
@@ -430,7 +458,7 @@ export function feedback(v: Vehicle, route: readonly Piece[], steps: readonly St
   const turned = (k: number, e: number, at?: TrackPt) => {
     const from = route[k - 1]?.lvl ?? 0, to = route[k].lvl, prev = steps[k - 1];
     const what = to === 0 ? 'straightened the wheel' : from !== 0 && Math.sign(from) !== Math.sign(to) ? 'steered the other way' : 'turned to full lock';
-    const deg = prev?.byHeading && at ? wrapPi(at.th - prev.to.th) * Math.sign(prev.turn) / DEG : null;
+    const deg = prev?.byHeading && at ? (at.th - prev.to.th) * Math.sign(prev.turn) / DEG : null;
     if (deg !== null) e = deg;
     const by = deg !== null ? `${Math.max(1, Math.round(Math.abs(deg)))}°` : fmt(Math.abs(e));
     return `You ${what} ${by} too ${e < 0 ? 'early' : 'late'}${cueOf(k)}.`;
@@ -501,7 +529,7 @@ export function timingCause(v: Vehicle, route: readonly Piece[], steps: readonly
     else if (a.lvl !== b.lvl) at = mine.find(t => Math.abs(t.lvl - a.lvl) >= Math.abs(b.lvl - a.lvl) / 2 - 1e-9 && sOf(t) >= a.s0 - 1);
     if (!at) continue;
     // how far past the mark (m along the route; on an arc, from how far round the car had turned)
-    const e = a.byHeading ? wrapPi(at.th - a.to.th) * Math.sign(a.turn) / Math.abs(curvature(v, a.lvl)) : sOf(at) - a.s1;
+    const e = a.byHeading ? (at.th - a.to.th) * Math.sign(a.turn) / Math.abs(curvature(v, a.lvl)) : sOf(at) - a.s1;
     const impact = Math.abs(e) * endSensitivity(v, steps, k);
     if (!best || impact > best.impact) best = { k, e, impact, stop: a.dir !== b.dir };
   }
