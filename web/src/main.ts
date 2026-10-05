@@ -3,12 +3,12 @@
 // loads the scene. On the street you drive in Drive mode and park in Park mode.
 import './style.css';
 import { CoachRun, Tracker, feedback, timingCause, type CoachEvent, type CoachSnap, type Feedback, type Step } from './core/coach';
-import type { CheckDone, CheckJob } from './cityCheck.worker';
+import type { CheckDone, CheckJob, ParDone, ParJob } from './cityCheck.worker';
 import CheckWorker from './cityCheck.worker?worker&inline';
 import { buildCity, checkSlot, localScene, lotAt, parkStart, slotMid, slotNear, slotPlace, streetAt, type CityMap, type MapSpec, type Slot } from './core/city';
 import { districtId, districtLevel, generateDistrict } from './core/district';
 import { alongHeading, lotFit } from './core/lot';
-import { toBay } from './core/scene';
+import { facesRight, parkedIn } from './core/parking';
 import { ATTO2, GARAGE_561, MAPS, VEHICLES, vehicleFor } from './core/content';
 import { V_KIN } from './core/dynamics';
 import { generate, parseKey, timeLimit, type Level } from './core/generator/level';
@@ -111,13 +111,20 @@ function setMode(m: Mode): void {
 /** Off the street: Park mode, north up, no speed limit. */
 function leaveCity(): void {
   if (!city) return;
-  city = null; setStreet(null); setDriveInfo(null); setLimit(null); setMode('park'); checker?.terminate(); checker = null;
+  city = null; setStreet(null); setDriveInfo(null); setLimit(null); setMode('park'); checker?.terminate(); checker = null; parWorker?.terminate(); parWorker = null;
 }
 /** The district's free spaces checked in the background, nearest the start first: can the planner park this car there?
- *  Without a worker (or before its answer comes) a space is checked the moment you slow down beside it. */
-let checker: Worker | null = null;
+ *  Without a worker (or before its answer comes) a space is checked the moment you slow down beside it. A second worker
+ *  works out par for each try, so the map never stops while the planner thinks (a car park's bay can take a second or
+ *  more on a phone). */
+let checker: Worker | null = null, parWorker: Worker | null = null, parTicket = 0;
 function checkSpaces(c: CityPlay): void {
-  checker?.terminate(); checker = null;
+  checker?.terminate(); checker = null; parWorker?.terminate(); parWorker = null;
+  try { parWorker = new CheckWorker(); } catch { parWorker = null; }
+  if (parWorker) {
+    parWorker.onmessage = (e: MessageEvent<ParDone>) => { if (e.data.ticket === parTicket && city === c) setRoute(e.data.pieces ?? []); };
+    parWorker.onerror = () => { parWorker?.terminate(); parWorker = null; };
+  }
   try { checker = new CheckWorker(); } catch { return; }
   const v = sim.vehicle, s0 = c.map.start, mid = slotMid;
   const order = c.map.slots.slice().sort((a, b) => Math.hypot(mid(a)[0] - s0.x, mid(a)[1] - s0.z) - Math.hypot(mid(b)[0] - s0.x, mid(b)[1] - s0.z)).map(s => s.id);
@@ -127,7 +134,7 @@ function checkSpaces(c: CityPlay): void {
     if (s && s.parkable === undefined) { s.parkable = e.data.parkable; syncStreet(); }
   };
   checker.onerror = () => { checker?.terminate(); checker = null; };
-  checker.postMessage({ spec: c.map.spec, car: v.spec, rearDeg: v.REAR_DEG, seed: c.map.seed, drive: c.map.drive, order } satisfies CheckJob);
+  checker.postMessage({ kind: 'check', spec: c.map.spec, car: v.spec, rearDeg: v.REAR_DEG, seed: c.map.seed, drive: c.map.drive, order } satisfies CheckJob);
 }
 const syncStreet = () => setStreet(city ? { slots: city.map.slots, target: city.slot, lockRot: city.lockRot } : null);
 /** Paint a message first, then do the slow part (generating a level, planning a route) on the next frame,
@@ -255,11 +262,14 @@ function enterPark(slot: Slot | null): void {
   } else showBanner('', `Park mode · ${fmtLen(slot.length)} space`, `On your ${kerbSide()}, ${fmtLen(slot.length - v.L)} longer than your car. Forward and Reverse, as in the garage; Show me has the route.`, null, 6000);
   planPar(c, slot);
 }
-/** Par for a try: the planner's route from where the try began into the space, worked out after the next paint. */
+/** Par for a try: the planner's route from where the try began into the space, worked out by the par worker (or,
+ *  without one, after the next paint). */
 function planPar(c: CityPlay, slot: Slot): void {
-  const from = c.from, v = sim.vehicle;
+  const from = c.from, v = sim.vehicle, ticket = ++parTicket;
+  if (!from) return;
+  if (parWorker) { parWorker.postMessage({ kind: 'par', spec: c.map.spec, car: v.spec, rearDeg: v.REAR_DEG, seed: c.map.seed, drive: c.map.drive, slot: slot.id, from, ticket } satisfies ParJob); return; }
   afterPaint(() => {
-    if (city !== c || c.slot !== slot || c.from !== from || !from) return;
+    if (city !== c || c.slot !== slot || c.from !== from || ticket !== parTicket) return;
     const plan = planBack(v, localScene(c.map, slot), from, slot.id, { maxNodes: 6000 });
     setRoute(plan.status === 'found' ? plan.pieces : []);
   });
@@ -274,16 +284,16 @@ function bayOnRight(slot: Slot & { kind: 'lot' }): boolean {
   const [mx, mz] = slot.at.mouth;
   return (mx - sim.x) * Math.sin(sim.th) + (mz - sim.z) * Math.cos(sim.th) > 0;
 }
-/** In Park mode in a car park any free bay counts: the one the car is pulling into becomes the space (and par is worked
- *  out again for it). */
+/** In Park mode in a car park any free bay counts: stopped and parked in another one, it becomes the space (par stays
+ *  the planner's from where you stopped, into the bay you stopped beside). Only once you have stopped in it, so a bay
+ *  you pass on the way never takes over. */
 function retarget(c: CityPlay): void {
-  const cur = c.slot; if (cur?.kind !== 'lot') return;
-  const v = sim.vehicle, mx = sim.x + (v.L / 2 - v.OVR) * Math.cos(sim.th), mz = sim.z - (v.L / 2 - v.OVR) * Math.sin(sim.th);
+  const cur = c.slot; if (cur?.kind !== 'lot' || Math.abs(sim.v) > 0.02) return;
   for (const s of c.map.slots) {
     if (s === cur || s.kind !== 'lot' || s.lot !== cur.lot || s.parkable === false) continue;
-    const b = s.bay, [x, z] = toBay(b, mx, mz, 0);
-    if (x < b.x0 || x > b.x1 || z < b.z0 || z > b.z1) continue;
-    c.slot = s; applySettings(); syncStreet(); setRoute([]); planPar(c, s);
+    const at = parkedIn(sim.vehicle, s.bay, sim.x, sim.z, sim.th);
+    if (!at || !facesRight(s.bay, at)) continue;
+    c.slot = s; applySettings(); syncStreet();
     showBanner('', `Bay ${s.at.n} then`, 'Any free bay counts.', null, 2500);
     return;
   }
