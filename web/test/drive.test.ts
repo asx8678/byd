@@ -130,21 +130,22 @@ describe('the rules', () => {
 });
 
 describe('a parked car that will pull out', () => {
-  // Harbour, layout 4: a 16 m space on Quay Road with a city car parked at the back of it, which never wakes in this test
-  const m = buildCity(MAPS.harbour, ATTO2, 4), net = networkOf(m), slot = m.slots.find(s => s.id === 'quay:-1:12') as KerbSlot, ex = exitFor(net, slot, 0)!;
+  // Harbour: a space long enough for a city car parked at the back of it (it never wakes in this test) and your car in
+  // front of it, in the first layout that has one
+  const [m, net, slot] = [1, 2, 3, 4, 5, 6].map(seed => { const mm = buildCity(MAPS.harbour, ATTO2, seed), nn = networkOf(mm); return [mm, nn, mm.slots.find((s): s is KerbSlot => s.kind === 'kerb' && s.length > 9.5 && !!exitFor(nn, s, 0))] as const; }).find(q => q[2])!, ex = exitFor(net, slot!, 0)!;
   const atBack = () => {
     const sim = new Sim(m.scene, ATTO2), ty = TYPES[0];
     m.scene.net = net; sim.traffic = new Traffic(net); sim.rules = new Rules(net);
-    sim.traffic.restore({ t: 0, r: 1, x: 1, base: 0, places: [{ slot: slot.id, type: 0 }], cars: [{ id: 0, type: 0, drv: 0, el: ex.el, s: ex.s0, v: 0, acc: 0, route: routeFrom(m, net.els[ex.el]), ind: 0, wait: true, commit: -1, inAt: 1e9, jams: 0, moved: 0, state: 'parked', place: 0, until: 1e9 }] });
+    sim.traffic.restore({ t: 0, r: 1, x: 1, base: 0, places: [{ slot: slot!.id, type: 0 }], cars: [{ id: 0, type: 0, drv: 0, el: ex.el, s: ex.s0, v: 0, acc: 0, route: routeFrom(m, net.els[ex.el]), ind: 0, wait: true, commit: -1, inAt: 1e9, jams: 0, moved: 0, state: 'parked', place: 0, until: 1e9 }] });
     // your car in the space just in front of it, 60 cm from its front bumper, facing the same way
     const u = ty.L - ty.OVR + 0.6 + ATTO2.OVR, h = Math.atan2(-ex.uz, ex.ux);
     sim.reset('start'); sim.place(ex.x0 + u * ex.ux, ex.z0 + u * ex.uz, h); sim.setMode('park');
     return sim;
   };
   it('takes its space until it has gone: you cannot park there', () => {
-    const sim = atBack(), free = (s: { id: string }) => !sim.traffic!.taken(s.id), p = parkStart(ATTO2, slot);
-    expect(sim.traffic!.taken(slot.id)).toBe(true);
-    expect(slotNear(m, ATTO2, p.x, p.z, p.th)?.id).toBe(slot.id);
+    const sim = atBack(), free = (s: { id: string }) => !sim.traffic!.taken(s.id), p = parkStart(ATTO2, slot!);
+    expect(sim.traffic!.taken(slot!.id)).toBe(true);
+    expect(slotNear(m, ATTO2, p.x, p.z, p.th)?.id).toBe(slot!.id);
     expect(slotNear(m, ATTO2, p.x, p.z, p.th, free)).toBeNull();
   });
   it('is a parked car to your car: your sensors hear it, your path stops at it, and backing into it is a touch, not a crash', () => {

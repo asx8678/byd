@@ -222,7 +222,7 @@ describe('parked cars that pull out, couriers, and drivers who honk', () => {
   }
   it('sit at the back of free spaces that were not promised to your car, which are taken while they are there', () => {
     const { m, T } = leaver();
-    expect(T.places.length).toBeGreaterThan(2);
+    expect(T.places.length).toBeGreaterThan(1);
     for (const ex of T.places) {
       const sl = m.slots.find(s => s.id === ex.slot)!;
       expect(sl.kind).toBe('kerb'); expect(sl.guaranteed).toBe(false);
@@ -423,3 +423,64 @@ describe('spot thieves', () => {
     expect(th.aimT).toBe(-1);   // the space is not free yet, and you are in its way
   });
 });
+
+describe('passing', () => {
+  const m = harbour(), net = networkOf(m), lane = net.els.filter(e => e.kind === 'lane' && e.street === 'harbour' && e.side === 1).sort((a, b) => b.len - a.len)[0];
+  const other = net.els.find(e => e.kind === 'lane' && e.street === 'harbour' && e.side === -1 && Math.abs(e.pieces[0].x + e.pieces[0].len * Math.cos(e.pieces[0].h) - lane.pieces[0].x) < 30)!;
+  /** A courier stopped in the lane with its hazards on for 50 s more, a car coming up behind it, and the cars `more`. */
+  function courier(more: CarSnap[] = []): Traffic {
+    const T = new Traffic(net);
+    T.restore({ t: 0, r: 1, x: 5, base: 0, cars: [carOn(m, 0, lane, 40, 0, VAN, COURIER, { state: 'stop', haz: true, until: 50, nextStop: 1e9 }), carOn(m, 1, lane, 10, 6), ...more] });
+    return T;
+  }
+  /** Step for secs, counting cars that touch, and noting when car `id` first pulls out to pass. */
+  function run(T: Traffic, secs: number, p: PlayerView | null = null, id = 1): { met: number; out: number } {
+    let met = 0, out = -1;
+    for (let n = 0; n < secs * 60; n++) {
+      T.step(STEP, p);
+      if (out < 0 && T.cars[id].pass >= 0) out = T.t;
+      for (let i = 0; i < T.cars.length; i++) for (let k = i + 1; k < T.cars.length; k++) if (polysOverlap(T.cars[i].box, T.cars[k].box)) met++;
+      if (p) for (const c of T.cars) if (polysOverlap(c.box, playerBox(p))) met++;
+    }
+    return { met, out };
+  }
+  it('goes round a courier stopped in its lane when the other lane is clear, and back in', () => {
+    const T = courier(), [V, C] = T.cars, r = run(T, 25);
+    expect(r.out).toBeGreaterThan(0);
+    expect(C.s - TYPES[C.type].OVR).toBeGreaterThan(V.s + TYPES[V.type].L - TYPES[V.type].OVR);   // past it
+    expect(C.pass).toBe(-1);
+    const [x, z] = poseOn(net.els[C.el], C.s); expect(Math.hypot(C.x - x, C.z - z)).toBeLessThan(1e-6);   // back on its lane's line
+    expect({ met: r.met, jams: C.jams }).toEqual({ met: 0, jams: 0 });
+  });
+  it('waits while a car comes the other way, and goes once it has gone by', () => {
+    const T = courier([carOn(m, 2, other, 0, 12)]), C = T.cars[1], O = T.cars[2];
+    let at = -1;
+    for (let n = 0; n < 30 * 60 && at < 0; n++) { T.step(STEP, null); if (C.pass >= 0) at = laneS(lane, poseOn(other, O.s - TYPES[O.type].OVR).slice(0, 2) as Pt); }
+    expect(at).toBeLessThan(C.s);   // the one coming the other way was behind it already
+    const r = run(T, 20);
+    expect({ met: r.met, jams: T.cars.reduce((s, c) => s + c.jams, 0) }).toEqual({ met: 0, jams: 0 });
+  });
+  it('goes round you when you stop in the lane to park, leaving it room, where there is length enough before the junction', () => {
+    const p = standing(lane, 35, { ind: 1 }), T = oneCar(m, lane, 2, 8), r = run(T, 20, p, 0), C = T.cars[0];
+    expect(r.out).toBeGreaterThan(0);
+    expect(C.el !== lane.id || C.s - TYPES[C.type].OVR > 35 + ATTO2.L).toBe(true);
+    expect(r.met).toBe(0);
+  });
+  it('stops for a car the other way that is out in its lane passing', () => {
+    // the passing car already out round the courier, and a car coming the other way 45 m off at 30 km/h
+    const T = courier(), snap = T.snapshot(), s = 45;
+    snap.cars[1] = { ...snap.cars[1], s, v: 6, pass: s - 14, passTo: 66, passBy: 0 };
+    const [px, pz] = poseOn(lane, s), sO = laneS(other, [px, pz]);
+    snap.cars.push(carOn(m, 2, other, sO - 45, 8.3));
+    T.restore(snap);
+    const O = T.cars[2];
+    let least = Infinity;
+    for (let n = 0; n < 6 * 60; n++) { T.step(STEP, null); least = Math.min(least, O.v); }
+    expect(least).toBeLessThan(0.5);   // it stopped, or near enough
+    const r = run(T, 20);
+    expect({ met: r.met, jams: T.cars.reduce((q, c) => q + c.jams, 0) }).toEqual({ met: 0, jams: 0 });
+    expect(O.v).toBeGreaterThan(3);   // and went on once the other was back in
+  });
+});
+/** Where a point is along a lane, from its start. */
+function laneS(e: El, p: Pt): number { const q = e.pieces[0]; return (p[0] - q.x) * Math.cos(q.h) - (p[1] - q.z) * Math.sin(q.h); }

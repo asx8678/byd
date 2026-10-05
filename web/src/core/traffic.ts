@@ -27,6 +27,11 @@
 // before its patience runs out (from when it got there and the space was free) and the space is yours; hesitate and it
 // dives in nose first. You lose the space, not points.
 //
+// A car held up behind your car, or behind a courier stopped in the lane, pulls out round it once it has waited a moment,
+// if it can get back in well before the junction and nobody coming the other way would get there first: it sweeps out
+// to the other lane's line on a smooth curve, passes, and comes back. A car coming the other way stops for one that is
+// out in its lane. Behind a stopped courier a car waits 7 m back, with room to pull out.
+//
 // Everything steps with the simulation's fixed steps and draws random numbers only from its own seed, so the same
 // district and seed give the same traffic, and a snapshot between steps brings it back exactly (replays, rewinds).
 import { footprint } from './car';
@@ -337,10 +342,13 @@ export interface TCar {
   imp: boolean;                                      // an impatient driver: honks sooner, and more often
   stopS: number; nextStop: number;                   // a courier: where along its lane it is stopping (-1: nowhere yet), when it next delivers
   aim: string; aimT: number; seen: number;           // a thief: the space it is after (''), when its patience began to run (-1: not yet), what it saw you do (1: signal, 2: reverse)
+  pass: number; passTo: number; passBy: number;      // passing: along its lane where it pulls out and where it is back in (-1: not passing), and whom (-2: you)
   x: number; z: number; h: number; box: Pt[];        // where it is, from its lane or path (or its way out of a space)
 }
 /** What a car that just drives has of the rest. */
-const FRESH = { state: 'drive' as CarState, place: -1, xs: 0, until: 0, wakeD: 0, haz: false, honk: -1, hold: 0, lineT: 0, imp: false, stopS: -1, nextStop: 0, aim: '', aimT: -1, seen: 0 };
+const FRESH = { state: 'drive' as CarState, place: -1, xs: 0, until: 0, wakeD: 0, haz: false, honk: -1, hold: 0, lineT: 0, imp: false, stopS: -1, nextStop: 0, aim: '', aimT: -1, seen: 0, pass: -1, passTo: 0, passBy: -1 };
+/** Passing: the length of the curve out to the other lane and back (m), and the speed it passes at, at most (m/s). */
+const SWERVE = 10, PASS_V = 9;
 type Later = keyof typeof FRESH;
 export type CarSnap = Omit<TCar, 'x' | 'z' | 'h' | 'box' | Later> & Partial<Pick<TCar, Later>>;
 /** The traffic between two steps: its clock, its two streams of random numbers (the traffic's own, and the one for
@@ -414,7 +422,8 @@ const cached = (net: Network, key: string, make: () => Kerbside | null): Kerbsid
  *  from a 4.5 m radius, more for the long cars; the second as gentle as it needs to be) that keeps its body and tyres clear
  *  of the car ahead, the kerb and everything else, keeps it on its own side of the centre line (10 cm to spare: the nose
  *  swings out as it turns back) and joins its lane at least 10 m before the lane ends. Null if there is none, if the
- *  parked car would be in the way of the traffic, or if its size does not fit the lane. */
+ *  parked car would be in the way of the traffic or less than 12 m into its lane (a car coming off the junction behind
+ *  could not stop for it), or if its size does not fit the lane. */
 export const exitFor = (net: Network, sl: KerbSlot, type: number): Kerbside | null => cached(net, `out:${sl.id}:${type}`, () => makeExit(net, sl, type));
 /** A thief's way into a free space, nose first, worked out once: from the lane, its nose no more than 50 cm past the back
  *  of the space (where it waits), the shortest S-curve (an arc towards the kerb from a 4.5 m radius, a straight, an arc
@@ -455,7 +464,7 @@ function makeExit(net: Network, sl: KerbSlot, type: number): Kerbside | null {
   const rear = dir > 0 ? sl.a0 : sl.a1, [x0, z0] = streetPt(st, rear + dir * (0.3 + ty.OVR), side * (sd.hw - 0.2 - ty.W / 2)), h = sd.th;
   const ux = Math.cos(h), uz = -Math.sin(h), lp = lane.pieces[0], s0 = (x0 - lp.x) * ux + (z0 - lp.z) * uz;
   const D = sd.hw - 0.2 - ty.W / 2 - (st.lane / 2 - OFF), k1 = net.drive === 'right' ? 1 : -1;   // away from the kerb: left, keeping right
-  if (s0 < 1 || !clearOfTraffic(net, boxAt(ty, x0, z0, h))) return null;
+  if (s0 < 12 || !clearOfTraffic(net, boxAt(ty, x0, z0, h))) return null;   // a car coming into the lane can stop behind it
   const across = (p: Pt) => side * ((st.along === 'x' ? p[1] : p[0]) - st.c), R0 = ty.L > 5.5 ? 6 : ty.L > 4.8 ? 5 : 4.5;
   let best: { pieces: Piece[]; len: number; X: number } | null = null;
   for (let R1 = R0; R1 <= R0 + 2 + 1e-9; R1 += 0.5) for (const R2 of [R1, 6, 8, 10, 12, 15, 18, 22, 27]) for (let deg = 50; deg >= 10; deg -= 4) {
@@ -527,10 +536,13 @@ export class Traffic {
   private pair = false;              // whether two thieves come for a space
   private called: string[] = [];     // the spaces thieves have come for (each only once)
   private readonly kerbSlots: Map<string, KerbSlot>;
+  private readonly opp: number[];    // the lane the other way along the same stretch of street (-1: none)
 
   constructor(readonly net: Network) {
     this.on = net.els.map(() => []); this.into = net.els.map(() => []);
     for (const e of net.els) if (e.kind === 'path') this.into[e.next[0]].push(e.id);
+    const lanes = net.els.filter(e => e.kind === 'lane');
+    this.opp = net.els.map(e => (e.kind !== 'lane' ? -1 : lanes.find(o => o.street === e.street && o.side !== e.side && Math.abs(laneS(o, poseOn(e, e.len / 2).slice(0, 2) as Pt) - o.len / 2) < o.len / 2)?.id ?? -1));
     this.kerbSlots = new Map(net.map.slots.filter((s): s is KerbSlot => s.kind === 'kerb').map(s => [s.id, s]));
   }
 
@@ -641,6 +653,7 @@ export class Traffic {
       if (c.state === 'parked') this.parked(c, pv);
       else if (c.drv === COURIER) this.deliver(c);
       else if (c.aim && c.state === 'drive') this.hunt(c, pv);
+      if (c.state === 'drive' && c.pass < 0 && !c.aim && c.stopS < 0) this.overtake(c, pv);
     }
     const plans = this.cars.map(c => (c.state === 'parked' ? STILL : this.decide(c, pv)));
     this.held = [];
@@ -708,13 +721,13 @@ export class Traffic {
       if (e.kind === 'path') for (const sb of e.siblings) for (const o of this.on[sb.el]) {
         if (o.s <= sb.shared + 1 && !(e === el && o.s <= c.s)) obs.push([off + o.s - TYPES[o.type].OVR - nose, o.v, d.s0, 0]);
       }
-      const o = this.on[e.id].find(q => q !== c && !(e === el && q.s <= c.s));
-      if (o) { obs.push([off + o.s - TYPES[o.type].OVR - nose, o.v, d.s0, o.state === 'stop' ? 2 : 0]); break; }
+      const o = this.on[e.id].find(q => q !== c && !(e === el && q.s <= c.s) && q.id !== c.passBy);   // not the one it is passing
+      if (o) { obs.push([off + o.s - TYPES[o.type].OVR - nose, o.v, o.state === 'stop' && o.haz ? 7 : d.s0, o.state === 'stop' ? 2 : 0]); break; }   // room to pull out round a courier
       off += e.len;
     }
     // the speed wanted here (pulling out of a space or diving into one, walking pace); slowing in time for a curve or a
     // lower limit ahead
-    const v0 = Math.min(want(el), curve(el), c.state === 'out' || way ? 3 : Infinity);
+    const v0 = Math.min(want(el), curve(el), c.state === 'out' || way ? 3 : c.pass >= 0 ? PASS_V : Infinity);
     let a = d.a * (1 - (v / Math.max(0.1, v0)) ** 4);
     off = el.len - c.s;
     for (const id of c.route) {
@@ -748,6 +761,15 @@ export class Traffic {
     }
     // a courier coming to its stop
     if (c.stopS >= 0 && el.kind === 'lane') obs.push([c.stopS - c.s, 0, 0, 0]);
+    // a car the other way out in this lane passing (it goes on: it was clear when it set off): stop short of where it will
+    // still be out in it, 3 m before it is back in
+    if (el.kind === 'lane' && this.opp[el.id] >= 0) for (const o of this.on[this.opp[el.id]]) {
+      if (o.pass < 0) continue;
+      const [x, z, h] = this.shifted(o, Math.max(o.s, o.passTo - 3));
+      let near = Infinity;
+      for (const q of [...o.box, ...boxAt(TYPES[o.type], x, z, h)]) { const s = laneS(el, q); if (s > c.s) near = Math.min(near, s); }
+      if (near < c.s + nose + look) obs.push([near - c.s - nose, 0, 1.5, 0]);
+    }
     // your car: in the way, or about to be
     if (pv) {
       const hit = this.corridor(c, pv, look), who = this.blame ? 1 : 0;
@@ -856,7 +878,7 @@ export class Traffic {
         if (k + 1 >= c.route.length) break;
         off += e.len - s; s = 0; e = E[c.route[++k]];
       }
-      const [x, z, h] = poseOn(e, s + (u - off));
+      const [x, z, h] = e === E[c.el] && c.pass >= 0 ? this.shifted(c, s + (u - off)) : poseOn(e, s + (u - off));
       if (x < bx0 - r || x > bx1 + r || z < bz0 - r || z > bz1 + r) continue;
       let box: Pt[] | null = null;
       for (let b = 0; b < pv.boxes.length; b++) {
@@ -1048,12 +1070,13 @@ export class Traffic {
       } else {
         s = c.s + ds;
         while (s > E[el].len && route.length) { s -= E[el].len; el = route[0]; route = route.slice(1); }
-        [x, z, h] = poseOn(E[el], s);
+        [x, z, h] = el === c.el && c.pass >= 0 ? this.shifted(c, s) : poseOn(E[el], s);
       }
       const box = boxAt(ty, x, z, h);
       if (this.overlaps(c, box, x, z, pv)) { c.v = 0; c.acc = 0; c.jams++; return; }
       if (el !== c.el && E[el].kind === 'lane') { c.commit = -1; c.inAt = NEVER; }
       if (el !== c.el) c.stopS = -1;
+      if (c.pass >= 0 && (el !== c.el || s >= c.passTo)) { c.pass = -1; c.passBy = -1; }   // back in
       if (c.state === 'out' && !out) { c.state = 'drive'; c.place = -1; c.xs = 0; c.ind = 0; } else c.xs = xs;
       if (c.state === 'in' && xs >= this.places[c.place].len) { c.state = 'parked'; c.until = 1e9; c.wakeD = 0; c.aim = ''; }   // parked for good
       c.el = el; c.s = s; c.route = route; c.x = x; c.z = z; c.h = h; c.box = box; c.moved += ds;
@@ -1089,10 +1112,63 @@ export class Traffic {
     c.ind = !p || p.turn === 'straight' ? 0 : p.dh > 0 ? -1 : 1;
   }
   /** Where a car is: along its lane or path, or along its way out of a space. */
-  private poseOf(c: Pick<TCar, 'state' | 'place' | 'xs' | 'el' | 's'>): [number, number, number] {
-    return c.state === 'parked' || c.state === 'out' ? poseOn(this.places[c.place], c.xs) : poseOn(this.net.els[c.el], c.s);
+  private poseOf(c: TCar): [number, number, number] {
+    return c.state === 'parked' || c.state === 'out' || c.state === 'in' ? poseOn(this.places[c.place], c.xs) : c.pass >= 0 ? this.shifted(c, c.s) : poseOn(this.net.els[c.el], c.s);
+  }
+  /** How far a passing car is out towards the other lane at s along its lane, and how fast that changes along it: out on
+   *  a half cosine over SWERVE m, along the other lane's line, back the same way. */
+  private lat(c: TCar, s: number): [number, number] {
+    if (c.pass < 0 || s <= c.pass || s >= c.passTo) return [0, 0];
+    const D = this.net.map.streets.find(st => st.id === this.net.els[c.el].street)!.lane - 2 * OFF, u = Math.min(1, (s - c.pass) / SWERVE, (c.passTo - s) / SWERVE);
+    const back = c.passTo - s < s - c.pass ? -1 : 1;
+    return u >= 1 ? [D, 0] : [D * (1 - Math.cos(Math.PI * u)) / 2, back * D * Math.PI * Math.sin(Math.PI * u) / (2 * SWERVE)];
+  }
+  /** A passing car's pose at s along its lane: out from the lane's line towards the other lane, turned with its curve. */
+  private shifted(c: TCar, s: number): [number, number, number] {
+    const [x, z, h] = poseOn(this.net.els[c.el], s), [lat, slope] = this.lat(c, s), k = this.net.drive === 'right' ? 1 : -1;
+    return [x - k * lat * Math.sin(h), z - k * lat * Math.cos(h), h + k * Math.atan(slope)];
+  }
+  /** A car held up behind your car, or behind a courier stopped in the lane with its hazards on: once it has waited 1.5 s
+   *  close behind it, it passes, if it can be back in its lane 8 m before the junction, its way round is clear of what it
+   *  passes (30 cm to spare) and of everything parked, you are not in the other lane on its way, and nobody coming the
+   *  other way would reach its way round before it is back in (at 4 m/s on average, with 3 s to spare). */
+  private overtake(c: TCar, pv: Shape | null): void {
+    const E = this.net.els, el = E[c.el], O = this.opp[c.el], ty = TYPES[c.type], nose = ty.L - ty.OVR;
+    if (el.kind !== 'lane' || O < 0 || c.hold < 1.5 || c.v > 0.5) return;
+    // what it is waiting behind, and how far along the lane that reaches
+    let by = -1, lo = Infinity, hi = -Infinity, what: Pt[] = [];
+    const ahead = this.on[c.el].find(q => q !== c && q.s > c.s);
+    if (ahead && ahead.state === 'stop' && ahead.haz && ahead.until - this.t > 5) { by = ahead.id; what = ahead.box; }
+    else if (pv && this.blame) { by = -2; what = pv.boxes[0]; }
+    if (by === -1) return;
+    for (const q of what) { const s = laneS(el, q); lo = Math.min(lo, s); hi = Math.max(hi, s); }
+    if (lo - (c.s + nose) > 12 || lo < c.s) return;
+    const plan = { ...c, pass: c.s, passTo: hi + 1.5 + ty.OVR + SWERVE };
+    if (plan.passTo > el.len - 8) return;
+    // its way round, clear of what it passes and of anything parked (the street's own things, and parked cars in traffic)
+    const big = { L: ty.L + 0.6, W: ty.W + 0.6, OVR: ty.OVR + 0.3 }, obs = this.net.map.scene.obstacles;
+    for (let s = plan.pass; s <= plan.passTo; s += 0.5) {
+      const [x, z, h] = this.shifted(plan, s), box = boxAt(big, x, z, h);
+      if (polysOverlap(box, what) || (pv && pv.boxes.some(q => polysOverlap(box, q)))) return;
+      for (const o of nearby(obs, x, z, ty.L + 1)) if (o.cls !== 'kerb' && (o.kind === 'poly' ? polysOverlap(box, o.pts) : circleHitsPoly(o.x, o.z, o.r, box))) return;
+      for (const o of this.cars) if (o !== c && o.id !== by && Math.abs(o.x - x) < 9 && Math.abs(o.z - z) < 9 && polysOverlap(box, o.box)) return;
+    }
+    // nobody coming the other way who would get there first: from where its way round ends (the other lane's way), back
+    const lane = E[O], [ex, ez] = this.shifted(plan, plan.passTo - SWERVE), far = laneS(lane, [ex, ez]), [sx, sz] = this.shifted(plan, plan.pass + SWERVE), near = laneS(lane, [sx, sz]);
+    const need = (plan.passTo - plan.pass) / 4 + 3;
+    for (const [o, gap] of this.coming(lane, far, 160)) {
+      if (gap > 0 ? gap < Math.max(o.v, DRIVERS[o.drv].v0 * lane.limit / 3.6) * need + 2 : o.s - TYPES[o.type].OVR < near + 2) return;
+    }
+    if (pv && Math.cos(pv.th - lane.pieces[0].h) > 0.5) {   // you, coming the other way
+      const s = laneS(lane, [pv.x, pv.z]);
+      if (s < near + 2 && far - s < Math.max(Math.abs(pv.v), 14) * need + 10) return;
+    }
+    c.pass = plan.pass; c.passTo = plan.passTo; c.passBy = by;
   }
 }
+
+/** Where a point is along a lane (straight): from its start, the way it runs. */
+function laneS(e: El, p: Pt): number { const q = e.pieces[0]; return (p[0] - q.x) * Math.cos(q.h) - (p[1] - q.z) * Math.sin(q.h); }
 
 /** Your car's box now and where it will be in 0.7 s and 1.4 s if it keeps going as it is, and the box round all three. */
 function shapeOf(p: PlayerView): Shape {
