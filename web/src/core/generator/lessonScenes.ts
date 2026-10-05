@@ -93,7 +93,7 @@ export function leaving(v: Vehicle, level: number, seed: number): LessonScene {
  * running at 30° across the plan: the car comes up the aisle at heading 30° and turns 60° into the bay. The mouths
  * and back lines slant with the aisle; neighbours are parked in the bays either side, some further along.
  */
-export function angled(v: Vehicle, seed: number, out = 1.0, Wb = 2.6): LessonScene {
+export function angled(v: Vehicle, seed: number, out = 1.2, Wb = 2.6): LessonScene {
   const rnd = mulberry32(seed * 7907 + 60), D = 6.0, A = 5.2, t30 = Math.tan(Math.PI / 6);
   const mz = (x: number) => -t30 * x;                                         // the line of the mouths
   const ux = Math.cos(Math.PI / 6), uz = -Math.sin(Math.PI / 6), nx = -uz, nz = ux;   // along the aisle, and across it (away from the bays)
@@ -115,7 +115,7 @@ export function angled(v: Vehicle, seed: number, out = 1.0, Wb = 2.6): LessonSce
   // the target bay as an upright box: corners in front of the slanting mouth at the car's right side, short of the back line at its left
   const x0 = -Wb / 2, x1 = Wb / 2, mouth = r3(mz(v.W / 2 + 0.05)), head = r3(mz(-(v.W / 2 + 0.05)) - D);
   spec.bays.target = { x0: r3(x0), x1: r3(x1), z0: head, z1: mouth, headZ: head, sideTol: 0.05, mouthTol: 0.1, inHeading: Math.PI / 2, face: 'in' };
-  // come up the aisle 1 m out from the parked cars' ends, a few bays before the target
+  // come up the aisle `out` m (1.2: Georgia's 3–4 ft) out from the parked cars' ends, a few bays before the target
   const start: Pose = { x: r3(-9 * ux + (out + v.W / 2) * nx), z: r3(-9 * uz + (out + v.W / 2) * nz), th: Math.PI / 6 };
   return { spec, bay: 'target', start };
 }

@@ -740,15 +740,15 @@
       },
       "route": {
         "start": [
-          -6.837,
-          6.158,
+          -6.737,
+          6.332,
           0.523599
         ],
         "pieces": [
           [
             1,
             0,
-            5.687983
+            5.572513
           ],
           [
             1,
@@ -758,14 +758,14 @@
           [
             1,
             0,
-            1.800951
+            1.847686
           ]
         ],
         "authored": true
       },
       "explain": [
         {
-          "text": "Georgia: approach about 1 m (3–4 ft) out from the parked cars, and turn sharply as your steering wheel passes the first line of the bay.",
+          "text": "Georgia: approach about 1–1.2 m (3–4 ft) out from the parked cars, and turn sharply as your steering wheel passes the first line of the bay.",
           "sources": [
             "georgia"
           ]
