@@ -120,6 +120,11 @@ export const viewMoving = (): boolean => moving || zoomed;
 /** The turn that puts heading th straight up the screen. */
 export const upRot = (th: number): number => th - Math.PI / 2;
 
+/** At least this much of the map on the screen (m): across it and down the free band in Park mode, across it when
+ *  driving slowly (faster, the stopping distance zooms out further). A bigger screen shows more round the car, not a
+ *  bigger car: on a phone about 25 px/m in Park mode and 12 px/m standing in Drive mode. */
+const PARK_ACROSS = 16.5, PARK_DOWN = 14, DRIVE_ACROSS = 35;
+
 function follow(sim: Sim, dt: number): void {
   let tx, tz, ts, rot = 0, oy = PV.oyPark;
   const v = sim.vehicle, drive = sim.mode === 'drive', mid = v.L / 2 - v.OVR, init = PV.init;
@@ -129,9 +134,9 @@ function follow(sim: Sim, dt: number): void {
     if (drive) {
       // the zoom rule: at least the distance to stop, plus the car, between the car and the top of the free band
       rot = upRot(sim.th); oy = PV.oyDrive;
-      ts = Math.max(1.2, (PV.oyDrive - PV.top) / (lookAhead(Math.abs(sim.v), v.L) + v.L / 2));
+      ts = Math.max(1.2, Math.min((PV.oyDrive - PV.top) / (lookAhead(Math.abs(sim.v), v.L) + v.L / 2), PV.w / DRIVE_ACROSS));
     } else {
-      ts = Math.min(PV.w, PV.band) / Math.max(11, 2.4 * v.L);
+      ts = Math.min(PV.w / Math.max(PARK_ACROSS, 3.8 * v.L), PV.band / Math.max(PARK_DOWN, 3.2 * v.L));
       if (street?.lockRot != null) rot = street.lockRot;
     }
   }
