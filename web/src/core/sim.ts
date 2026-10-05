@@ -126,7 +126,8 @@ export class Sim {
   place(x: number, z: number, th: number): void { this.x = x; this.z = z; this.th = th; }
 
   touching(x = this.x, z = this.z, th = this.th) { return collides(this.vehicle, this.obstacles, x, z, th); }
-  predict(dir: 1 | -1): Prediction { return predictPath(this.vehicle, this.obstacles, this.x, this.z, this.th, this.steerDeg, dir); }
+  /** The path at the current steering, to where it would touch: on the street, a car parked at the kerb counts too. */
+  predict(dir: 1 | -1): Prediction { return predictPath(this.vehicle, this.obstacles, this.x, this.z, this.th, this.steerDeg, dir, this.traffic?.near(this.x, this.z, this.vehicle.REACH + 12, true)); }
 
   /** Advance by dt seconds. Returns what happened (touches, parking) for the UI to show. */
   step(dt: number): SimEvent[] {
@@ -177,7 +178,7 @@ export class Sim {
       const hit = this.touching(nx, nz, nth), car = !hit && this.traffic ? this.traffic.touch(this.vehicle, nx, nz, nth) : null;
       if (hit || car) {
         const name = hit ? hit.obstacle.name : car!.name, part = hit ? hit.part : car!.part;
-        if (!this.inContact) { this.inContact = true; this.hits++; events.push({ type: 'touch', name, part, hits: this.hits }); touched = { name, traffic: !!car }; }
+        if (!this.inContact) { this.inContact = true; this.hits++; events.push({ type: 'touch', name, part, hits: this.hits }); touched = { name, traffic: !!car && !car.parked }; }
         this.v = 0; this.vy = 0; this.r = 0; break;
       }
       this.x = nx; this.z = nz; this.th = nth; this.inContact = false;
@@ -188,10 +189,12 @@ export class Sim {
     // the street: the traffic moves on (never into your car), and the rules judge this step
     if (this.traffic) this.traffic.step(dt, this.view());
     if (this.rules) for (const fault of this.rules.step({ x: this.x, z: this.z, th: this.th, v: this.v, L: this.vehicle.L, OVR: this.vehicle.OVR, drive }, this.traffic, this.time, dt, touched)) events.push({ type: 'fault', fault });
-    // sensors only when the car has moved; in Drive mode only below 10 km/h
+    // sensors only when the car (or a car in traffic near it: the sensors hear those too) has moved; in Drive mode only
+    // below 10 km/h
     if (!drive || Math.abs(this.v) < PDC_MAX) {
-      const ps = this.x.toFixed(4) + ',' + this.z.toFixed(4) + ',' + this.th.toFixed(5);
-      if (ps !== this.poseSig) { this.poseSig = ps; edgeGaps(this.vehicle, this.obstacles, this.x, this.z, this.th, this.gaps); scanPdc(this.vehicle, this.obstacles, this.x, this.z, this.th, this.sensorReadings, this.pdc); }
+      const near = this.traffic ? this.traffic.near(this.x, this.z, this.vehicle.REACH + 10) : undefined;
+      const ps = this.x.toFixed(4) + ',' + this.z.toFixed(4) + ',' + this.th.toFixed(5) + (near ? near.map(o => `|${o.cx.toFixed(3)},${o.cz.toFixed(3)}`).join('') : '');
+      if (ps !== this.poseSig) { this.poseSig = ps; edgeGaps(this.vehicle, this.obstacles, this.x, this.z, this.th, this.gaps, near); scanPdc(this.vehicle, this.obstacles, this.x, this.z, this.th, this.sensorReadings, this.pdc, near); }
     } else if (this.poseSig !== 'off') {
       this.poseSig = 'off'; this.sensorReadings.fill(Infinity);
       for (const k of ['front', 'rear', 'left', 'right'] as const) { this.gaps[k] = 9; this.pdc[k] = Infinity; }

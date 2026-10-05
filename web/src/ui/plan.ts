@@ -248,7 +248,7 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
   if (street && d1 > 0) {
     c.globalAlpha = d1; c.lineWidth = 1; c.setLineDash([4, 4]); c.strokeStyle = 'rgba(94,208,138,.55)';
     for (const sl of street.slots) {
-      if (sl === street.target || sl.parkable === false) continue;
+      if (sl === street.target || sl.parkable === false || sim.traffic?.taken(sl.id)) continue;   // a car parked in it for now
       const q = bayRect(sl.bay, [sl.bay.x0 + 0.08, sl.bay.x1 - 0.08, sl.bay.z0 + 0.05, sl.bay.z1 - 0.05]), xs = q.map(p => p[0]), zs = q.map(p => p[1]);
       if (inView(Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs))) { path(c, q); c.stroke(); }
     }

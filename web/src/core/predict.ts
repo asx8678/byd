@@ -15,7 +15,7 @@ export interface Prediction {
   end: [number, number, number];
 }
 
-export function predictPath(v: Vehicle, obstacles: readonly Obstacle[], x: number, z: number, th: number, steerDeg: number, dir: 1 | -1): Prediction {
+export function predictPath(v: Vehicle, obstacles: readonly Obstacle[], x: number, z: number, th: number, steerDeg: number, dir: 1 | -1, extra?: readonly Obstacle[]): Prediction {
   const k = Math.tan(-steerDeg * DEG) / v.WB, step = 0.06 * dir, sg = Math.sign(steerDeg) || 1;
   const fc = v.planCorners[1];   // front-right corner, mirrored for the side that swings
   const swing: Pt = dir > 0 ? [0, sg * v.W / 2] : [fc[0], -sg * fc[1]];   // inner rear going forward, outer front corner reversing
@@ -28,7 +28,7 @@ export function predictPath(v: Vehicle, obstacles: readonly Obstacle[], x: numbe
     let nx, nz, nh;
     if (Math.abs(k) < 1e-6) { nx = px + step * Math.cos(ph); nz = pz - step * Math.sin(ph); nh = ph; }
     else { nh = ph + step * k; nx = px + (Math.sin(nh) - Math.sin(ph)) / k; nz = pz + (Math.cos(nh) - Math.cos(ph)) / k; }
-    const o = collides(v, obstacles, nx, nz, nh); if (o) { hit = o.obstacle; part = o.part; break; }
+    const o = collides(v, obstacles, nx, nz, nh, extra); if (o) { hit = o.obstacle; part = o.part; break; }
     px = nx; pz = nz; ph = nh; s += step; rec();
     if (Math.abs(s) >= nextGhost - 1e-9) { ghosts.push([px, pz, ph]); nextGhost += 0.8; }
   }

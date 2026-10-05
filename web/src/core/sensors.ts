@@ -10,12 +10,16 @@ export type { Side, SensorMount } from './vehicle';
 export type SideValues = Record<Side, number>;
 export const SIDES: readonly Side[] = ['front', 'rear', 'left', 'right'];
 
-/** Gap from each side of the car's rectangle to the nearest obstacle (9 = nothing near). */
-export function edgeGaps(v: Vehicle, obstacles: readonly Obstacle[], x: number, z: number, th: number, out: SideValues): void {
+const NONE: readonly Obstacle[] = [];
+/** Gap from each side of the car's rectangle to the nearest obstacle (9 = nothing near): the scene's, and `extra` (on the
+ *  street, the cars in traffic near it). */
+export function edgeGaps(v: Vehicle, obstacles: readonly Obstacle[], x: number, z: number, th: number, out: SideValues, extra: readonly Obstacle[] = NONE): void {
   const C = heroCorners(v, x, z, th);
   const edges: Record<Side, [Pt, Pt]> = { rear: [C[0], C[3]], front: [C[1], C[2]], left: [C[0], C[1]], right: [C[3], C[2]] };
   for (const k of SIDES) out[k] = 9;
-  for (const o of nearby(obstacles, x, z, v.L + 10)) {
+  const list = nearby(obstacles, x, z, v.L + 10);
+  for (let i = 0, n = list.length + extra.length; i < n; i++) {
+    const o = i < list.length ? list[i] : extra[i - list.length];
     if (o.cls === 'kerb') continue;   // the bumpers hang over kerbs
     if (o.kind === 'poly') {
       let near = false; for (const p of o.pts) if (Math.abs(p[0] - x) < 14 && Math.abs(p[1] - z) < 14) { near = true; break; }
@@ -57,9 +61,10 @@ export function rayDist(obstacles: readonly Obstacle[], ox: number, oz: number, 
   return best;
 }
 
-/** Each sensor sweeps five rays across its cone; readings[i] is sensor i's distance, out is the closest per group. */
-export function scanPdc(v: Vehicle, obstacles: readonly Obstacle[], x: number, z: number, th: number, readings: number[], out: SideValues): void {
-  const cs = Math.cos(th), sn = Math.sin(th), near = nearby(obstacles, x, z, v.REACH + Math.max(v.pdc.front, v.pdc.rear, v.pdc.side) + 1);
+/** Each sensor sweeps five rays across its cone; readings[i] is sensor i's distance, out is the closest per group. The
+ *  sensors hear `extra` too (on the street, the cars in traffic near it). */
+export function scanPdc(v: Vehicle, obstacles: readonly Obstacle[], x: number, z: number, th: number, readings: number[], out: SideValues, extra: readonly Obstacle[] = NONE): void {
+  const cs = Math.cos(th), sn = Math.sin(th), stat = nearby(obstacles, x, z, v.REACH + Math.max(v.pdc.front, v.pdc.rear, v.pdc.side) + 1), near = extra.length ? stat.concat(extra) : stat;
   for (const k of SIDES) out[k] = Infinity;
   v.sensors.forEach((sd, i) => {
     const range = rangeOf(v, sd.g);

@@ -15,14 +15,20 @@
 // to get across; does not drive into a junction it cannot leave; and keeps clear of your car: it stops behind you, leaves
 // room when you signal to park, and waits at its line when you are in, or about to cross, its way through the junction.
 //
+// Some of the parked cars pull out: each sits at the back of a free space on the street. When you come up behind one (or
+// when its time comes anyway) its indicator starts blinking; after three seconds, once neither you nor anyone else is in
+// its way or coming too fast, it pulls out on an S-curve onto its lane's line and drives on, and the space is free.
+// Couriers drive vans and now and then stop in their lane, hazards on, for 30 to 60 s. A driver held up by you, or by a
+// car stopped in the lane, honks once its patience runs out (an impatient one sooner, and more often).
+//
 // Everything steps with the simulation's fixed steps and draws random numbers only from its own seed, so the same
 // district and seed give the same traffic, and a snapshot between steps brings it back exactly (replays, rewinds).
 import { footprint } from './car';
-import { sideDir, streetPt, type CityMap, type Drive, type Street } from './city';
+import { sideDir, streetPt, type CityMap, type Drive, type KerbSlot, type Street } from './city';
 import type { CarPart } from './collision';
 import { circleHitsPoly, polysOverlap, ptSeg } from './geometry';
 import { wrapPi, type Pt } from './math';
-import type { Rect } from './scene';
+import type { Obstacle, Rect } from './scene';
 import type { Vehicle } from './vehicle';
 import { nearby } from './world';
 
@@ -70,7 +76,7 @@ export function lightAt(j: Junction, axis: 'x' | 'z', t: number): Light {
 
 /** The pose (rear-axle middle and heading) s along a lane or path; before its start or past its end, straight on (the
  *  lanes either side are straight). */
-export function poseOn(e: El, s: number): [number, number, number] {
+export function poseOn(e: { pieces: readonly Piece[] }, s: number): [number, number, number] {
   const P = e.pieces;
   if (s < 0) { const p = P[0]; return [p.x + s * Math.cos(p.h), p.z - s * Math.sin(p.h), p.h]; }
   let i = P.length - 1;
@@ -234,23 +240,28 @@ function buildNetwork(map: CityMap): Network {
  *  the kerbs and its body clear of everything else; then only what it can carry on from to more of the same (a long car
  *  that cannot take a tight corner of the ring stays off the lane leading to it). */
 function fitting(map: CityMap, els: El[], ty: CarType): boolean[] {
-  const obs = map.scene.obstacles, tr = ty.W - 0.26, big = { L: ty.L + 0.1, W: ty.W + 0.06, OVR: ty.OVR + 0.05 };
-  const tyres: Pt[][] = [0, ty.WB].flatMap(ax => [-1, 1].map(sg => [[ax - 0.4, sg * tr / 2 - 0.14], [ax + 0.4, sg * tr / 2 - 0.14], [ax + 0.4, sg * tr / 2 + 0.14], [ax - 0.4, sg * tr / 2 + 0.14]] as Pt[]));
-  const use = els.map(e => {
-    for (let s = 0; s <= e.len + 1e-9; s += 2 * SAMPLE) {
-      const [x, z, h] = poseOn(e, s), box = boxAt(big, x, z, h);
-      for (const o of nearby(obs, x, z, ty.L + 1)) {
-        if (o.cls === 'kerb') { if (o.kind === 'poly' && tyres.some(w => polysOverlap(footprint(x, z, h, w), o.pts))) return false; continue; }
-        if (o.kind === 'poly' ? polysOverlap(box, o.pts) : circleHitsPoly(o.x, o.z, o.r, box)) return false;
-      }
-    }
-    return true;
-  });
+  const use = els.map(e => sweepClear(map, e.pieces, e.len, ty, 2 * SAMPLE));
   for (let changed = true; changed;) {
     changed = false;
     for (const e of els) if (use[e.id] && (e.kind === 'lane' ? !e.next.some(p => use[p]) : !use[e.next[0]])) { use[e.id] = false; changed = true; }
   }
   return use;
+}
+
+/** Whether a size of car driven along these pieces keeps its body (a little oversize) clear of everything on the map and
+ *  its tyres off the kerbs, looked at every `step` m (and its body where `inside` says it may be). */
+function sweepClear(map: CityMap, pieces: readonly Piece[], len: number, ty: CarType, step = SAMPLE, inside?: (box: Pt[]) => boolean): boolean {
+  const obs = map.scene.obstacles, tr = ty.W - 0.26, big = { L: ty.L + 0.1, W: ty.W + 0.06, OVR: ty.OVR + 0.05 };
+  const tyres: Pt[][] = [0, ty.WB].flatMap(ax => [-1, 1].map(sg => [[ax - 0.4, sg * tr / 2 - 0.14], [ax + 0.4, sg * tr / 2 - 0.14], [ax + 0.4, sg * tr / 2 + 0.14], [ax - 0.4, sg * tr / 2 + 0.14]] as Pt[]));
+  for (let s = 0; s <= len + 1e-9; s += step) {
+    const [x, z, h] = poseOn({ pieces }, s), box = boxAt(big, x, z, h);
+    if (inside && !inside(box)) return false;
+    for (const o of nearby(obs, x, z, ty.L + 1)) {
+      if (o.cls === 'kerb') { if (o.kind === 'poly' && tyres.some(w => polysOverlap(footprint(x, z, h, w), o.pts))) return false; continue; }
+      if (o.kind === 'poly' ? polysOverlap(box, o.pts) : circleHitsPoly(o.x, o.z, o.r, box)) return false;
+    }
+  }
+  return true;
 }
 
 /** Who goes where two paths through junction J share a zone, as seen from p. */
@@ -264,7 +275,8 @@ function ruleOf(J: Junction, p: El, q: El): Conflict['rule'] {
 
 /** A car in traffic, by size: as common as the parked ones (generator/templates.ts), each with the wheelbase and rear
  *  overhang of a real car its size (Smart fortwo, Peugeot 208, BYD Atto 2, Škoda Octavia estate, Ram 1500; the
- *  saloon's are estimated). */
+ *  saloon's are estimated); and a van, which only couriers drive (a Ford Transit Custom's length, width and wheelbase, its
+ *  overhang estimated). */
 export interface CarType { name: string; L: number; W: number; WB: number; OVR: number; share: number }
 export const TYPES: readonly CarType[] = [
   { name: 'city car', L: 2.70, W: 1.66, WB: 1.87, OVR: 0.40, share: 0.5 },
@@ -273,19 +285,28 @@ export const TYPES: readonly CarType[] = [
   { name: 'estate', L: 4.69, W: 1.83, WB: 2.69, OVR: 1.09, share: 2 },
   { name: 'saloon', L: 5.00, W: 1.90, WB: 2.95, OVR: 1.10, share: 1.5 },
   { name: 'pickup', L: 5.92, W: 2.08, WB: 3.67, OVR: 1.24, share: 0.4 },
+  { name: 'van', L: 4.97, W: 1.99, WB: 2.93, OVR: 1.09, share: 0 },
 ];
 /** A driver: the speed wanted (a share of the limit), the time gap kept to the car ahead (s), acceleration and comfortable
  *  braking (m/s²), the gap left when stopped (m), how hard a curve may push them sideways (m/s²), the hardest they will
- *  brake to stop for amber rather than drive on (m/s²), and the time to spare they want when they give way (s). */
-export interface Driver { name: string; share: number; v0: number; T: number; a: number; b: number; s0: number; lat: number; amber: number; gap: number }
+ *  brake to stop for amber rather than drive on (m/s²), the time to spare they want when they give way (s), and how long
+ *  they wait behind you, or behind a car stopped in the lane, before they honk (s). Couriers come only with the Extras. */
+export interface Driver { name: string; share: number; v0: number; T: number; a: number; b: number; s0: number; lat: number; amber: number; gap: number; patience: number }
 export const DRIVERS: readonly Driver[] = [
-  { name: 'calm', share: 6, v0: 1.0, T: 1.4, a: 1.4, b: 2.0, s0: 2.0, lat: 2.0, amber: 3.0, gap: 1.6 },
-  { name: 'cautious', share: 2, v0: 0.7, T: 2.0, a: 1.0, b: 1.6, s0: 2.5, lat: 1.5, amber: 4.5, gap: 2.6 },
-  { name: 'fast', share: 2, v0: 1.15, T: 0.8, a: 2.2, b: 2.6, s0: 1.5, lat: 2.6, amber: 1.8, gap: 1.0 },
+  { name: 'calm', share: 6, v0: 1.0, T: 1.4, a: 1.4, b: 2.0, s0: 2.0, lat: 2.0, amber: 3.0, gap: 1.6, patience: 14 },
+  { name: 'cautious', share: 2, v0: 0.7, T: 2.0, a: 1.0, b: 1.6, s0: 2.5, lat: 1.5, amber: 4.5, gap: 2.6, patience: 25 },
+  { name: 'fast', share: 2, v0: 1.15, T: 0.8, a: 2.2, b: 2.6, s0: 1.5, lat: 2.6, amber: 1.8, gap: 1.0, patience: 6 },
+  { name: 'courier', share: 0, v0: 0.95, T: 1.5, a: 1.4, b: 2.0, s0: 2.0, lat: 1.8, amber: 3.5, gap: 1.4, patience: 10 },
 ];
+const VAN = TYPES.findIndex(t => t.name === 'van'), COURIER = DRIVERS.findIndex(d => d.name === 'courier');
 /** Cars per kilometre of lane: light traffic and busy. */
 export const DENSITY = { light: 12, busy: 24 } as const;
+/** The cars besides the traffic itself: parked ones that will pull out, and couriers. */
+export interface Extras { leavers?: number; couriers?: number }
 
+/** Driving; parked at the kerb (it will pull out: el and s say where its rear axle is along its lane); pulling out of its
+ *  space (el and s likewise, as it goes); stopped in its lane to deliver. */
+export type CarState = 'drive' | 'parked' | 'out' | 'stop';
 export interface TCar {
   id: number; type: number; drv: number;
   el: number; s: number; v: number; acc: number;   // where along which lane or path (its rear axle's middle), speed (m/s), acceleration
@@ -295,10 +316,27 @@ export interface TCar {
   commit: number;                                    // the junction it drives on through at amber (-1: none)
   inAt: number;                                      // when its front crossed into the junction it is in (the first in goes first)
   jams: number; moved: number;                       // times the last-resort check held it back, and metres driven (for the tests)
-  x: number; z: number; h: number; box: Pt[];        // where it is, from its lane or path
+  state: CarState;
+  place: number; xs: number;                         // parked or pulling out: its place at the kerb (Traffic.places), how far along its way out
+  until: number;                                     // parked: when it wakes anyway, then since when it has signalled; stopped: when it drives on
+  wakeD: number;                                     // parked: it wakes as your car comes this close behind it (m; 0: only when its time comes)
+  haz: boolean; honk: number; hold: number;          // its hazard lights, when it last honked, how long it has been held up (s)
+  lineT: number;                                     // how long it has been waiting at its line (s): the longer, the smaller the gap it takes
+  imp: boolean;                                      // an impatient driver: honks sooner, and more often
+  stopS: number; nextStop: number;                   // a courier: where along its lane it is stopping (-1: nowhere yet), when it next delivers
+  x: number; z: number; h: number; box: Pt[];        // where it is, from its lane or path (or its way out of a space)
 }
-export type CarSnap = Omit<TCar, 'x' | 'z' | 'h' | 'box'>;
-export interface TrafficSnap { t: number; r: number; cars: CarSnap[] }
+/** What a car that just drives has of the rest. */
+const FRESH = { state: 'drive' as CarState, place: -1, xs: 0, until: 0, wakeD: 0, haz: false, honk: -1, hold: 0, lineT: 0, imp: false, stopS: -1, nextStop: 0 };
+type Later = keyof typeof FRESH;
+export type CarSnap = Omit<TCar, 'x' | 'z' | 'h' | 'box' | Later> & Partial<Pick<TCar, Later>>;
+/** The traffic between two steps: its clock, its two streams of random numbers (the traffic's own, and the one for
+ *  everything that came after it), how many of the cars are the traffic itself, and the places parked cars pull out of. */
+export interface TrafficSnap { t: number; r: number; x?: number; base?: number; places?: { slot: string; type: number }[]; cars: CarSnap[] }
+/** What a car does this step: how hard it brakes or accelerates, whether it holds at its line, the junction it drives on
+ *  through at amber, and what holds it up if anything does: you, or a car stopped in the lane. */
+interface Plan { a: number; wait: boolean; commit: number; by: '' | 'you' | 'stop' }
+const STILL: Plan = { a: 0, wait: true, commit: -1, by: '' };
 /** Your car as the traffic sees it: where it is, its speed (m/s, + forward), size, signals, and whether you are parking. */
 export interface PlayerView { x: number; z: number; th: number; v: number; L: number; W: number; OVR: number; ind: -1 | 0 | 1; hazard: boolean; park: boolean }
 interface Shape extends PlayerView { boxes: Pt[][]; bb: [number, number, number, number] }
@@ -312,9 +350,9 @@ function rand(st: { r: number }): number {
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
 const pickShare = (list: readonly { share: number }[], u: number): number => {
-  let x = u * list.reduce((m, q) => m + q.share, 0);
-  for (let i = 0; i < list.length; i++) { x -= list[i].share; if (x <= 0) return i; }
-  return list.length - 1;
+  let x = u * list.reduce((m, q) => m + q.share, 0), last = 0;
+  for (let i = 0; i < list.length; i++) { if (!list[i].share) continue; last = i; x -= list[i].share; if (x <= 0) return i; }
+  return last;   // never one with no share
 };
 const boxAt = (ty: { L: number; W: number; OVR: number }, x: number, z: number, h: number): Pt[] => footprint(x, z, h, [[-ty.OVR, -ty.W / 2], [ty.L - ty.OVR, -ty.W / 2], [ty.L - ty.OVR, ty.W / 2], [-ty.OVR, ty.W / 2]]);
 /** A shared zone a0-a1 (where the biggest car's rear axle is while it could touch a car on the other path) as it is for car
@@ -342,17 +380,101 @@ function distTo(P: Pt[], x: number, z: number): number {
   return inside ? 0 : m;
 }
 
+/** A parked car's way out of its space: parked at the back of it (30 cm from the car behind, 20 cm from the kerb), it
+ *  pulls out on an S-curve (a tight arc away from the kerb, a straight, a gentler arc back) onto its lane's line. */
+export interface Exit {
+  slot: string; type: number;
+  el: number; s0: number; joinS: number;    // its lane, where along it the rear axle is while parked, and where it joins the lane's line
+  pieces: Piece[]; len: number;             // the way out
+  side: -1 | 1;                             // the indicator it shows: away from the kerb
+  sweep: Pt[][];                            // its box (5 cm to spare) every 50 cm along the way out, where it is parked first
+  x0: number; z0: number; ux: number; uz: number;   // where its rear axle is while parked, and the way the lane runs
+}
+const exits = new WeakMap<Network, Map<string, Exit | null>>();
+/** The way out of a free space for a parked car of a given size, worked out once: the shortest S-curve (its first arc
+ *  from a 4.5 m radius, more for the long cars; the second as gentle as it needs to be) that keeps its body and tyres clear
+ *  of the car ahead, the kerb and everything else, keeps it on its own side of the centre line (10 cm to spare: the nose
+ *  swings out as it turns back) and joins its lane at least 10 m before the lane ends. Null if there is none, if the
+ *  parked car would be in the way of the traffic, or if its size does not fit the lane. */
+export function exitFor(net: Network, sl: KerbSlot, type: number): Exit | null {
+  let m = exits.get(net);
+  if (!m) exits.set(net, m = new Map());
+  const key = `${sl.id}:${type}`;
+  if (!m.has(key)) m.set(key, makeExit(net, sl, type));
+  return m.get(key)!;
+}
+function makeExit(net: Network, sl: KerbSlot, type: number): Exit | null {
+  const ty = TYPES[type], st = sl.street, sd = st.side[sl.side], dir = sideDir(st, sl.side), side = sl.side;
+  if (sl.length < 0.3 + ty.L + 1.2) return null;
+  const lane = net.els.find(e => {
+    if (e.kind !== 'lane' || e.street !== st.id || e.side !== side) return false;
+    const p = e.pieces[0], a = st.along === 'x' ? p.x : p.z, b = a + dir * e.len;
+    return Math.min(a, b) <= sl.a0 && Math.max(a, b) >= sl.a1;
+  });
+  if (!lane || !net.ok[type][lane.id]) return null;
+  const rear = dir > 0 ? sl.a0 : sl.a1, [x0, z0] = streetPt(st, rear + dir * (0.3 + ty.OVR), side * (sd.hw - 0.2 - ty.W / 2)), h = sd.th;
+  const ux = Math.cos(h), uz = -Math.sin(h), lp = lane.pieces[0], s0 = (x0 - lp.x) * ux + (z0 - lp.z) * uz;
+  const D = sd.hw - 0.2 - ty.W / 2 - (st.lane / 2 - OFF), k1 = net.drive === 'right' ? 1 : -1;   // away from the kerb: left, keeping right
+  if (s0 < 1 || !clearOfTraffic(net, boxAt(ty, x0, z0, h))) return null;
+  const across = (p: Pt) => side * ((st.along === 'x' ? p[1] : p[0]) - st.c), R0 = ty.L > 5.5 ? 6 : ty.L > 4.8 ? 5 : 4.5;
+  let best: { pieces: Piece[]; len: number; X: number } | null = null;
+  for (let R1 = R0; R1 <= R0 + 2 + 1e-9; R1 += 0.5) for (const R2 of [R1, 6, 8, 10, 12, 15, 18, 22, 27]) for (let deg = 50; deg >= 10; deg -= 4) {
+    const p = deg * Math.PI / 180, dl = (D - (R1 + R2) * (1 - Math.cos(p))) / Math.sin(p), X = (R1 + R2) * Math.sin(p) + dl * Math.cos(p);
+    if (R2 < R1 || dl < 0 || s0 + X > lane.len - 10 || (best && X >= best.X)) continue;
+    const pieces: Piece[] = [];
+    let s = 0, x = x0, z = z0, hh = h;
+    for (const [len, k] of [[R1 * p, k1 / R1], [dl, 0], [R2 * p, -k1 / R2]]) {
+      if (len < 1e-6) continue;
+      const pc: Piece = { s0: s, len, x, z, h: hh, k };
+      pieces.push(pc); [x, z, hh] = poseOn({ pieces: [pc] }, s + len); s += len;
+    }
+    if (sweepClear(net.map, pieces, s, ty, SAMPLE, b => b.every(q => across(q) >= 0.1))) best = { pieces, len: s, X };
+  }
+  if (!best) return null;
+  const { pieces, len } = best, big = { L: ty.L + 0.1, W: ty.W + 0.1, OVR: ty.OVR + 0.05 }, sweep: Pt[][] = [];
+  for (let u = 0; u < len + 0.5; u += 0.5) { const [px, pz, ph] = poseOn({ pieces }, Math.min(u, len)); sweep.push(boxAt(big, px, pz, ph)); }
+  return { slot: sl.id, type, el: lane.id, s0, joinS: s0 + best.X, pieces, len, side: k1 > 0 ? -1 : 1, sweep, x0, z0, ux, uz };
+}
+/** Whether a parked car's box is clear, with 15 cm to spare, of every size of car on every lane and path it fits. */
+function clearOfTraffic(net: Network, box: Pt[]): boolean {
+  const xs = box.map(p => p[0]), zs = box.map(p => p[1]), bx0 = Math.min(...xs) - 7, bx1 = Math.max(...xs) + 7, bz0 = Math.min(...zs) - 7, bz1 = Math.max(...zs) + 7;
+  for (const e of net.els) {
+    const ends = e.pieces.flatMap(p => [[p.x, p.z], poseOn({ pieces: [p] }, p.s0 + p.len)]);
+    if (ends.every(q => q[0] < bx0) || ends.every(q => q[0] > bx1) || ends.every(q => q[1] < bz0) || ends.every(q => q[1] > bz1)) continue;
+    for (let t = 0; t < TYPES.length; t++) {
+      if (!net.ok[t][e.id]) continue;
+      const ty = TYPES[t], big = { L: ty.L + 0.3, W: ty.W + 0.3, OVR: ty.OVR + 0.15 };
+      for (let s = 0; s <= e.len + 1e-9; s += 2 * SAMPLE) {
+        const [x, z, h] = poseOn(e, s);
+        if (x > bx0 && x < bx1 && z > bz0 && z < bz1 && polysOverlap(boxAt(big, x, z, h), box)) return false;
+      }
+    }
+  }
+  return true;
+}
+
 export class Traffic {
   t = 0;
   cars: TCar[] = [];
+  /** The places at the kerb that parked cars pull out of (TCar.place). */
+  places: Exit[] = [];
+  /** The cars your car held up in the last step (their ids): waiting behind it while it was not waiting itself. */
+  held: number[] = [];
+  private base = 0;                  // how many of the cars are the traffic itself (the rest came after, with numbers of their own)
   private readonly rs = { r: 1 };
-  private readonly on: TCar[][];   // who is on each lane and path, in order along it (made each step)
+  private readonly rx = { r: 1 };    // the random numbers of everything that came after the traffic itself
+  private readonly on: TCar[][];     // who is on each lane and path, in order along it (made each step)
+  private readonly into: number[][]; // the paths leading into each lane
+  private blame = false;             // this step: whether whoever waits behind your car is held up by you
 
-  constructor(readonly net: Network) { this.on = net.els.map(() => []); }
+  constructor(readonly net: Network) {
+    this.on = net.els.map(() => []); this.into = net.els.map(() => []);
+    for (const e of net.els) if (e.kind === 'path') this.into[e.next[0]].push(e.id);
+  }
 
   /** Traffic for a district: perKm cars per kilometre of lane, placed and chosen from the seed, none within 35 m of `avoid`
-   *  (where you start). */
-  static spawn(net: Network, seed: number, perKm: number, avoid: { x: number; z: number } | null): Traffic {
+   *  (where you start); then, with random numbers of their own, the parked cars that will pull out and the couriers. */
+  static spawn(net: Network, seed: number, perKm: number, avoid: { x: number; z: number } | null, more: Extras = {}): Traffic {
     const T = new Traffic(net), lanes = net.els.filter(e => e.kind === 'lane'), n = Math.round(net.laneLen / 1000 * perKm);
     T.rs.r = Math.imul(seed, 2654435761) ^ 0x5bd1e995;
     for (let tries = 0; T.cars.length < n && tries < 40 * n; tries++) {
@@ -363,70 +485,144 @@ export class Traffic {
       if (room <= 0 || !net.ok[type][e.id] || T.cars.some(o => o.el === e.id && Math.abs(o.s - s) < (TYPES[o.type].L + ty.L) / 2 + 5)) continue;
       const [x, z, h] = poseOn(e, s);
       if (avoid && Math.hypot(x - avoid.x, z - avoid.z) < 35) continue;
-      const c: TCar = { id: T.cars.length, type, drv, el: e.id, s, v: 0.6 * DRIVERS[drv].v0 * e.limit / 3.6, acc: 0, route: [], ind: 0, wait: false, commit: -1, inAt: NEVER, jams: 0, moved: 0, x, z, h, box: boxAt(ty, x, z, h) };
-      T.extend(c); T.signal(c); T.cars.push(c);
+      const c: TCar = { id: T.cars.length, type, drv, el: e.id, s, v: 0.6 * DRIVERS[drv].v0 * e.limit / 3.6, acc: 0, route: [], ind: 0, wait: false, commit: -1, inAt: NEVER, jams: 0, moved: 0, ...FRESH, x, z, h, box: boxAt(ty, x, z, h) };
+      T.extend(c, T.rs); T.signal(c); T.cars.push(c);
     }
+    T.base = T.cars.length;
+    T.rx.r = Math.imul(seed, 2246822519) ^ 0x27d4eb2f;
+    for (const c of T.cars) c.imp = rand(T.rx) < 0.25;
+    if (more.leavers) T.addLeavers(more.leavers);
+    if (more.couriers) T.addCouriers(more.couriers, avoid);
     return T;
+  }
+  /** n parked cars that will pull out, each at the back of a free space on the street that was not promised to your car
+   *  (the spaces in an order of their own), its size as common as in traffic among those that can pull out of it. */
+  private addLeavers(n: number): void {
+    const net = this.net, order = net.map.slots.filter((s): s is KerbSlot => s.kind === 'kerb' && !s.guaranteed).map(s => ({ s, u: rand(this.rx) })).sort((a, b) => a.u - b.u);
+    const sizes = TYPES.map((_, t) => t).filter(t => TYPES[t].share > 0).sort((a, b) => TYPES[b].share - TYPES[a].share);
+    for (const { s: sl } of order) {
+      if (this.places.length >= n) break;
+      const want = pickShare(TYPES, rand(this.rx)), t = [want, ...sizes.filter(q => q !== want)].find(q => exitFor(net, sl, q));
+      if (t === undefined) continue;
+      const ex = exitFor(net, sl, t)!, ty = TYPES[t], [x, z, h] = poseOn(ex, 0), box = boxAt(ty, x, z, h);
+      if (this.cars.some(o => Math.abs(o.x - x) < 12 && Math.abs(o.z - z) < 12 && polysOverlap(o.box, box))) continue;
+      const drv = pickShare(DRIVERS, rand(this.rx)), until = 90 + 600 * rand(this.rx), wakeD = rand(this.rx) < 0.75 ? 15 + 30 * rand(this.rx) : 0;
+      const c: TCar = { id: this.cars.length, type: t, drv, el: ex.el, s: ex.s0, v: 0, acc: 0, route: [], ind: 0, wait: false, commit: -1, inAt: NEVER, jams: 0, moved: 0,
+        ...FRESH, state: 'parked', place: this.places.length, until, wakeD, imp: rand(this.rx) < 0.25, x, z, h, box };
+      this.places.push(ex); this.extend(c); this.cars.push(c);
+    }
+  }
+  /** n couriers in vans, placed like the traffic: they drive like anyone else until a delivery is due. */
+  private addCouriers(n: number, avoid: { x: number; z: number } | null): void {
+    const net = this.net, ty = TYPES[VAN], lanes = net.els.filter(e => e.kind === 'lane' && net.ok[VAN][e.id] && e.len > ty.L + 20);
+    for (let k = 0, tries = 0; k < n && lanes.length && tries < 50 * n; tries++) {
+      const e = lanes[Math.floor(rand(this.rx) * lanes.length)], s = ty.OVR + 6 + rand(this.rx) * (e.len - ty.L - 16);
+      if (this.cars.some(o => o.state !== 'parked' && o.el === e.id && Math.abs(o.s - s) < (TYPES[o.type].L + ty.L) / 2 + 5)) continue;
+      const [x, z, h] = poseOn(e, s);
+      if (avoid && Math.hypot(x - avoid.x, z - avoid.z) < 35) continue;
+      const c: TCar = { id: this.cars.length, type: VAN, drv: COURIER, el: e.id, s, v: 0.6 * DRIVERS[COURIER].v0 * e.limit / 3.6, acc: 0, route: [], ind: 0, wait: false, commit: -1, inAt: NEVER, jams: 0, moved: 0,
+        ...FRESH, nextStop: 20 + 60 * rand(this.rx), imp: rand(this.rx) < 0.25, x, z, h, box: boxAt(ty, x, z, h) };
+      this.extend(c); this.signal(c); this.cars.push(c); k++;
+    }
   }
 
   snapshot(): TrafficSnap {
-    return { t: this.t, r: this.rs.r, cars: this.cars.map(({ x: _x, z: _z, h: _h, box: _b, route, ...c }) => ({ ...c, route: route.slice() })) };
+    return {
+      t: this.t, r: this.rs.r, x: this.rx.r, base: this.base, places: this.places.map(p => ({ slot: p.slot, type: p.type })),
+      cars: this.cars.map(({ x: _x, z: _z, h: _h, box: _b, route, ...c }) => ({ ...c, route: route.slice() })),
+    };
   }
   restore(s: TrafficSnap): void {
-    this.t = s.t; this.rs.r = s.r;
-    this.cars = s.cars.map(c => { const [x, z, h] = poseOn(this.net.els[c.el], c.s); return { ...c, route: c.route.slice(), x, z, h, box: boxAt(TYPES[c.type], x, z, h) }; });
+    this.t = s.t; this.rs.r = s.r; this.rx.r = s.x ?? 1; this.base = s.base ?? s.cars.length;
+    this.places = (s.places ?? []).map(p => exitFor(this.net, this.net.map.slots.find(q => q.id === p.slot) as KerbSlot, p.type)!);
+    this.cars = s.cars.map(c => {
+      const car = { ...c, route: c.route.slice() } as TCar;   // in the snapshot's order, so the next snapshot reads the same
+      for (const [k, v] of Object.entries(FRESH)) if ((car as unknown as Record<string, unknown>)[k] === undefined) (car as unknown as Record<string, unknown>)[k] = v;   // one made before these existed
+      [car.x, car.z, car.h] = this.poseOf(car); car.box = boxAt(TYPES[car.type], car.x, car.z, car.h);
+      return car;
+    });
   }
 
   /** The light the lane `el` has at its junction now. */
   lightFor(ap: Approach): Light { return lightAt(this.net.junctions[ap.j], this.net.els[ap.el].axis, this.t); }
 
-  /** Advance by dt: every car decides from where everyone is, then they all move. */
+  /** Advance by dt: the parked cars wake and pull out, the couriers stop and go, every car decides from where everyone is,
+   *  the ones held up count their patience, then they all move. */
   step(dt: number, p: PlayerView | null): void {
     this.t += dt;
     for (const l of this.on) l.length = 0;
-    for (const c of this.cars) this.on[c.el].push(c);
+    for (const c of this.cars) if (c.state !== 'parked') this.on[c.el].push(c);
     for (const l of this.on) if (l.length > 1) l.sort((a, b) => a.s - b.s);
-    const pv = p ? shapeOf(p) : null, plans = this.cars.map(c => this.decide(c, pv));
-    this.cars.forEach((c, i) => { c.wait = plans[i].wait; c.commit = plans[i].commit; });
-    for (let i = 0; i < this.cars.length; i++) this.move(this.cars[i], plans[i].a, dt, pv);
+    const pv = p ? shapeOf(p) : null;
+    this.blame = !!pv && !this.queued(pv);
+    for (const c of this.cars) { if (c.state === 'parked') this.parked(c, pv); else if (c.drv === COURIER) this.deliver(c); }
+    const plans = this.cars.map(c => (c.state === 'parked' ? STILL : this.decide(c, pv)));
+    this.held = [];
+    this.cars.forEach((c, i) => {
+      const pl = plans[i];
+      c.wait = pl.wait; c.commit = pl.commit;
+      c.lineT = pl.wait && c.v < 0.5 ? c.lineT + dt : c.v > 2 ? 0 : c.lineT;
+      // held up by you, or by a car stopped in the lane: it honks once its patience runs out, and again every few seconds
+      if (pl.by && c.v < 0.5) { c.hold += dt; if (pl.by === 'you') this.held.push(c.id); } else c.hold = 0;
+      if (c.hold >= DRIVERS[c.drv].patience * (c.imp ? 0.4 : 1) && this.t - c.honk >= (c.imp ? 3 : 6)) c.honk = this.t;
+    });
+    for (let i = 0; i < this.cars.length; i++) if (this.cars[i].state !== 'parked') this.move(this.cars[i], plans[i].a, dt, pv);
   }
 
-  /** What your car (v at rear-axle pose x, z, th) would touch in traffic: a car's body, or with a door mirror (they are
-   *  all taller than the mirrors). */
-  touch(v: Vehicle, x: number, z: number, th: number): { name: string; part: CarPart } | null {
+  /** What your car (v at rear-axle pose x, z, th) would touch of the traffic: a car's body, or with a door mirror (they
+   *  are all taller than the mirrors). A car still parked at the kerb is a parked car. */
+  touch(v: Vehicle, x: number, z: number, th: number): { name: string; part: CarPart; parked: boolean } | null {
     let B: Pt[] | null = null, M: Pt[][] = [];
     for (const c of this.cars) {
       const ty = TYPES[c.type];
       if (Math.abs(c.x - x) > v.REACH + ty.L || Math.abs(c.z - z) > v.REACH + ty.L) continue;
       if (!B) { B = footprint(x, z, th, v.body); M = v.mirrors.map(m => footprint(x, z, th, m)); }
-      const name = `${ty.name} in traffic`;
-      if (polysOverlap(B, c.box)) return { name, part: '' };
-      for (let k = 0; k < M.length; k++) if (polysOverlap(M[k], c.box)) return { name, part: k ? 'right mirror' : 'left mirror' };
+      const parked = c.state === 'parked', name = parked ? 'parked car' : `${ty.name} in traffic`;
+      if (polysOverlap(B, c.box)) return { name, part: '', parked };
+      for (let k = 0; k < M.length; k++) if (polysOverlap(M[k], c.box)) return { name, part: k ? 'right mirror' : 'left mirror', parked };
     }
     return null;
   }
+  /** The cars within r of (x, z) as obstacles (only those parked at the kerb: parkedOnly), for your parking sensors and
+   *  for where your drawn path would touch. */
+  near(x: number, z: number, r: number, parkedOnly = false): Obstacle[] {
+    const out: Obstacle[] = [];
+    for (const c of this.cars) {
+      if ((parkedOnly && c.state !== 'parked') || Math.abs(c.x - x) > r || Math.abs(c.z - z) > r) continue;
+      const xs = c.box.map(p => p[0]), zs = c.box.map(p => p[1]), bx0 = Math.min(...xs), bx1 = Math.max(...xs), bz0 = Math.min(...zs), bz1 = Math.max(...zs);
+      out.push({ kind: 'poly', pts: c.box, name: c.state === 'parked' ? 'parked car' : `${TYPES[c.type].name} in traffic`, fill: '', h: 1.5, cls: 'car', label: '', bx0, bx1, bz0, bz1, cx: (bx0 + bx1) / 2, cz: (bz0 + bz1) / 2 });
+    }
+    return out;
+  }
+  /** Whether a free space on the street has a car in it now: one parked there, or pulling out of it. */
+  taken(slot: string): boolean {
+    return this.cars.some(c => (c.state === 'parked' || c.state === 'out') && this.places[c.place].slot === slot);
+  }
 
-  /** How hard a car brakes or accelerates this step, whether it holds at its line, and the junction it now drives on
-   *  through at amber. */
-  private decide(c: TCar, pv: Shape | null): { a: number; wait: boolean; commit: number } {
+  /** How hard a car brakes or accelerates this step, whether it holds at its line, the junction it now drives on through
+   *  at amber, and who holds it up. */
+  private decide(c: TCar, pv: Shape | null): Plan {
+    if (c.state === 'stop') return { a: -9, wait: false, commit: c.commit, by: '' };
     const E = this.net.els, el = E[c.el], ty = TYPES[c.type], d = DRIVERS[c.drv], v = c.v;
     const nose = ty.L - ty.OVR, front = c.s + nose, look = Math.max(40, v * 4 + 20);
     const want = (e: El) => d.v0 * e.limit / 3.6, curve = (e: El) => (e.kmax ? Math.sqrt(d.lat / e.kmax) : Infinity);
-    const obs: [number, number, number][] = [];   // what is ahead: the gap from the front bumper, its speed, the gap to keep when stopped
+    // what is ahead: the gap from the front bumper, its speed, the gap to keep when stopped, and who it is (1: you, when you
+    // are not waiting yourself; 2: a car stopped in the lane)
+    const obs: [number, number, number, number][] = [];
     let commit = c.commit, wait = false;
     // the cars ahead along the route, and on paths setting off from the same lane (they overlap at first)
     let off = -c.s;
     for (let i = -1; i < c.route.length && off < look; i++) {
       const e = i < 0 ? el : E[c.route[i]];
       if (e.kind === 'path') for (const sb of e.siblings) for (const o of this.on[sb.el]) {
-        if (o.s <= sb.shared + 1 && !(e === el && o.s <= c.s)) obs.push([off + o.s - TYPES[o.type].OVR - nose, o.v, d.s0]);
+        if (o.s <= sb.shared + 1 && !(e === el && o.s <= c.s)) obs.push([off + o.s - TYPES[o.type].OVR - nose, o.v, d.s0, 0]);
       }
       const o = this.on[e.id].find(q => q !== c && !(e === el && q.s <= c.s));
-      if (o) { obs.push([off + o.s - TYPES[o.type].OVR - nose, o.v, d.s0]); break; }
+      if (o) { obs.push([off + o.s - TYPES[o.type].OVR - nose, o.v, d.s0, o.state === 'stop' ? 2 : 0]); break; }
       off += e.len;
     }
-    // the speed wanted here; slowing in time for a curve or a lower limit ahead
-    const v0 = Math.min(want(el), curve(el));
+    // the speed wanted here (pulling out of a space, walking pace); slowing in time for a curve or a lower limit ahead
+    const v0 = Math.min(want(el), curve(el), c.state === 'out' ? 3 : Infinity);
     let a = d.a * (1 - (v / Math.max(0.1, v0)) ** 4);
     off = el.len - c.s;
     for (const id of c.route) {
@@ -451,26 +647,28 @@ export class Traffic {
         const b = this.blocker(c, p, c.s - el.len, false), green = J.control === 'lights' && lightAt(J, el.axis, this.t) === 'green';
         hold = !!b && (b.why !== 'gap' || !(green && p.turn === 'far' && !this.on[p.id].length && b.a0 > ty.OVR + 0.5));
       }
-      if (hold) { obs.push([toLine, 0, 0.4]); wait = true; }
+      if (hold) { obs.push([toLine, 0, 0.4, 0]); wait = true; }
     } else if (el.kind === 'path' || toLine < 0) {
       // over the line: through the junction, stopping short of a zone someone else has
       const p = el.kind === 'path' ? el : E[c.route[0]], at = el.kind === 'path' ? c.s : c.s - el.len, b = this.blocker(c, p, at, true);
-      if (b) { obs.push([b.a0 - at, 0, 0.3]); wait = b.why === 'gap'; }
+      if (b) { obs.push([b.a0 - at, 0, 0.3, 0]); wait = b.why === 'gap'; }
     }
+    // a courier coming to its stop
+    if (c.stopS >= 0 && el.kind === 'lane') obs.push([c.stopS - c.s, 0, 0, 0]);
     // your car: in the way, or about to be
     if (pv) {
-      const hit = this.corridor(c, pv, look);
+      const hit = this.corridor(c, pv, look), who = this.blame ? 1 : 0;
       if (hit) {
-        if (hit.ahead && toLine >= 0) { obs.push([toLine, 0, 0.4]); wait = true; }   // in the junction, or crossing its way: wait at the line
-        else obs.push([hit.gap, hit.v, hit.room ? 7 : d.s0]);
+        if (hit.ahead && toLine >= 0) { obs.push([toLine, 0, 0.4, who]); wait = true; }   // in the junction, or crossing its way: wait at the line
+        else obs.push([hit.gap, hit.v, hit.room ? 7 : d.s0, who]);
       }
     }
-    for (const [gap, vl, s0] of obs) {
-      if (gap <= 0.05) { a = -9; continue; }
-      const ss = s0 + Math.max(0, v * d.T + v * (v - vl) / (2 * Math.sqrt(d.a * d.b)));
-      a = Math.min(a, d.a * (1 - (v / Math.max(0.1, v0)) ** 4 - (ss / gap) ** 2));
+    let by: Plan['by'] = '';
+    for (const [gap, vl, s0, who] of obs) {
+      const ai = gap <= 0.05 ? -9 : d.a * (1 - (v / Math.max(0.1, v0)) ** 4 - ((s0 + Math.max(0, v * d.T + v * (v - vl) / (2 * Math.sqrt(d.a * d.b)))) / gap) ** 2);
+      if (ai < a) { a = ai; by = who === 1 ? 'you' : who === 2 ? 'stop' : ''; }
     }
-    return { a: Math.max(-9, Math.min(a, d.a)), wait, commit };
+    return { a: Math.max(-9, Math.min(a, d.a)), wait, commit, by };
   }
 
   /** The cars in the junction on path q: on it, about to be on it with their front over the line or too close to stop
@@ -495,6 +693,9 @@ export class Traffic {
       if (out && out.s - TYPES[out.type].OVR < ty.L + 1.5 && out.v < 2) return { why: 'room', a0: 0 };
     }
     const cap = Math.min(d.v0 * p.limit / 3.6, p.kmax ? Math.sqrt(d.lat / p.kmax) : Infinity);
+    // the time to spare it wants before someone else gets there: after 15 s waiting at its line it settles for less, down
+    // to 30% of it after half a minute more (it never goes when the other would be there before it is across)
+    const spare = d.gap * Math.max(0.3, 1 - Math.max(0, c.lineT - 15) / 30);
     // once in the junction a car drives on through, stopping only for someone in its way; but a turn across the oncoming
     // lane at lights waits in the junction for its gap
     const gapsInside = J.control === 'lights' && p.turn === 'far';
@@ -527,7 +728,7 @@ export class Traffic {
         if (o.route[0] !== q.id || olo > ohi || ahead === Infinity) continue;
         const tO = Math.max(ahead, this.reach(o, lane.len - o.s + olo));
         if (cf.rule === 'first' && (tMe < tO || (tMe === tO && c.id < o.id))) continue;
-        if (tO < tClear + d.gap) { best = { why: 'gap', a0: lo }; break; }
+        if (tO < tClear + spare) { best = { why: 'gap', a0: lo }; break; }
       }
     }
     return best;
@@ -543,17 +744,24 @@ export class Traffic {
     return travel(o.v, D.a, Math.max(o.v, D.v0 * this.net.els[o.el].limit / 3.6), d);
   }
 
-  /** Your car on the way ahead of car c: the first place along its route, half a metre at a time, where your car (or where
-   *  it will be in 0.7 s and 1.4 s) comes within its half width and 30 cm of its line. With the gap from its front bumper,
-   *  your speed along its way, whether that is only where you are going (or inside the junction: it then waits at its
-   *  line), and whether to leave room (you are slow and signalling to park, have your hazards on, or are parking). */
+  /** Your car on the way ahead of car c: the first place along its route (out of its space first, if it is pulling out),
+   *  half a metre at a time, where your car (or where it will be in 0.7 s and 1.4 s) comes within its half width and 30 cm
+   *  of its line. With the gap from its front bumper, your speed along its way, whether that is only where you are going
+   *  (or inside the junction: it then waits at its line), and whether to leave room (you are slow and signalling to park,
+   *  have your hazards on, or are parking). */
   private corridor(c: TCar, pv: Shape, look: number): { gap: number; v: number; ahead: boolean; room: boolean } | null {
     const E = this.net.els, ty = TYPES[c.type], nose = ty.L - ty.OVR, r = ty.W / 2 + 0.3;
     if (Math.abs(pv.x - c.x) > look + nose + 10 || Math.abs(pv.z - c.z) > look + nose + 10) return null;
-    const [bx0, bx1, bz0, bz1] = pv.bb, line = E[c.el].kind === 'lane' ? E[c.el].len - c.s : -Infinity;
-    let off = 0, e = E[c.el], s = c.s, k = -1;
+    const [bx0, bx1, bz0, bz1] = pv.bb, ex = c.state === 'out' ? this.places[c.place] : null;
+    const line = ex ? ex.len - c.xs + E[ex.el].len - ex.joinS : E[c.el].kind === 'lane' ? E[c.el].len - c.s : -Infinity;
+    let off = 0, e: { pieces: readonly Piece[]; len: number } = ex ?? E[c.el], s = ex ? c.xs : c.s, k = -1, out = !!ex;
     for (let u = 0; u <= nose + look; u += 0.5) {
-      while (s + (u - off) > e.len && k + 1 < c.route.length) { off += e.len - s; s = 0; e = E[c.route[++k]]; }
+      for (;;) {   // on along the way: off the way out onto the lane, then lane by lane, path by path
+        if (s + (u - off) <= e.len) break;
+        if (out) { off += e.len - s; s = ex!.joinS; e = E[ex!.el]; out = false; continue; }
+        if (k + 1 >= c.route.length) break;
+        off += e.len - s; s = 0; e = E[c.route[++k]];
+      }
       const [x, z, h] = poseOn(e, s + (u - off));
       if (x < bx0 - r || x > bx1 + r || z < bz0 - r || z > bz1 + r) continue;
       for (let b = 0; b < pv.boxes.length; b++) {
@@ -566,18 +774,114 @@ export class Traffic {
     return null;
   }
 
-  /** Move a car on by its acceleration, onto the next lane or path as it runs off the end of one: unless that would put it
-   *  into your car or another (the last resort; the rules above should never let it come to that). */
+  /** A parked car that will pull out: it wakes as your car comes up behind it (or when its time comes), signals, and after
+   *  three seconds pulls out once the way is clear. */
+  private parked(c: TCar, pv: Shape | null): void {
+    const ex = this.places[c.place];
+    if (!c.ind) {
+      const g = pv && c.wakeD > 0 ? this.behind(c, pv) : null;
+      if (this.t >= c.until || (g !== null && g > 0 && g < c.wakeD)) { c.ind = ex.side; c.until = this.t; }
+    } else if (this.t - c.until >= 3 && this.clearOut(c, ex, pv)) c.state = 'out';
+  }
+  /** How far your car's front bumper is behind a parked car's back bumper, along its lane, when you are in the lane beside
+   *  its row facing the way it does (null otherwise; below 0 once you are level with it). */
+  private behind(c: TCar, pv: Shape): number | null {
+    if (Math.cos(pv.th - c.h) < 0.8) return null;
+    const ex = this.places[c.place], back = TYPES[c.type].OVR, nose = pv.L - pv.OVR;
+    const dx = c.x - back * ex.ux - (pv.x + nose * Math.cos(pv.th)), dz = c.z - back * ex.uz - (pv.z - nose * Math.sin(pv.th));
+    return Math.abs(dx * ex.uz - dz * ex.ux) < 5 ? dx * ex.ux + dz * ex.uz : null;
+  }
+  /** Whether a parked car can pull out now: its way out clear of your car (where it is and where it is going) and of every
+   *  other car, and nobody coming along the lane (you included) who would have to brake harder than they like for it. */
+  private clearOut(c: TCar, ex: Exit, pv: Shape | null): boolean {
+    for (const b of ex.sweep) {
+      if (pv && pv.boxes.some(q => polysOverlap(b, q))) return false;
+      for (const o of this.cars) if (o !== c && Math.abs(o.x - c.x) < 25 && Math.abs(o.z - c.z) < 25 && polysOverlap(b, o.box)) return false;
+    }
+    // a car beside it, or past it and not yet clear of its way out, that is still moving counts as coming too
+    const clearAt = ex.joinS + TYPES[c.type].L;
+    for (const [o, gap] of this.coming(this.net.els[ex.el], c.s - TYPES[c.type].OVR, 90)) {
+      const D = DRIVERS[o.drv];
+      if (o.v > 0.3 && (gap > 0 ? gap < D.s0 + o.v * D.T + (o.v * o.v) / (2 * D.b) : o.s - TYPES[o.type].OVR < clearAt + 1)) return false;
+    }
+    const g = pv && pv.v > 0.3 ? this.behind(c, pv) : null;
+    return !(g !== null && g > -1 && g < 2 + pv!.v * 1.4 + (pv!.v * pv!.v) / 4);
+  }
+  /** The cars on their way to the point s along lane `lane` (on it, on a path into it, or on a lane before that path and
+   *  turning onto it), within `horizon` m, and the ones on the lane already past it: each with the distance from its front
+   *  bumper to that point (below 0 for those past it). */
+  private coming(lane: El, s: number, horizon: number): [TCar, number][] {
+    const E = this.net.els, out: [TCar, number][] = [];
+    const add = (e: El, off: number, then: number) => {
+      for (const o of this.on[e.id]) {
+        const gap = off - (o.s + TYPES[o.type].L - TYPES[o.type].OVR);
+        if ((gap > 0 || e === lane) && gap < horizon && (then < 0 || o.route[0] === then)) out.push([o, gap]);
+      }
+    };
+    add(lane, s, -1);
+    for (const p of this.into[lane.id]) { const P = E[p], a = E[P.from]; add(P, P.len + s, -1); add(a, a.len + P.len + s, p); }
+    return out;
+  }
+  /** A courier: once a delivery is due it picks where to stop in its lane (well short of the junction ahead), stops there
+   *  with its hazards on for 30 to 60 s, then drives on. */
+  private deliver(c: TCar): void {
+    const el = this.net.els[c.el], ty = TYPES[c.type];
+    if (c.state === 'stop') {
+      if (this.t >= c.until) { c.state = 'drive'; c.haz = false; c.stopS = -1; c.nextStop = this.t + 90 + 120 * rand(this.rx); }
+      return;
+    }
+    if (c.stopS >= 0) {
+      if (c.v < 0.05 && c.stopS - c.s < 1) { c.state = 'stop'; c.haz = true; c.until = this.t + 30 + 30 * rand(this.rx); }
+      return;
+    }
+    if (this.t < c.nextStop || el.kind !== 'lane') return;
+    const at = c.s + Math.max(12, (c.v * c.v) / 2 + 6);
+    if (at + ty.L - ty.OVR <= el.len - 25) c.stopS = at;
+  }
+  /** Whether your car is waiting itself (a car in traffic just ahead of it, or a red or amber light, or a give-way line,
+   *  just ahead): then whoever waits behind it is not held up by you. */
+  private queued(pv: Shape): boolean {
+    const nose = pv.L - pv.OVR, ux = Math.cos(pv.th), uz = -Math.sin(pv.th), fx = pv.x + nose * ux, fz = pv.z + nose * uz;
+    const probe = footprint(pv.x, pv.z, pv.th, [[nose, -pv.W / 2], [nose + 8, -pv.W / 2], [nose + 8, pv.W / 2], [nose, pv.W / 2]]);
+    for (const o of this.cars) if (o.state !== 'parked' && Math.abs(o.x - fx) < 16 && Math.abs(o.z - fz) < 16 && polysOverlap(probe, o.box)) return true;
+    for (const J of this.net.junctions) {
+      if (J.control === 'none') continue;
+      for (const ap of J.approaches) {
+        if (J.control === 'giveway' && !ap.minor) continue;
+        const ax = Math.cos(ap.th), az = -Math.sin(ap.th), [a, b] = ap.line;
+        if (ux * ax + uz * az < 0.7) continue;
+        const d = (a[0] - fx) * ax + (a[1] - fz) * az, wx = b[0] - a[0], wz = b[1] - a[1], q = ((fx - a[0]) * wx + (fz - a[1]) * wz) / (wx * wx + wz * wz);
+        if (d < -0.5 || d > 12 || q < -0.3 || q > 1.3) continue;
+        if (J.control === 'giveway' || lightAt(J, this.net.els[ap.el].axis, this.t) !== 'green') return true;
+      }
+    }
+    return false;
+  }
+
+  /** Move a car on by its acceleration: along its way out of a space, onto the next lane or path as it runs off the end
+   *  of one; unless that would put it into your car or another (the last resort; the rules above should never let it
+   *  come to that). */
   private move(c: TCar, a: number, dt: number, pv: Shape | null): void {
     const E = this.net.els, ty = TYPES[c.type];
     let v1 = c.v + a * dt, ds: number;
     if (v1 <= 0) { ds = a < 0 ? Math.min(c.v * dt, (c.v * c.v) / (-2 * a)) : 0; v1 = 0; } else ds = ((c.v + v1) / 2) * dt;
     if (ds > 0) {
-      let el = c.el, s = c.s + ds, route = c.route;
-      while (s > E[el].len && route.length) { s -= E[el].len; el = route[0]; route = route.slice(1); }
-      const [x, z, h] = poseOn(E[el], s), box = boxAt(ty, x, z, h);
+      let el = c.el, s: number, route = c.route, xs = c.xs, out = c.state === 'out', x: number, z: number, h: number;
+      if (out) {
+        const ex = this.places[c.place];
+        xs += ds;
+        if (xs < ex.len) { [x, z, h] = poseOn(ex, xs); s = ex.s0 + (x - ex.x0) * ex.ux + (z - ex.z0) * ex.uz; }
+        else { out = false; s = ex.joinS + xs - ex.len; [x, z, h] = poseOn(E[el], s); }
+      } else {
+        s = c.s + ds;
+        while (s > E[el].len && route.length) { s -= E[el].len; el = route[0]; route = route.slice(1); }
+        [x, z, h] = poseOn(E[el], s);
+      }
+      const box = boxAt(ty, x, z, h);
       if (this.overlaps(c, box, x, z, pv)) { c.v = 0; c.acc = 0; c.jams++; return; }
       if (el !== c.el && E[el].kind === 'lane') { c.commit = -1; c.inAt = NEVER; }
+      if (el !== c.el) c.stopS = -1;
+      if (c.state === 'out' && !out) { c.state = 'drive'; c.place = -1; c.xs = 0; c.ind = 0; } else c.xs = xs;
       c.el = el; c.s = s; c.route = route; c.x = x; c.z = z; c.h = h; c.box = box; c.moved += ds;
       if (c.inAt === NEVER && (E[el].kind === 'path' || s + ty.L - ty.OVR >= E[el].len)) c.inAt = this.t;
       this.extend(c);
@@ -590,22 +894,29 @@ export class Traffic {
     for (const o of this.cars) if (o !== c && Math.abs(o.x - x) < 8 && Math.abs(o.z - z) < 8 && polysOverlap(box, o.box)) return true;
     return false;
   }
-  /** At least three lanes and paths ahead: at each junction, of the ways the car fits, straight on twice as often as each turn. */
-  private extend(c: TCar): void {
+  /** At least three lanes and paths ahead: at each junction, of the ways the car fits, straight on twice as often as each
+   *  turn (from the traffic's own random numbers, or for a car that came after it, the others). */
+  private extend(c: TCar, r = c.id < this.base ? this.rs : this.rx): void {
     const E = this.net.els;
     while (c.route.length < 3) {
       const last = E[c.route.length ? c.route[c.route.length - 1] : c.el];
       if (last.kind === 'path') { c.route.push(last.next[0]); continue; }
       const fit = last.next.filter(id => this.net.ok[c.type][id]), ps = (fit.length ? fit : last.next).map(id => E[id]), w = ps.map(p => (p.turn === 'straight' ? 2 : 1));
-      let u = rand(this.rs) * w.reduce((m, q) => m + q, 0), pick = ps[ps.length - 1].id;
+      let u = rand(r) * w.reduce((m, q) => m + q, 0), pick = ps[ps.length - 1].id;
       for (let i = 0; i < ps.length; i++) { u -= w[i]; if (u <= 0) { pick = ps[i].id; break; } }
       c.route.push(pick);
     }
   }
-  /** Indicating for a turn from 40 m before it until it is done. */
+  /** Indicating for a turn from 40 m before it until it is done (a parked car signals as it wakes, until it is out; a car
+   *  stopped to deliver shows its hazards). */
   private signal(c: TCar): void {
+    if (c.state !== 'drive') { if (c.state === 'stop') c.ind = 0; return; }
     const E = this.net.els, el = E[c.el], p = el.kind === 'path' ? el : el.len - c.s < 40 ? E[c.route[0]] : null;
     c.ind = !p || p.turn === 'straight' ? 0 : p.dh > 0 ? -1 : 1;
+  }
+  /** Where a car is: along its lane or path, or along its way out of a space. */
+  private poseOf(c: Pick<TCar, 'state' | 'place' | 'xs' | 'el' | 's'>): [number, number, number] {
+    return c.state === 'parked' || c.state === 'out' ? poseOn(this.places[c.place], c.xs) : poseOn(this.net.els[c.el], c.s);
   }
 }
 

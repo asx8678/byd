@@ -118,13 +118,16 @@ function leaveCity(): void {
   setStreet(null); setDriveInfo(null); setLimit(null); setMode('park'); checker?.terminate(); checker = null; parWorker?.terminate(); parWorker = null;
 }
 /** The district's traffic from its layout number (the same every time), as many cars as Setup asks for (none: just the
- *  lights), clear of where you are; and a fresh drive for the rules. */
+ *  lights), clear of where you are, with parked cars that will pull out and couriers (more of each in busy traffic); and
+ *  a fresh drive for the rules. */
 function spawnTraffic(c: CityPlay, at: { x: number; z: number } = c.map.start): void {
-  const net = networkOf(c.map);
+  const net = networkOf(c.map), busy = settings.traffic === 'busy';
   c.map.scene.net = net;
-  sim.traffic = Traffic.spawn(net, c.map.seed, settings.traffic === 'off' ? 0 : DENSITY[settings.traffic], at);
+  sim.traffic = settings.traffic === 'off' ? Traffic.spawn(net, c.map.seed, 0, at) : Traffic.spawn(net, c.map.seed, DENSITY[settings.traffic], at, { leavers: busy ? 5 : 3, couriers: busy ? 2 : 1 });
   sim.rules = new Rules(net);
 }
+/** Whether a space is free now: none parked in it for the moment. */
+const freeNow = (s: Slot): boolean => !sim.traffic?.taken(s.id);
 /** The district's free spaces checked in the background, nearest the start first: can the planner park this car there?
  *  Without a worker (or before its answer comes) a space is checked the moment you slow down beside it. A second worker
  *  works out par for each try, so the map never stops while the planner thinks (a car park's bay can take a second or
@@ -251,7 +254,7 @@ function resetCity(): void {
   const s = c.map.start;
   sim.resetAt(s.x, s.z, s.th); c.slot = null; c.from = null; c.lockRot = null; c.hinted = ''; c.lotHint = '';
   spawnTraffic(c);
-  c.declined = slotNear(c.map, sim.vehicle, s.x, s.z, s.th)?.id ?? '';   // a space beside the start waits until you have driven on
+  c.declined = slotNear(c.map, sim.vehicle, s.x, s.z, s.th, freeNow)?.id ?? '';   // a space beside the start waits until you have driven on
   setMode('drive'); applySettings(); setRoute([]); syncStreet(); forgetPrediction(); clearPedals(); snapView();
   settledT = 0; tryOver = false; tryRewound = false; beginRecording();
   showBanner('', c.map.spec.name, `Drive along the streets and park in a free space on your ${kerbSide()}, between the cars${c.map.lots.length ? ', or in a car park' : ''}. Stop beside one and Park mode takes over. Accelerator and brake: higher up on the button for more.`, null, 9000);
@@ -315,7 +318,7 @@ function retarget(c: CityPlay): void {
 /** Back into Drive mode: the accelerator and brake, the map turning with you. */
 function enterDrive(): void {
   const c = city!;
-  const near = slotNear(c.map, sim.vehicle, sim.x, sim.z, sim.th);
+  const near = slotNear(c.map, sim.vehicle, sim.x, sim.z, sim.th, freeNow);
   c.declined = near?.id ?? ''; c.slot = null; c.from = null; c.lockRot = null;
   setMode('drive'); applySettings(); setRoute([]); syncStreet(); hideGuide(); hideResult(); forgetPrediction(); beginRecording();
 }
@@ -324,7 +327,7 @@ function switchMode(): void {
   if (!city || replay) return;
   if (sim.mode === 'drive') {
     if (sim.v > V_KIN) { showBanner('', 'Slow down to park', 'Park mode takes over below 7 km/h.', null, 2500); return; }
-    enterPark(slotNear(city.map, sim.vehicle, sim.x, sim.z, sim.th));
+    enterPark(slotNear(city.map, sim.vehicle, sim.x, sim.z, sim.th, freeNow));
   } else {
     if (sim.v < -0.1) { showBanner('', 'Stop first', 'Drive mode only goes forwards.', null, 2500); return; }
     enterDrive(); showBanner('', 'Drive mode', 'Accelerator and brake: higher up on the button for more. Stop beside a free space and Park mode takes over.', null, 4000);
@@ -343,7 +346,7 @@ function cityFrame(): void {
       showBanner(why ? 'bad' : '', lot.name, why ? `${why} Look for a space on the street.` : `${lot.limit} km/h. Stop in an aisle beside a free bay and Park mode takes over: ${lot.angle === 90 ? 'nose first or reversed in' : 'nose first, the way the bays lean'}.`, null, 5000);
     }
     if (!lot) c.lotHint = '';
-    let near = sim.v < 15 / 3.6 ? slotNear(c.map, v, sim.x, sim.z, sim.th) : null;
+    let near = sim.v < 15 / 3.6 ? slotNear(c.map, v, sim.x, sim.z, sim.th, freeNow) : null;
     // a space the planner cannot park your car in drops off the map (checked in the background; without a worker, the
     // first time you slow down beside it)
     if (near && near.parkable === undefined && !checker) checkSlot(c.map, v, near);
@@ -736,7 +739,7 @@ function start(saved: Saved = {}): void {
   if (cityPlay && cityMap) {   // back on the street, in Drive mode, where you were if the layout is the same
     enterCity(buildCity(cityMap, chosenCar(), +cityPlay[2], settings.drive));
     if (typeof saved.x === 'number' && typeof saved.z === 'number' && typeof saved.th === 'number' && saved.scene === sim.scene.id && (saved.car ?? ATTO2.id) === sim.vehicle.id && !sim.touching(saved.x, saved.z, saved.th)) {
-      sim.place(saved.x, saved.z, saved.th); sim.wheelAngle = saved.wheelAngle || 0; city!.declined = slotNear(city!.map, sim.vehicle, saved.x, saved.z, saved.th)?.id ?? '';
+      sim.place(saved.x, saved.z, saved.th); sim.wheelAngle = saved.wheelAngle || 0; city!.declined = slotNear(city!.map, sim.vehicle, saved.x, saved.z, saved.th, freeNow)?.id ?? '';
       spawnTraffic(city!, { x: saved.x, z: saved.z }); beginRecording();   // the traffic clear of where you are now, not of the start
     }
   } else if (play.startsWith('lesson:') && lessonById(play.slice(7)) && lessonFor(chosenCar(), lessonById(play.slice(7))!)) enterLesson(play.slice(7), 'drive');   // a lesson starts its try over

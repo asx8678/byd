@@ -26,11 +26,15 @@ export function wheelsOf(v: Vehicle): { part: WheelPart; pts: Pt[] }[] {
   return w;
 }
 
-/** The first obstacle the car touches at rear-axle pose (px, pz, h), or null. part says whether only a door mirror or a wheel did it. */
-export function collides(v: Vehicle, obstacles: readonly Obstacle[], px: number, pz: number, h: number): Hit | null {
+const NONE: readonly Obstacle[] = [];
+/** The first obstacle the car touches at rear-axle pose (px, pz, h), or null: of the scene's, then of `extra` (on the
+ *  street, the cars in traffic near it). part says whether only a door mirror or a wheel did it. */
+export function collides(v: Vehicle, obstacles: readonly Obstacle[], px: number, pz: number, h: number, extra: readonly Obstacle[] = NONE): Hit | null {
   let B: Pt[] | null = null, ML: Pt[] = [], MR: Pt[] = [], WH: { part: WheelPart; pts: Pt[] }[] | null = null;
   const r = Math.max(4.5, v.REACH + 0.8);   // nothing of the car reaches further than REACH from its origin
-  for (const o of nearby(obstacles, px, pz, r)) {
+  const near = nearby(obstacles, px, pz, r);
+  for (let i = 0, n = near.length + extra.length; i < n; i++) {
+    const o = i < near.length ? near[i] : extra[i - near.length];
     if (o.bx1 < px - r || o.bx0 > px + r || o.bz1 < pz - r || o.bz0 > pz + r) continue;
     if (o.cls === 'kerb' && o.kind === 'poly') {   // only the tyres meet a kerb
       if (!WH) WH = wheelsOf(v).map(w => ({ part: w.part, pts: footprint(px, pz, h, w.pts) }));

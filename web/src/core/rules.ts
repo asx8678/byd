@@ -9,7 +9,7 @@ import { lightAt, type Network, type Traffic } from './traffic';
 export type FaultKind = 'red' | 'speed' | 'crash' | 'touch';
 /** A fault: what it is, when (the simulation's clock), a banner's title and line, and a few words for the card. */
 export interface Fault { kind: FaultKind; t: number; title: string; text: string; brief: string }
-export interface RulesSnap { faults: Fault[]; over: number; under: number; open: number; peak: number; limit: number; front: Pt | null }
+export interface RulesSnap { faults: Fault[]; over: number; under: number; open: number; peak: number; limit: number; front: Pt | null; heldUp?: number; heldCars?: number[] }
 /** Over the limit by more than this (km/h; the speed readout turns red there too), for longer than SPEED_HOLD s, is
  *  speeding; back under it for SPEED_CLEAR s ends that spell. */
 export const SPEED_SLACK = 3, SPEED_HOLD = 1, SPEED_CLEAR = 2;
@@ -26,17 +26,20 @@ export class Rules {
   private peak = 0;       // that spell's top speed, km/h
   private limit = 0;      // the last speed limit you were under (in a junction you keep the one you came with)
   private front: Pt | null = null;   // your front bumper's middle after the last step
+  /** How long you have held up traffic on this drive (s: while a car waited behind you and you were not waiting
+   *  yourself), and the cars you held up. */
+  heldUp = 0; heldCars = new Set<number>();
 
   constructor(readonly net: Network) {}
 
   /** A fresh drive: no faults yet. */
-  clear(): void { this.faults = []; this.over = this.under = 0; this.open = -1; this.peak = 0; }
+  clear(): void { this.faults = []; this.over = this.under = 0; this.open = -1; this.peak = 0; this.heldUp = 0; this.heldCars = new Set(); }
   snapshot(): RulesSnap {
-    return { faults: this.faults.map(f => ({ ...f })), over: this.over, under: this.under, open: this.open, peak: this.peak, limit: this.limit, front: this.front ? [this.front[0], this.front[1]] : null };
+    return { faults: this.faults.map(f => ({ ...f })), over: this.over, under: this.under, open: this.open, peak: this.peak, limit: this.limit, front: this.front ? [this.front[0], this.front[1]] : null, heldUp: this.heldUp, heldCars: [...this.heldCars] };
   }
   restore(s: RulesSnap): void {
     this.faults = s.faults.map(f => ({ ...f })); this.over = s.over; this.under = s.under; this.open = s.open; this.peak = s.peak; this.limit = s.limit;
-    this.front = s.front ? [s.front[0], s.front[1]] : null;
+    this.front = s.front ? [s.front[0], s.front[1]] : null; this.heldUp = s.heldUp ?? 0; this.heldCars = new Set(s.heldCars ?? []);
   }
 
   /** The speed limit at a point (a street's, or a car park's), or null off the roads. */
@@ -54,6 +57,8 @@ export class Rules {
       const kind: FaultKind = hit.traffic ? 'crash' : 'touch', text = `The ${hit.name}.`;
       if (!this.faults.some(f => f.kind === kind && f.text === text && t - f.t < 3)) add(kind, hit.traffic ? 'You hit a car' : 'Touched', text, `${hit.traffic ? 'hit' : 'touched'} the ${hit.name}`);
     }
+    // holding up traffic
+    if (traffic?.held.length) { this.heldUp += dt; for (const id of traffic.held) this.heldCars.add(id); }
     // speeding
     const here = this.limitAt(p.x, p.z, p.th);
     if (here) this.limit = here.limit;

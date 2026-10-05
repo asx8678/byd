@@ -1,22 +1,29 @@
 // Your drive on the street (core/sim.ts with core/traffic.ts and core/rules.ts): indicators that cancel themselves after
-// a turn, the faults the rules note (a red light, speeding, hitting a car), and a recording with traffic in it that
-// replays and rewinds exactly.
+// a turn, the faults the rules note (a red light, speeding, hitting a car), how long you hold up traffic, a parked car
+// that will pull out as your car meets it, and a recording with traffic in it that replays and rewinds exactly.
 import { describe, expect, it } from 'vitest';
-import { buildCity, type CityMap } from '../src/core/city';
+import { buildCity, parkStart, slotNear, type CityMap, type KerbSlot } from '../src/core/city';
 import { ATTO2, MAPS } from '../src/core/content';
 import { clamp } from '../src/core/math';
 import { Recorder, STEP, playback, replayTo, stateOf } from '../src/core/replay';
 import { Rules, SPEED_SLACK } from '../src/core/rules';
 import { Sim, type SimEvent } from '../src/core/sim';
-import { CYCLE, DENSITY, TYPES, Traffic, lightAt, networkOf, poseOn, type El, type Light, type TrafficSnap } from '../src/core/traffic';
+import { CYCLE, DENSITY, TYPES, Traffic, exitFor, lightAt, networkOf, poseOn, type El, type Extras, type Light, type TrafficSnap } from '../src/core/traffic';
 
-/** Harbour with its road network, a sim in Drive mode on it, and traffic of n cars per km (0: just the lights). */
-function street(perKm = 0, seed = 1): { m: CityMap; sim: Sim } {
+/** Harbour with its road network, a sim in Drive mode on it, and traffic of n cars per km (0: just the lights), with the
+ *  extra cars asked for. */
+function street(perKm = 0, seed = 1, more: Extras = {}): { m: CityMap; sim: Sim } {
   const m = buildCity(MAPS.harbour, ATTO2, seed), net = networkOf(m), sim = new Sim(m.scene, ATTO2);
   m.scene.net = net;
   sim.reset('start'); sim.setMode('drive');
-  sim.traffic = Traffic.spawn(net, seed, perKm, m.start); sim.rules = new Rules(net);
+  sim.traffic = Traffic.spawn(net, seed, perKm, m.start, more); sim.rules = new Rules(net);
   return { m, sim };
+}
+/** The way on from lane el: straight on where it can. */
+function routeFrom(m: CityMap, el: El): number[] {
+  const net = networkOf(m), route: number[] = [];
+  for (let e = el; route.length < 3;) { const n = e.kind === 'lane' ? e.next.find(id => net.els[id].turn === 'straight') ?? e.next[0] : e.next[0]; route.push(n); e = net.els[n]; }
+  return route;
 }
 /** Hold kmh along a straight road for secs (wheel straight), collecting the events. */
 function cruise(sim: Sim, kmh: number, secs: number, out: SimEvent[] = []): SimEvent[] {
@@ -95,10 +102,9 @@ describe('the rules', () => {
   });
   it('note driving into a car in traffic, as a touch and a fault', () => {
     // a car waiting at the red light; you come up behind it at 15 km/h and do not stop
-    const { m, sim } = street(), net = networkOf(m), el = lightsLane(m), ty = TYPES[2];
+    const { m, sim } = street(), el = lightsLane(m), ty = TYPES[2];
     const t = timeWhen(m, el, 'red', 0), front = el.len - 0.4, s = front - (ty.L - ty.OVR);   // where it settles at its line
-    const route: number[] = []; for (let e = el; route.length < 3;) { const n = e.kind === 'lane' ? e.next.find(id => net.els[id].turn === 'straight')! : e.next[0]; route.push(n); e = net.els[n]; }
-    const snap: TrafficSnap = { t, r: 1, cars: [{ id: 0, type: 2, drv: 0, el: el.id, s, v: 0, acc: 0, route, ind: 0, wait: true, commit: -1, inAt: 1e9, jams: 0, moved: 0 }] };
+    const snap: TrafficSnap = { t, r: 1, cars: [{ id: 0, type: 2, drv: 0, el: el.id, s, v: 0, acc: 0, route: routeFrom(m, el), ind: 0, wait: true, commit: -1, inAt: 1e9, jams: 0, moved: 0 }] };
     sim.traffic!.restore(snap);
     const [x, z, th] = poseOn(el, s - ty.OVR - 12 - (ATTO2.L - ATTO2.OVR));
     sim.place(x, z, th); sim.v = 15 / 3.6;
@@ -109,12 +115,55 @@ describe('the rules', () => {
     expect(faults(evs).map(f => f.kind)).toEqual(['crash']);
     expect(sim.traffic!.cars[0].jams).toBe(0);   // it never moved into you either
   });
+  it('count how long you hold up traffic: while a car waits behind you and you are not waiting yourself', () => {
+    const { m, sim } = street(), net = networkOf(m), lane = net.els.filter(e => e.kind === 'lane' && e.street === 'harbour').sort((a, b) => b.len - a.len)[0];
+    const [x, z, th] = poseOn(lane, lane.len - 30);
+    sim.place(x, z, th); sim.v = 0;
+    sim.traffic!.restore({ t: 0, r: 1, cars: [{ id: 0, type: 2, drv: 0, el: lane.id, s: 5, v: 12, acc: 0, route: routeFrom(m, lane), ind: 0, wait: false, commit: -1, inAt: 1e9, jams: 0, moved: 0 }] });
+    for (let n = 0; n < 30 * 60; n++) sim.step(STEP);
+    const held = sim.rules!.heldUp;
+    expect(held).toBeGreaterThan(20); expect(held).toBeLessThan(30);   // from when it had to stop behind you
+    expect(sim.rules!.heldCars.size).toBe(1);
+    cruise(sim, 20, 8);
+    expect(sim.rules!.heldUp - held).toBeLessThan(1.5);
+  });
+});
+
+describe('a parked car that will pull out', () => {
+  // Harbour, layout 4: a 16 m space on Quay Road with a city car parked at the back of it, which never wakes in this test
+  const m = buildCity(MAPS.harbour, ATTO2, 4), net = networkOf(m), slot = m.slots.find(s => s.id === 'quay:-1:12') as KerbSlot, ex = exitFor(net, slot, 0)!;
+  const atBack = () => {
+    const sim = new Sim(m.scene, ATTO2), ty = TYPES[0];
+    m.scene.net = net; sim.traffic = new Traffic(net); sim.rules = new Rules(net);
+    sim.traffic.restore({ t: 0, r: 1, x: 1, base: 0, places: [{ slot: slot.id, type: 0 }], cars: [{ id: 0, type: 0, drv: 0, el: ex.el, s: ex.s0, v: 0, acc: 0, route: routeFrom(m, net.els[ex.el]), ind: 0, wait: true, commit: -1, inAt: 1e9, jams: 0, moved: 0, state: 'parked', place: 0, until: 1e9 }] });
+    // your car in the space just in front of it, 60 cm from its front bumper, facing the same way
+    const u = ty.L - ty.OVR + 0.6 + ATTO2.OVR, h = Math.atan2(-ex.uz, ex.ux);
+    sim.reset('start'); sim.place(ex.x0 + u * ex.ux, ex.z0 + u * ex.uz, h); sim.setMode('park');
+    return sim;
+  };
+  it('takes its space until it has gone: you cannot park there', () => {
+    const sim = atBack(), free = (s: { id: string }) => !sim.traffic!.taken(s.id), p = parkStart(ATTO2, slot);
+    expect(sim.traffic!.taken(slot.id)).toBe(true);
+    expect(slotNear(m, ATTO2, p.x, p.z, p.th)?.id).toBe(slot.id);
+    expect(slotNear(m, ATTO2, p.x, p.z, p.th, free)).toBeNull();
+  });
+  it('is a parked car to your car: your sensors hear it, your path stops at it, and backing into it is a touch, not a crash', () => {
+    const sim = atBack(), evs: SimEvent[] = [];
+    evs.push(...sim.step(STEP));
+    expect(sim.pdc.rear).toBeLessThan(0.75);
+    const pred = sim.predict(-1);
+    expect(pred.hit?.name).toBe('parked car'); expect(pred.dist).toBeGreaterThan(0.5); expect(pred.dist).toBeLessThan(0.65);
+    sim.input.rev = true;
+    for (let n = 0; n < 6 * 60 && !evs.some(e => e.type === 'touch'); n++) evs.push(...sim.step(STEP));
+    expect(evs.flatMap(e => (e.type === 'touch' ? [e.name] : []))).toEqual(['parked car']);
+    expect(faults(evs)).toEqual([]);   // in Park mode a touch is the parking's own business
+  });
 });
 
 describe('a recording with traffic', () => {
   /** 40 s on the street in busy traffic: pull away, a turn of the wheel, brake, signal, go again. */
   function drive(): { sim: Sim; rec: Recorder; at: Record<number, string> } {
-    const { sim } = street(DENSITY.busy, 2), rec = new Recorder(), at: Record<number, string> = {};
+    const { sim } = street(DENSITY.busy, 2, { leavers: 5, couriers: 2 }), rec = new Recorder(), at: Record<number, string> = {};
     rec.begin(sim);
     for (let n = 0; n < 40 * 60; n++) {
       sim.input.acc = n < 600 || n > 1500 ? 0.35 : 0; sim.input.brk = n >= 900 && n < 1500 ? 0.6 : 0;

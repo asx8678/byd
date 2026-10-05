@@ -418,14 +418,14 @@ export function lotStop(v: Vehicle, lot: Lot, b: LotBay, d: 1 | -1): Pose {
  * the parking lane and facing along it, its back bumper somewhere between a metre short of the space and four metres
  * past it (the classic start is level with the car in front). In a car park: in an aisle, facing along it (the way a
  * one-way aisle runs), within most of a bay's width of where you would stop for the bay (see lotStop), on either side.
- * The nearest such space.
+ * The nearest such space that `free` says is free now (on the street a car may be parked in one for a while).
  */
-export function slotNear(city: CityMap, v: Vehicle, x: number, z: number, th: number): Slot | null {
+export function slotNear(city: CityMap, v: Vehicle, x: number, z: number, th: number, free: (s: Slot) => boolean = () => true): Slot | null {
   let best: Slot | null = null, bestD = Infinity;
   const fx = Math.cos(th), fz = -Math.sin(th), rx = x - fx * v.OVR, rz = z - fz * v.OVR, mx = x + fx * (v.L / 2 - v.OVR), mz = z + fz * (v.L / 2 - v.OVR);
   const lot = lotAt(city, mx, mz);
   for (const s of city.slots) {
-    if (s.parkable === false) continue;
+    if (s.parkable === false || !free(s)) continue;
     if (s.kind === 'lot') {
       if (s.lot !== lot) continue;
       const a = lot.aisles[s.at.aisle], [, t] = lotST(lot, mx, mz);
