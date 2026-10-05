@@ -84,9 +84,9 @@ export function poseOn(e: El, s: number): [number, number, number] {
 const endOf = (p: Piece): [number, number, number] => { const h = p.h + p.k * p.len; return [p.x + (Math.sin(h) - Math.sin(p.h)) / p.k, p.z + (Math.cos(h) - Math.cos(p.h)) / p.k, h]; };
 
 // cars keep 20 cm in from the middle of their lane. Where paths meet is found with the biggest car in traffic (a pickup,
-// 15 cm round it) placed every 25 cm along each, from where its nose reaches the junction to where its tail leaves it:
-// two paths share a zone where those boxes overlap, measured by where the car's rear axle is.
-const OFF = 0.2, WIDE = 2, SAMPLE = 0.25, BIG = { L: 6.22, W: 2.38, OVR: 1.39 };
+// 15 cm round it) placed every 50 cm along each, from where its nose reaches the junction to where its tail leaves it:
+// two paths share a zone where those boxes overlap (and 50 cm either side), measured by where the car's rear axle is.
+const OFF = 0.2, WIDE = 2, SAMPLE = 0.25, ZONE = 0.5, BIG = { L: 6.22, W: 2.38, OVR: 1.39 };
 const nets = new WeakMap<CityMap, Network>();
 /** A district's road network, made once. */
 export function networkOf(map: CityMap): Network {
@@ -133,6 +133,26 @@ function buildNetwork(map: CityMap): Network {
     }
   }
   const lanes = els.slice();
+  // a turn on your kerb side goes round the block's corner on an arc as wide as the corner's kerb plus the further of the
+  // two lanes from its kerb: no other arc keeps the inner wheels further from that kerb (the corner's radius plus the nearer
+  // lane's distance from its kerb, less half the car). Where one street has a parking lane and the other none, the arc
+  // that fits the nearer end would cut the corner, so that end moves back (the lane ends sooner, or the next starts later).
+  const until = (a: El, b: El) => { const [ax, az, ah] = poseOn(a, a.len), [bx, bz, bh] = poseOn(b, 0), X: Pt = a.axis === 'x' ? [bx, az] : [ax, bz]; return { dIn: (X[0] - ax) * Math.cos(ah) - (X[1] - az) * Math.sin(ah), dOut: (bx - X[0]) * Math.cos(bh) - (bz - X[1]) * Math.sin(bh), dh: wrapPi(bh - ah) }; };
+  const fromKerb = (l: El) => { const st = byId.get(l.street)!; return st.side[l.side].hw - (st.lane / 2 - OFF); }, round = (a: El, b: El) => R + Math.max(fromKerb(a), fromKerb(b));
+  const endBack = new Map<number, number>(), startOn = new Map<number, number>();
+  junctions.forEach((_, ji) => {
+    for (const a of lanes) if (a.j === ji) for (const b of lanes) if (startJ.get(b.id) === ji && a.street !== b.street) {
+      const { dIn, dOut, dh } = until(a, b), want = round(a, b);
+      if ((dh < 0) !== (drive === 'right')) continue;   // across the oncoming lane: wide enough already
+      if (dIn < want) endBack.set(a.id, Math.max(endBack.get(a.id) ?? 0, want - dIn));
+      if (dOut < want) startOn.set(b.id, Math.max(startOn.get(b.id) ?? 0, want - dOut));
+    }
+  });
+  for (const l of lanes) {
+    const back = Math.min(endBack.get(l.id) ?? 0, 6), on = Math.min(startOn.get(l.id) ?? 0, 6), p = l.pieces[0];
+    if (back + on > l.len - 15) throw new Error(`${map.spec.id}: ${l.name} is too short for its turns`);
+    p.x += on * Math.cos(p.h); p.z -= on * Math.sin(p.h); l.len -= back + on; p.len = l.len;
+  }
   junctions.forEach((J, ji) => {
     const ins = lanes.filter(l => l.j === ji), outs = lanes.filter(l => startJ.get(l.id) === ji), paths: El[] = [];
     for (const a of ins) for (const b of outs) {
@@ -146,7 +166,8 @@ function buildNetwork(map: CityMap): Network {
         // between the two ends, with a straight before or after it where one end is further out
         turn = (dh < 0) === (drive === 'right') ? 'near' : 'far';
         const X: Pt = a.axis === 'x' ? [bx, az] : [ax, bz];
-        const dIn = (X[0] - ax) * Math.cos(ah) - (X[1] - az) * Math.sin(ah), dOut = (bx - X[0]) * Math.cos(bh) - (bz - X[1]) * Math.sin(bh), rho = Math.min(dIn, dOut);
+        const dIn = (X[0] - ax) * Math.cos(ah) - (X[1] - az) * Math.sin(ah), dOut = (bx - X[0]) * Math.cos(bh) - (bz - X[1]) * Math.sin(bh);
+        const rho = Math.min(dIn, dOut, turn === 'near' ? round(a, b) : Infinity);
         add(dIn - rho, ax, az, ah, 0);
         add(rho * Math.abs(dh), X[0] - rho * Math.cos(ah), X[1] + rho * Math.sin(ah), ah, Math.sign(dh) / rho);
         add(dOut - rho, X[0] + rho * Math.cos(bh), X[1] - rho * Math.sin(bh), bh, 0);
@@ -175,7 +196,7 @@ function buildNetwork(map: CityMap): Network {
     }
     // where the paths come close: from the same lane they overlap at first (the car ahead on either is ahead); from
     // different lanes they share a zone, and the junction's rules say who goes
-    const boxes = paths.map(p => { const out: { s: number; x: number; z: number; box: Pt[] }[] = []; for (let s = -(BIG.L - BIG.OVR); s <= p.len + BIG.OVR + 1e-9; s += SAMPLE) { const [x, z, h] = poseOn(p, s); out.push({ s, x, z, box: boxAt(BIG, x, z, h) }); } return out; });
+    const boxes = paths.map(p => { const out: { s: number; x: number; z: number; box: Pt[] }[] = []; for (let s = -(BIG.L - BIG.OVR); s <= p.len + BIG.OVR + 1e-9; s += ZONE) { const [x, z, h] = poseOn(p, s); out.push({ s, x, z, box: boxAt(BIG, x, z, h) }); } return out; });
     const reach = Math.hypot(BIG.L - BIG.OVR, BIG.W / 2) * 2;
     for (let i = 0; i < paths.length; i++) for (let k = i + 1; k < paths.length; k++) {
       const p = paths[i], q = paths[k], P = boxes[i], Q = boxes[k], same = p.from === q.from;
@@ -192,6 +213,10 @@ function buildNetwork(map: CityMap): Network {
         a0 = Math.min(a0, A.s); a1 = Math.max(a1, A.s); b0 = Math.min(b0, B.s); b1 = Math.max(b1, B.s);
       }
       if (a0 === Infinity) continue;
+      // and what lies between two of the places looked at, but never before a nose is over the line: a car waiting at its
+      // line is not in anyone's way
+      const first = -(BIG.L - BIG.OVR);
+      a0 = Math.max(first, a0 - ZONE); a1 += ZONE; b0 = Math.max(first, b0 - ZONE); b1 += ZONE;
       const rule = same ? 'first' : ruleOf(J, p, q);
       p.conflicts.push({ el: q.id, rule, a0, a1, b0, b1 });
       q.conflicts.push({ el: p.id, rule: rule === 'yield' ? 'go' : rule === 'go' ? 'yield' : rule, a0: b0, a1: b1, b0: a0, b1: a1 });
@@ -205,15 +230,15 @@ function buildNetwork(map: CityMap): Network {
   return { map, drive, els, junctions, laneLen: lanes.reduce((m, l) => m + l.len, 0), ok: TYPES.map(ty => fitting(map, els, ty)) };
 }
 
-/** Where a size of car fits: driven along every lane and path, 25 cm at a time, its tyres (a little oversize) must stay off
+/** Where a size of car fits: driven along every lane and path, 50 cm at a time, it and its tyres (a little oversize) must stay off
  *  the kerbs and its body clear of everything else; then only what it can carry on from to more of the same (a long car
  *  that cannot take a tight corner of the ring stays off the lane leading to it). */
 function fitting(map: CityMap, els: El[], ty: CarType): boolean[] {
-  const obs = map.scene.obstacles, tr = ty.W - 0.26;
-  const tyres: Pt[][] = [0, ty.WB].flatMap(ax => [-1, 1].map(sg => [[ax - 0.35, sg * tr / 2 - 0.13], [ax + 0.35, sg * tr / 2 - 0.13], [ax + 0.35, sg * tr / 2 + 0.13], [ax - 0.35, sg * tr / 2 + 0.13]] as Pt[]));
+  const obs = map.scene.obstacles, tr = ty.W - 0.26, big = { L: ty.L + 0.1, W: ty.W + 0.06, OVR: ty.OVR + 0.05 };
+  const tyres: Pt[][] = [0, ty.WB].flatMap(ax => [-1, 1].map(sg => [[ax - 0.4, sg * tr / 2 - 0.14], [ax + 0.4, sg * tr / 2 - 0.14], [ax + 0.4, sg * tr / 2 + 0.14], [ax - 0.4, sg * tr / 2 + 0.14]] as Pt[]));
   const use = els.map(e => {
-    for (let s = 0; s <= e.len + 1e-9; s += SAMPLE) {
-      const [x, z, h] = poseOn(e, s), box = boxAt(ty, x, z, h);
+    for (let s = 0; s <= e.len + 1e-9; s += 2 * SAMPLE) {
+      const [x, z, h] = poseOn(e, s), box = boxAt(big, x, z, h);
       for (const o of nearby(obs, x, z, ty.L + 1)) {
         if (o.cls === 'kerb') { if (o.kind === 'poly' && tyres.some(w => polysOverlap(footprint(x, z, h, w), o.pts))) return false; continue; }
         if (o.kind === 'poly' ? polysOverlap(box, o.pts) : circleHitsPoly(o.x, o.z, o.r, box)) return false;

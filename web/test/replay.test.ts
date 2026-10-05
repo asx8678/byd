@@ -1,6 +1,6 @@
 // A recorded attempt replays exactly: same path, same touches, same parking result.
 import { describe, expect, it } from 'vitest';
-import { Recorder, STEP, playback } from '../src/core/replay';
+import { Recorder, STEP, playback, replayTo, stateOf } from '../src/core/replay';
 import { Sim, type SimEvent } from '../src/core/sim';
 
 /** Drive like a player would: pedals, a dragged wheel, Straighten, a touch on the way. */
@@ -32,6 +32,16 @@ describe('replay', () => {
     expect(again.sensorReadings).toEqual(sim.sensorReadings);
   });
   it('produces the same events', () => expect(replayed).toEqual(live));
+  it('rewinds from its checkpoints to exactly where replaying it all would', () => {
+    // a longer drive in the garage: past two checkpoints (every 10 s)
+    const g = new Sim(), r = new Recorder(); g.reset('left'); r.begin(g);
+    drive(g, r); drive(g, r);
+    expect(r.rec!.marks!.map(m => m.step)).toEqual([600, 1200]);
+    for (const n of [599, 600, 601, 1000, 1339]) {
+      const all = replayTo(r.rec!, g.scene, g.vehicle, n, () => {});   // a hook: replayed from the start
+      expect(JSON.stringify(stateOf(replayTo(r.rec!, g.scene, g.vehicle, n))), `step ${n}`).toBe(JSON.stringify(stateOf(all)));
+    }
+  });
   it('survives a round trip through JSON', () => {
     const copy = JSON.parse(JSON.stringify(rec.rec));
     const p = playback(copy, sim.scene, sim.vehicle); while (p.step());

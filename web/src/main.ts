@@ -736,7 +736,8 @@ function start(saved: Saved = {}): void {
   if (cityPlay && cityMap) {   // back on the street, in Drive mode, where you were if the layout is the same
     enterCity(buildCity(cityMap, chosenCar(), +cityPlay[2], settings.drive));
     if (typeof saved.x === 'number' && typeof saved.z === 'number' && typeof saved.th === 'number' && saved.scene === sim.scene.id && (saved.car ?? ATTO2.id) === sim.vehicle.id && !sim.touching(saved.x, saved.z, saved.th)) {
-      sim.place(saved.x, saved.z, saved.th); sim.wheelAngle = saved.wheelAngle || 0; city!.declined = slotNear(city!.map, sim.vehicle, saved.x, saved.z, saved.th)?.id ?? ''; beginRecording();
+      sim.place(saved.x, saved.z, saved.th); sim.wheelAngle = saved.wheelAngle || 0; city!.declined = slotNear(city!.map, sim.vehicle, saved.x, saved.z, saved.th)?.id ?? '';
+      spawnTraffic(city!, { x: saved.x, z: saved.z }); beginRecording();   // the traffic clear of where you are now, not of the start
     }
   } else if (play.startsWith('lesson:') && lessonById(play.slice(7)) && lessonFor(chosenCar(), lessonById(play.slice(7))!)) enterLesson(play.slice(7), 'drive');   // a lesson starts its try over
   else {
@@ -759,6 +760,8 @@ if (import.meta.env.MODE === 'harness') Object.assign(window, { __game: {
   sim, level: () => level, route: () => parRoute, lesson: () => lesson, city: () => city, pedals, enterLesson, playCity, switchMode, parkStart,
   /** Time the planner's check of a free space (ms), as the game runs it when you slow down beside one. */
   timeCheck: (i: number) => { const c = city!, s = c.map.slots[i], t0 = performance.now(); s.parkable = undefined; checkSlot(c.map, sim.vehicle, s); return performance.now() - t0; },
+  /** Time making a district's road network (ms), as entering it does (the district itself built first). */
+  timeNet: (id: string, seed: number) => { const m = buildCity(mapFor(id, seed)!, chosenCar(), seed, settings.drive), t0 = performance.now(); networkOf(m); return performance.now() - t0; },
   /** Run the frame loop for ms of game time at 30 frames a second (automation tabs get no animation frames). */
   pump: (ms: number) => { const t0 = Math.max(last, clock()); for (let k = 33.4; k <= ms + 1e-9; k += 33.4) tick(t0 + k); clockOffset += Math.max(0, t0 + ms - clock()); },
 } });

@@ -56,6 +56,22 @@ describe('the road network', () => {
       expect(e.kmax).toBeLessThanOrEqual(1 / 6);
     }
   });
+  it('is made for every made-up district: lanes long enough, paths joined up, and every size of car with somewhere to drive', () => {
+    // TRAFFIC_NETS=n for n layouts of each level, both ways round (default 20)
+    for (const drive of ['right', 'left'] as Drive[]) for (const level of [2, 5, 9]) for (let seed = 1; seed <= +(process.env.TRAFFIC_NETS ?? 20); seed++) {
+      const n = networkOf(buildCity(generateDistrict(seed, level), ATTO2, seed, drive)), id = `level ${level} layout ${seed} ${drive}`;
+      for (const e of n.els) {
+        if (e.kind === 'lane') { expect(e.len, id).toBeGreaterThan(10); continue; }
+        const a = n.els[e.from], [ax, az] = poseOn(a, a.len), [bx, bz] = poseOn(e, 0), [cx, cz] = poseOn(e, e.len), [dx, dz] = poseOn(n.els[e.next[0]], 0);
+        expect(Math.hypot(ax - bx, az - bz) + Math.hypot(cx - dx, cz - dz), id).toBeLessThan(1e-6);
+      }
+      TYPES.forEach((ty, t) => {
+        const lanes = n.els.filter(e => e.kind === 'lane' && n.ok[t][e.id]).length, out = n.els.filter(e => !n.ok[t][e.id]);
+        expect(lanes, `${id}: ${ty.name}`).toBeGreaterThan(0);
+        if (ty.name !== 'pickup') for (const e of out) expect(e.turn, `${id}: ${ty.name} kept off ${e.name}`).toBe('far');   // only a turn that swings it over a parked car
+      });
+    }
+  }, 120000);
   it('lets every size of car drive all of Harbour, but keeps a pickup off a turn that would swing it over a parked car', () => {
     TYPES.forEach((ty, t) => {
       const out = net.els.filter(e => !net.ok[t][e.id]);
