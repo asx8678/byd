@@ -15,11 +15,12 @@ try { Object.assign(saved, JSON.parse(localStorage.getItem(KEY) || '{}')); } cat
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch { /* not saved */ } };
 
 /** Where you are is kept per car: the Atto 2's under the lesson's own id (as before there were other cars), the others'
- *  with the car's id in front. */
+ *  with the car's id in front. A towing lesson brings its own car, so it has one place whatever car is chosen. */
 let carKey = '';
 export function setCourseCar(id: string): void { carKey = id === 'byd-atto2' ? '' : id + '|'; }
-export const stateOf = (id: string): LessonState => ({ ...freshState(), ...saved.lessons[carKey + id] });
-export function setState(id: string, s: LessonState): void { saved.lessons[carKey + id] = s; save(); }
+const keyOf = (id: string): string => (COURSE.lessons.find(l => l.id === id)?.tow ? id : carKey + id);
+export const stateOf = (id: string): LessonState => ({ ...freshState(), ...saved.lessons[keyOf(id)] });
+export function setState(id: string, s: LessonState): void { saved.lessons[keyOf(id)] = s; save(); }
 /** Why a lesson is not for this car, in a few words (the course list) or a sentence (when it is asked for). */
 export function notFor(def: LessonDef, v: Vehicle, long = false): string {
   const sc = def.scene;
@@ -54,13 +55,15 @@ export function renderCourse(current: string | null, v: Vehicle): void {
   const tab = saved.tab;
   $('tabCourse').hidden = tab !== 'course'; $('tabLevels').hidden = tab !== 'levels';
   document.querySelectorAll<HTMLElement>('#playTabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
-  $('crsList').replaceChildren(...COURSE.lessons.map(l => {
-    const b = el('button', 'crsRow'), s = stateOf(l.id), started = !!saved.lessons[carKey + l.id], ok = lessonFor(v, l);
+  $('crsList').replaceChildren(...COURSE.lessons.flatMap(l => {
+    const b = el('button', 'crsRow'), s = stateOf(l.id), started = !!saved.lessons[keyOf(l.id)], ok = lessonFor(v, l);
     b.type = 'button'; b.dataset.id = l.id; b.disabled = !!l.soon || !ok;
     const t = el('span', 'crsT'); t.append(el('b', '', l.title), el('small', '', l.learn));
     b.append(el('b', 'crsN', String(l.n)), t, el('em', s.done && ok ? 'crsS done' : 'crsS', l.soon ? 'Next update' : !ok ? notFor(l, v) : started ? statusText(s) : 'Start'));
     if (l.id === current) b.classList.add('cur');
-    return b;
+    if (!l.chapter) return [b];
+    const h = el('div', 'crsChapter'); h.append(el('b', '', l.chapter), el('small', '', l.tow ? 'In the Škoda Octavia estate with a box trailer, whichever car you have chosen' : ''));
+    return [h, b];
   }));
 }
 

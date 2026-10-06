@@ -67,6 +67,7 @@
         <circle cx="100" cy="100" r="31" fill="#1b1c21" stroke="#4a4d58" stroke-width="3"/>
         <path d="M100 8 l-7 13 h14 z" fill="#f2c230"/>
       </svg>
+      <svg id="wheelGuide" viewBox="-12 -12 224 224" aria-hidden="true" hidden><path id="wgArc" d=""/><path id="wgMark" d="M100 -10 l-8 -1 l8 14 l8 -14 z"/></svg>
       <div id="steerInfo" aria-label="Steering wheel turns from straight"><b id="steerTurns">0.0</b>turns</div>
       <button id="btnCenter" type="button">Straighten</button>
     </div>
@@ -74,6 +75,7 @@
       <div id="dash">
         <div id="dashSpd"><b id="gear" title="Gear">P</b><span id="spd">0.0</span><small>km/h</small></div>
         <div id="movesTile"><span id="movesK">Moves</span><b id="movesV">0</b><small id="parV"></small></div>
+        <div id="hitchTile" hidden title="The angle between the car and the trailer, and where the trailer folds into the car"><span>Trailer</span><b id="hitchV">0°</b><small id="hitchS"></small></div>
       </div>
       <div id="driveBtns" hidden>
         <button id="btnIndL" class="ind" type="button" aria-label="Left indicator" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12 L12 4 V9 H21 V15 H12 V20 Z"/></svg></button>

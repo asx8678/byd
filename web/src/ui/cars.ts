@@ -3,6 +3,7 @@
 import { ackermann } from '../core/car';
 import { CAR_SPECS } from '../core/content';
 import { DEG } from '../core/math';
+import { ballBehind, jackknifeAngle, type Trailer } from '../core/trailer';
 import { circlesOf, type Vehicle } from '../core/vehicle';
 import { $ } from './dom';
 
@@ -30,8 +31,8 @@ const SENSORS: Record<string, string> = {
   '4-rear': 'four in the rear bumper',
 };
 
-/** The Info sheet's table for the car being driven. */
-export function renderCarFacts(v: Vehicle): void {
+/** The Info sheet's table for the car being driven, and the trailer when one is on. */
+export function renderCarFacts(v: Vehicle, trailer: Trailer | null = null): void {
   const s = v.spec, d = s.dims, c = circlesOf(v);
   const pub = s.turning.kerbRadius !== undefined ? { kerbDiameter: 2 * s.turning.kerbRadius } : (s.turning.circles ?? []).find(k => (k.rearSteer ?? 0) === v.REAR_DEG);
   const mirrorW = d.widthMirrors ?? (s.mirrors ? 2 * s.mirrors.box[3] : d.width);
@@ -48,10 +49,11 @@ export function renderCarFacts(v: Vehicle): void {
   rows.push(
     ['Road-wheel angle at full lock', `${v.MAXSTEER.toFixed(1)}°`, `inner wheel ${inner.toFixed(1)}°, outer ${outer.toFixed(1)}° (Ackermann); worked out from the turning circle`],
     ['Steering wheel, lock to lock', s.turning.turnsLockToLock ? `${s.turning.turnsLockToLock} turns` : 'not published', 'the game uses the setting in Setup'],
-    ['Parking sensors', s.parkingSensors ? SENSORS[s.parkingSensors.layout] ?? s.parkingSensors.layout : 'none', ''],
+    ['Parking sensors', s.parkingSensors ? SENSORS[s.parkingSensors.layout] ?? s.parkingSensors.layout : 'none', trailer ? 'the rear ones are off while the trailer is on' : ''],
   );
+  if (v.tow) rows.push(['Tow bar', `may tow ${v.tow.unbraked} kg without brakes, ${v.tow.braked} kg with`, `${v.tow.noseWeight} kg on the ball at most; the ball ${m(ballBehind(v))} behind the rear axle`]);
   // label | value, with the note under the value: three columns do not fit a phone
-  const tr = ([label, value, note]: [string, string, string]) => {
+  const tr = ([label, value, note]: [string, string, string]): HTMLTableRowElement => {
     const t = document.createElement('tr'), a = document.createElement('td'), b = document.createElement('td');
     a.textContent = label; b.textContent = value;
     if (note) { const n = document.createElement('small'); n.textContent = note; b.append(n); }
@@ -73,5 +75,36 @@ export function renderCarFacts(v: Vehicle): void {
     }
     out.push(ul);
   }
+  if (trailer) out.push(...trailerFacts(v, trailer, tr));
   $('carFacts').replaceChildren(...out);
+}
+
+/** The trailer's part of the Info sheet: its size, where it turns, its weight against what the car may tow, where it
+ *  folds into the car, and its sources and estimates. */
+function trailerFacts(v: Vehicle, t: Trailer, tr: (r: [string, string, string]) => HTMLTableRowElement): HTMLElement[] {
+  const s = t.spec, d = s.dims, el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text: string) => { const e = document.createElement(tag); if (cls) e.className = cls; e.textContent = text; return e; };
+  const rows: [string, string, string][] = [
+    ['Length / width / height', `${n(d.length)} / ${n(d.width)} / ${n(d.height)} m`, 'overall, the drawbar included'],
+    ['Drawbar', m(d.drawbar), 'from the coupling to the box'],
+    ['Ball to axle', m(t.L1), 'how far behind the ball the trailer turns: the shorter, the quicker it swings when you reverse'],
+    ['Box inside', d.inside ? `${n(d.inside[0])} × ${n(d.inside[1])} × ${n(d.inside[2])} m` : '–', ''],
+    ['Gross weight', `${d.mass} kg`, d.payload ? `payload ${d.payload} kg` : ''],
+    ['Folds into the car at', `${(jackknifeAngle(v, t) / DEG).toFixed(0)}°`, `the hitch angle where the A-frame meets the ${v.short}'s bumper: the jackknife`],
+  ];
+  const out: HTMLElement[] = [el('h4', '', `Trailer: ${s.name}`)];
+  if (s.basedOn) out.push(el('p', 'est', s.basedOn));
+  const table = document.createElement('table'); table.className = 'dim'; table.append(...rows.map(tr)); out.push(table);
+  if (v.tow && d.mass > v.tow.unbraked) out.push(el('p', 'est', `Its ${d.mass} kg gross weight is more than the ${v.tow.unbraked} kg the ${v.short} may tow without brakes, so fully loaded it is heavier than the ${v.short} is rated for; its maker does not say whether it has brakes.`));
+  if (s.estimates?.length) out.push(el('p', 'est', `Estimates, not from a source: ${s.estimates.join('; ')}.`));
+  if (s.sources?.length) {
+    const ul = document.createElement('ul'); ul.className = 'src';
+    for (const src of s.sources) {
+      const li = document.createElement('li'), at = src.search(/https?:\/\//);
+      if (at < 0) li.textContent = src;
+      else { const url = src.slice(at).trim(), a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = new URL(url).hostname.replace(/^www\./, ''); li.append(src.slice(0, at).trim() + ' ', a); }
+      ul.append(li);
+    }
+    out.push(ul);
+  }
+  return out;
 }

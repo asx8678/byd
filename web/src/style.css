@@ -168,6 +168,9 @@ kbd{font:500 12px var(--font-ui);background:rgba(255,255,255,.08);border:1px sol
 .seg.tabs{margin:0 0 12px;width:max-content}
 .crsRow{display:flex;align-items:center;gap:10px;width:100%;box-sizing:border-box;margin:0 0 6px;padding:9px 12px;border-radius:10px;background:rgba(255,255,255,.05);border:1px solid var(--panel-line);color:var(--fg);text-align:left;cursor:pointer;font:inherit}
 .crsRow:disabled{opacity:.5;cursor:default}
+.crsChapter{display:flex;flex-direction:column;gap:2px;margin:14px 2px 8px}
+.crsChapter b{font:700 12px/1.2 var(--font-num);letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+.crsChapter small{font-size:12px;color:var(--muted)}
 .crsRow.cur{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 .crsRow:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .crsN{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.08);font:700 15px/1 var(--font-num);font-variant-numeric:tabular-nums}
@@ -229,6 +232,14 @@ kbd{font:500 12px var(--font-ui);background:rgba(255,255,255,.08);border:1px sol
 #movesTile{font:600 10px/1 var(--font-num);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 #movesV{font:600 14px/1 var(--font-num);letter-spacing:0;color:var(--fg);margin-left:5px}
 #parV{font-size:11px;letter-spacing:0;margin-left:2px}
+#hitchTile{font:600 10px/1 var(--font-num);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+#hitchV{font:600 14px/1 var(--font-num);letter-spacing:0;color:var(--fg);margin-left:5px}
+#hitchS{font-size:11px;letter-spacing:0;margin-left:3px}
+#hitchTile.near #hitchV{color:var(--warn)} #hitchTile.bad #hitchV{color:var(--bad)}
+#wheelGuide{position:absolute;left:50%;top:0;width:calc(var(--wheel) * 224 / 200);height:auto;transform:translate(-50%, calc(var(--wheel) * -12 / 200));pointer-events:none;overflow:visible}
+#wgArc{fill:none;stroke:#5ed0d8;stroke-width:7;stroke-linecap:round;opacity:.85}
+#wgMark{fill:#5ed0d8;stroke:#0d0e12;stroke-width:2}
+#wheelGuide.ok #wgMark{fill:#5ed08a} #wheelGuide.ok #wgArc{stroke:#5ed08a}
 #driveBtns{pointer-events:auto;display:grid;grid-template-columns:repeat(2,40px);gap:6px;touch-action:none}
 #driveBtns button{height:38px;border-radius:10px;border:1px solid var(--panel-line);background:var(--panel);color:var(--muted);display:grid;place-items:center;padding:0;cursor:pointer;backdrop-filter:blur(6px);font:700 11px/1 var(--font-num);letter-spacing:.06em;text-transform:uppercase}
 #driveBtns svg{width:20px;height:20px;fill:currentColor}

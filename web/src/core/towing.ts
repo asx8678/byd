@@ -4,7 +4,9 @@
 // trailer's axle), the hitch angle that holds the trailer on that curve, and the car's curvature that brings the hitch
 // angle there. The coach shows its wheel as a target for your hand; Show me and the tests drive with it.
 // Pure logic with no screen code, like the rest of core/.
+import type { PassRule } from './lesson';
 import { DEG, clamp, wrapPi } from './math';
+import type { ParkedResult } from './sim';
 import { angleForTrailerCurve, ballAt, ballBehind, hitchAngle, jackknifeAngle, settledAngle, type Trailer } from './trailer';
 import type { Vehicle } from './vehicle';
 
@@ -215,4 +217,16 @@ export class TowCoach {
 
   snapshot(): TowSnap { return { phase: this.phase, i: this.pilot.index, needle: this.pilot.needle, fwdFrom: this.fwdFrom }; }
   restore(s: TowSnap): void { this.phase = s.phase; this.pilot.index = s.i; this.pilot.needle = s.needle; this.fwdFrom = s.fwdFrom; this.hint = ''; }
+}
+
+/** What to work on after a towing try that did not pass: the jackknife first, then a touch, then where the trailer
+ *  finished against what the lesson asks for. */
+export function towFeedback(r: ParkedResult | null, rule: PassRule, par: number, jack: boolean): string {
+  if (jack) return 'The trailer folded into the car: correct earlier and with smaller movements, and pull forward to straighten it as soon as it gets away.';
+  if (r?.hits) return 'Something was touched: watch the trailer’s corners on the plan, and correct as soon as it drifts off its line.';
+  if (!r) return 'The trailer stopped outside the space: keep reversing slowly until all of it is in, straight.';
+  if (rule.angle !== undefined && Math.abs(r.angle) > rule.angle) return `The trailer finished ${Math.abs(r.angle).toFixed(1)}° off straight: bring it into line with the space a little sooner, so it goes in straight.`;
+  if (rule.centre !== undefined && Math.abs(r.offCentre) > rule.centre) return `The trailer finished ${Math.round(Math.abs(r.offCentre) * 100)} cm off centre: line it up with the middle of the space before it goes in.`;
+  if (rule.moves === 'par+1' && r.moves > par + 1) return `${r.moves} moves: aim to back it in at one go, with small corrections early.`;
+  return 'Close: the plan shows where the trailer went against its line.';
 }

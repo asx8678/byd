@@ -10,7 +10,7 @@ import { blendOf, rates } from './dynamics';
 import { DEG, clamp } from './math';
 import { facesRight, parkedIn, placement, type InBay } from './parking';
 import { footprint } from './car';
-import { predictPath, type Prediction } from './predict';
+import { predictPath, predictTow, type Prediction } from './predict';
 import { COUNTRIES } from './country';
 import { Rules, type Fault, type RulesSnap } from './rules';
 import { toBay, type Bay, type Obstacle, type Scene } from './scene';
@@ -151,7 +151,10 @@ export class Sim {
     return hit ? { name: hit.obstacle.name, part: hit.part } : null;
   }
   /** The path at the current steering, to where it would touch: on the street, a car parked at the kerb counts too. */
-  predict(dir: 1 | -1): Prediction { return predictPath(this.vehicle, this.obstacles, this.x, this.z, this.th, this.steerDeg, dir, this.traffic?.near(this.x, this.z, this.vehicle.REACH + 12, true)); }
+  predict(dir: 1 | -1): Prediction {
+    if (this.trailer) return predictTow(this.vehicle, this.trailer, this.obstacles, this.x, this.z, this.th, this.tth, this.steerDeg, dir);
+    return predictPath(this.vehicle, this.obstacles, this.x, this.z, this.th, this.steerDeg, dir, this.traffic?.near(this.x, this.z, this.vehicle.REACH + 12, true));
+  }
 
   /** Advance by dt seconds. Returns what happened (touches, parking) for the UI to show. */
   step(dt: number): SimEvent[] {

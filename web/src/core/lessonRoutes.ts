@@ -59,7 +59,7 @@ function attoSurvives(def: LessonDef): boolean {
 /** How a car's route differs from the Atto 2's, which the lesson's words are about ('' when it does not): more moves or
  *  steps, or (angled bays) coming up the aisle further out than Georgia's 1.2 m because the car turns wider. */
 export function routeNote(def: LessonDef, v: Vehicle, route: readonly Piece[]): string {
-  if (v.id === ATTO2.id) return '';
+  if (v.id === ATTO2.id || !def.route) return '';   // a towing lesson has no stored route to compare
   const ref = def.route!.pieces, out: string[] = [], sc = def.scene;
   const m0 = ref.reduce((m, p, i) => m + (i === 0 || p[0] !== ref[i - 1][0] ? 1 : 0), 0), m = route.reduce((n, p, i) => n + (i === 0 || p.dir !== route[i - 1].dir ? 1 : 0), 0);
   const same = ref.length === route.length && ref.every((p, i) => p[0] === route[i].dir && p[1] === route[i].lvl);
@@ -109,7 +109,8 @@ function intoLane(v: Vehicle, L: Lesson, route: Piece[]): Piece[] {
  * can overshoot a mark by 20 or 35 cm without touching anything, only if this car can too.
  */
 export function planLesson(v: Vehicle, def: LessonDef): Piece[] | null {
-  const sc = def.scene!, atto = v.id === ATTO2.id, ref: Shape = def.route!.pieces.map(p => [p[0] as 1 | -1, p[1]] as const);
+  if (!def.route) return null;   // a towing lesson: its coach steers by the trailer's path, there is no route to plan
+  const sc = def.scene!, atto = v.id === ATTO2.id, ref: Shape = def.route.pieces.map(p => [p[0] as 1 | -1, p[1]] as const);
   // the Atto 2's moves; then with a straight piece at the end; then with a straight between two turns the same way on
   // opposite locks (the three-phase way, which lets a car with a tight circle take out an error before the last turn)
   const last = ref[ref.length - 1], split: Shape = ref.flatMap((p, i) => (i && ref[i - 1][0] === p[0] && ref[i - 1][1] * p[1] < 0 ? [[p[0], 0] as const, p] : [p]));
@@ -131,7 +132,7 @@ export function planLesson(v: Vehicle, def: LessonDef): Piece[] | null {
     const plan = (shape?: Shape) => () => planToBay(v, scene, B.start, B.bay, { lvls: LOCK, maxNodes: 60000, shape }).pieces;
     return first(shapes.map(plan), r => (exit && !atto ? intoLane(v, loadLesson(v, def, r), r) : r));
   }
-  if ('tow' in sc) return null;   // a towing lesson has no stored route: its coach steers by the trailer's path
+  if ('tow' in sc) return null;
   if ('garage' in sc) {
     const s = clearStart(v, GARAGE_561, GARAGE_561.starts[sc.start]);
     return first(shapes.map(shape => () => planToBay(v, GARAGE_561, s, sc.garage, { lvls: LOCK, shape }).pieces));

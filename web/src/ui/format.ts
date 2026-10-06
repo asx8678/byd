@@ -16,4 +16,4 @@ export function parkedCard(r: ParkedResult): { title: string; text: string; stat
   };
 }
 
-export const touchTitle = (name: string, part: string): string => `Touched the ${name}` + (part ? ` with the ${part}` : '');
+export const touchTitle = (name: string, part: string): string => (part === 'jackknife' ? 'Jackknife: the trailer has folded into the car' : `Touched the ${name}` + (part ? ` with the ${part}` : ''));

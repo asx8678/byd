@@ -9,10 +9,11 @@ import { lookAhead } from '../core/dynamics';
 import { bayRect, besideKerb, type Rect } from '../core/scene';
 import { DEG, clamp, wrapPi, type Pt } from '../core/math';
 import type { Pose, RoutePoint } from '../core/planner';
-import type { Prediction } from '../core/predict';
+import type { Prediction, TowPrediction } from '../core/predict';
 import { SIDES, rangeOf } from '../core/sensors';
 import { PDC_MAX, type Sim } from '../core/sim';
 import { DRIVERS, TYPES, type Traffic } from '../core/traffic';
+import { ballAt, boxCorners, type Trailer } from '../core/trailer';
 import { $, fitCanvas } from './dom';
 import { bannerCar, bannerRoom } from './hud';
 import { settings } from './settings';
@@ -52,8 +53,9 @@ function placeNums(): void {
   $('planNums').style.top = top + 'px';
 }
 
-/** Show me: a planned route drawn on the floor, and a ghost car at point `at` along it. */
-export interface Guide { pts: RoutePoint[]; at: number }
+/** Show me: a planned route drawn on the floor, and a ghost car at point `at` along it (with a trailer on, the ghost
+ *  pulls one too: each point has its heading, tth). follow: the view follows the ghost rather than the car. */
+export interface Guide { pts: (RoutePoint & { tth?: number })[]; at: number; follow?: boolean }
 let guide: Guide | null = null;
 export function setGuide(g: Guide | null): void { guide = g; }
 /** A lesson on the floor: the route (guided), the marks still to come (the next one where the car should really stop,
@@ -61,6 +63,11 @@ export function setGuide(g: Guide | null): void { guide = g; }
 export interface CoachDraw { route: RoutePoint[] | null; marks: Pose[]; from: number; cur: Pose | null; track: Pt[] | null; drift: Pt | null }
 let coach: CoachDraw | null = null;
 export function setCoachDraw(d: CoachDraw | null): void { coach = d; }
+/** A towing lesson on the floor: the line the trailer's axle should follow, and the trailer as it should sit in the
+ *  space at the end (its ball's pose). */
+export interface TowDraw { path: Pt[] | null; goal: [number, number, number] | null }
+let towDraw: TowDraw | null = null;
+export function setTowDraw(d: TowDraw | null): void { towDraw = d; }
 
 /** Jump straight to the target view on the next frame instead of easing there (a new scene: the map zooms itself again). */
 export function snapView(): void { PV.init = false; setUserZoom(null); }
@@ -125,18 +132,31 @@ export const upRot = (th: number): number => th - Math.PI / 2;
  *  bigger car: on a phone about 25 px/m in Park mode and 12 px/m standing in Drive mode. */
 const PARK_ACROSS = 16.5, PARK_DOWN = 14, DRIVE_ACROSS = 35;
 
+/** The middle of what is driven (the car, or the car and its trailer) and how long it is when straight: the car's, or
+ *  the ghost's while the view follows it. */
+function rigMid(sim: Sim): { x: number; z: number; L: number } {
+  const g = guide?.follow ? guide.pts[Math.min(guide.at, guide.pts.length - 1)] : null;
+  const v = sim.vehicle, t = sim.trailer, mid = v.L / 2 - v.OVR, x = g ? g.x : sim.x, z = g ? g.z : sim.z, th = g ? g.th : sim.th, tth = g?.tth ?? sim.tth;
+  if (!t) return { x: x + mid * Math.cos(th), z: z - mid * Math.sin(th), L: v.L };
+  const nose = v.WB + v.OVF, [bx, bz] = ballAt(v, x, z, th), fx = x + nose * Math.cos(th), fz = z - nose * Math.sin(th);
+  const rx = bx - t.length * Math.cos(tth), rz = bz + t.length * Math.sin(tth);
+  return { x: (fx + rx) / 2, z: (fz + rz) / 2, L: nose - v.tow!.x + t.length };
+}
+
 function follow(sim: Sim, dt: number): void {
   let tx, tz, ts, rot = 0, oy = PV.oyPark;
-  const v = sim.vehicle, drive = sim.mode === 'drive', mid = v.L / 2 - v.OVR, init = PV.init;
+  const v = sim.vehicle, drive = sim.mode === 'drive', init = PV.init;
   if (settings.planView === 'area') { const [x0, x1, z0, z1] = sim.scene.areaView; tx = (x0 + x1) / 2; tz = (z0 + z1) / 2; ts = Math.min(PV.w / (x1 - x0), PV.band / (z1 - z0)); }   // the scene's whole-area view, north up
   else {
-    tx = sim.x + mid * Math.cos(sim.th); tz = sim.z - mid * Math.sin(sim.th);
+    const rm = rigMid(sim); tx = rm.x; tz = rm.z;
     if (drive) {
       // the zoom rule: at least the distance to stop, plus the car, between the car and the top of the free band
       rot = upRot(sim.th); oy = PV.oyDrive;
       ts = Math.max(1.2, Math.min((PV.oyDrive - PV.top) / (lookAhead(Math.abs(sim.v), v.L) + v.L / 2), PV.w / DRIVE_ACROSS));
     } else {
-      ts = Math.min(PV.w / Math.max(PARK_ACROSS, 3.8 * v.L), PV.band / Math.max(PARK_DOWN, 3.2 * v.L));
+      // a car and trailer: the whole rig and some room round it (it folds, and the trailer goes where the car does not)
+      ts = sim.trailer ? Math.min(PV.w / Math.max(PARK_ACROSS, 2.6 * rm.L), PV.band / Math.max(PARK_DOWN, 2.0 * rm.L))
+        : Math.min(PV.w / Math.max(PARK_ACROSS, 3.8 * v.L), PV.band / Math.max(PARK_DOWN, 3.2 * v.L));
       if (street?.lockRot != null) rot = street.lockRot;
     }
   }
@@ -236,8 +256,8 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
   const size = fitCanvas(planCv); if (!size) return;
   const { w, h } = size, { x, z, th } = sim, v = sim.vehicle, sc = sim.scene;
   PV.w = w; PV.h = h; follow(sim, dt); zoomed = false;
-  {   // keep messages off the car and, in Park mode, off the space it is going into
-    const mid = v.L / 2 - v.OVR, cy = PS(x + mid * Math.cos(th), z - mid * Math.sin(th))[1], r = (v.L / 2 + 0.4) * PV.s;
+  {   // keep messages off the car (and its trailer) and, in Park mode, off the space it is going into
+    const rm = rigMid(sim), cy = PS(rm.x, rm.z)[1], r = (sim.trailer ? rm.L * Math.abs(Math.sin(sim.th - PV.rot)) / 2 + 1.2 : v.L / 2 + 0.4) * PV.s;
     let lo = cy - r, hi = cy + r;
     const T = sim.mode === 'park' ? sim.scene.bays[sim.options.bay] : undefined;
     if (T) for (const q of bayRect(T, [T.x0, T.x1, T.z0, T.z1])) { const y = PS(q[0], q[1])[1]; lo = Math.min(lo, y); hi = Math.max(hi, y); }
@@ -339,6 +359,11 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
     });
     if (C.drift) { const [sx, sy] = PS(C.drift[0], C.drift[1]); c.strokeStyle = '#ff6b5a'; c.lineWidth = 2.5; c.beginPath(); c.arc(sx, sy, Math.max(10, 0.45 * s), 0, 6.3); c.stroke(); }
   }
+  // a towing lesson: the line the trailer's axle should follow (dashed cyan, as reversing is) and the trailer in the space
+  if (towDraw && sim.trailer) {
+    if (towDraw.path && towDraw.path.length > 1) { c.strokeStyle = 'rgba(94,208,216,.65)'; c.lineWidth = Math.max(1.5, 0.06 * s); c.setLineDash([6, 5]); c.lineCap = 'round'; path(c, towDraw.path, false); c.stroke(); c.setLineDash([]); }
+    if (towDraw.goal) { const [gx, gz, gt] = towDraw.goal; c.strokeStyle = 'rgba(94,208,138,.7)'; c.lineWidth = 1; c.setLineDash([4, 4]); path(c, footprint(gx, gz, gt, boxCorners(sim.trailer))); c.stroke(); c.setLineDash([]); }
+  }
   // Show me: the planned route (forward yellow, reverse dashed cyan), where each move ends, and the ghost car
   if (guide) {
     const G = guide.pts;
@@ -351,6 +376,7 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
     c.setLineDash([]);
     for (let i = 1; i < G.length - 1; i++) if (G[i + 1].dir !== G[i].dir) { c.strokeStyle = 'rgba(235,232,223,.35)'; c.lineWidth = 1; c.setLineDash([4, 4]); path(c, footprint(G[i].x, G[i].z, G[i].th, v.body)); c.stroke(); c.setLineDash([]); }
     const g = G[Math.min(guide.at, G.length - 1)];
+    if (sim.trailer && g.tth !== undefined) { const [gbx, gbz] = ballAt(v, g.x, g.z, g.th); trailerShape(c, sim.trailer, gbx, gbz, g.tth, true); }
     c.fillStyle = 'rgba(242,194,48,.10)'; c.strokeStyle = 'rgba(242,194,48,.95)'; c.lineWidth = 1.5; c.setLineDash([5, 4]);
     path(c, footprint(g.x, g.z, g.th, v.body)); c.fill(); c.stroke(); c.setLineDash([]);
     c.fillStyle = 'rgba(242,194,48,.85)'; path(c, footprint(g.x, g.z, g.th, [[v.WB + v.OVF - 0.143, 0], [v.WB + v.OVF - 0.543, -0.27], [v.WB + v.OVF - 0.543, 0.27]])); c.fill();
@@ -365,6 +391,14 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
   if (settings.layerSwept === 'on' && !fast) {   // learning layer: the swept path of all four corners
     c.lineWidth = 1.5; c.strokeStyle = 'rgba(214,160,255,.75)';
     for (const tr of [p.tracks.fl, p.tracks.fr, p.tracks.rl, p.tracks.rr]) { path(c, tr, false); c.stroke(); }
+  }
+  const tp = sim.trailer && 'tow' in p ? (p as TowPrediction).tow : null;
+  if (showPath && tp && sim.trailer) {   // where the trailer goes at this wheel: its outline every 0.8 m and its back corners' tracks
+    c.strokeStyle = 'rgba(94,208,216,.22)'; c.lineWidth = 1;
+    for (const g of tp.ghosts) { path(c, footprint(g[0], g[1], g[2], boxCorners(sim.trailer))); c.stroke(); }
+    // red once it would fold up or touch something soon: held steady, a reversing trailer always folds in the end
+    c.lineWidth = 2; c.strokeStyle = (tp.folded || tp.thit) && p.dist < 2.5 ? '#ff6b5a' : 'rgba(94,208,216,.9)';
+    for (const tr of [tp.rl, tp.rr]) { path(c, tr, false); c.stroke(); }
   }
   if (showPath) {
     c.strokeStyle = 'rgba(242,194,48,.26)'; c.lineWidth = 1;
@@ -398,6 +432,8 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
     c.lineCap = 'round';
     for (const k of SIDES) { const d = sim.pdc[k]; if (!(d < rangeOf(v, k) - 1e-6)) continue; c.strokeStyle = zoneCol(d); c.lineWidth = Math.max(3, 0.12 * s); path(c, footprint(x, z, th, Z[k]), false); c.stroke(); }
   }
+  // the trailer, under the car's tail
+  if (sim.trailer) { const [tbx, tbz] = ballAt(v, x, z, th); trailerShape(c, sim.trailer, tbx, tbz, sim.tth, false); }
   // the car: body, mirrors, glass, the nose mark, wheels (the fronts at their Ackermann angles)
   c.fillStyle = 'rgba(16,18,22,.95)'; c.strokeStyle = '#ebe8df'; c.lineWidth = 1.5; path(c, footprint(x, z, th, v.body)); c.fill(); c.stroke();
   c.fillStyle = '#8e939c'; for (const m of v.mirrors) { path(c, footprint(x, z, th, m)); c.fill(); }
@@ -430,14 +466,35 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
   const info = drive && driveInfo !== null ? driveInfo + streetInfo(sim) : `<div><span>Wheels</span>L ${(fl / DEG).toFixed(1)}° · R ${(fr / DEG).toFixed(1)}°</div><div><span>Turn radius</span>${Rout < 60 ? Rout.toFixed(2) + ' m' : 'straight'}</div>`;
   if (info !== infoTxt) { infoTxt = info; $('planInfo').innerHTML = info; placeNums(); }
   const what = p.dir > 0 ? 'Forward' : 'Reversing';
-  const ptxt = !showPath || drive ? '' : p.hit ? `${what}: ${p.part ? p.part + ' ' : ''}hits ${p.hit.name} in ${p.dist.toFixed(1)} m` : `${what}: clear for ${p.dist.toFixed(1)} m`;
-  if (ptxt !== predTxt) { predTxt = ptxt; const el = $('planPred'); el.textContent = ptxt; el.className = p.hit && p.dist < 1 ? 'bad' : ''; }
+  const ptxt = !showPath || drive ? '' : p.hit ? `${what}: ${p.part ? p.part + ' ' : ''}hits ${p.hit.name} in ${p.dist.toFixed(1)} m`
+    : tp?.folded ? `${what}: the trailer folds into the car in ${p.dist.toFixed(1)} m` : tp?.thit ? `${what}: the ${p.part} hits ${tp.thit.name} in ${p.dist.toFixed(1)} m` : `${what}: clear for ${p.dist.toFixed(1)} m`;
+  const pbad = (!!p.hit || !!tp?.folded || !!tp?.thit) && p.dist < 1;
+  if (ptxt !== predTxt) { predTxt = ptxt; const el = $('planPred'); el.textContent = ptxt; el.className = pbad ? 'bad' : ''; }
   const sw = Math.round(s); if (sw !== scaleW) { scaleW = sw; $('planScale').innerHTML = `<i style="width:${sw}px"></i>1 m`; }
   // learning layers: the kerb close-up, and the numbers (angle to the space, gaps)
   const kw = nearestKerbWheel(sim);
   if (settings.layerKerb !== 'off' && kw && kw.gap < 1.0) drawKerbCloseUp(c, kw);
   const nums = settings.layerNums === 'off' ? '' : numbersHtml(sim, kw);
   if (nums !== numsTxt) { numsTxt = nums; const el = $('planNums'); el.innerHTML = nums; el.hidden = !nums; }
+}
+
+/** A trailer with its ball at (bx, bz), pointing along tth: the box with its load floor, the tyres beside it, the
+ *  A-frame to the coupling on the ball; a ghost (Show me) as a dashed outline. */
+function trailerShape(c: CanvasRenderingContext2D, t: Trailer, bx: number, bz: number, tth: number, ghost: boolean): void {
+  const F = (pts: Pt[]) => footprint(bx, bz, tth, pts), fw = t.spec.frame.width / 2, head = t.spec.frame.head;
+  const arms: Pt[][] = [[[-t.drawbar, -fw], [-head, -0.06]], [[-t.drawbar, fw], [-head, 0.06]]];
+  if (ghost) {
+    c.strokeStyle = 'rgba(242,194,48,.85)'; c.fillStyle = 'rgba(242,194,48,.08)'; c.lineWidth = 1.5; c.setLineDash([5, 4]);
+    path(c, F(boxCorners(t))); c.fill(); c.stroke(); for (const a of arms) { path(c, F(a), false); c.stroke(); }
+    c.setLineDash([]); return;
+  }
+  const [il, iw] = t.spec.dims.inside ?? [t.length - t.drawbar - 0.1, t.width - 0.5], box = t.length - t.drawbar, x0 = -t.drawbar - (box - il) / 2;
+  c.strokeStyle = '#8e939c'; c.lineWidth = Math.max(1.5, 0.05 * PV.s); c.lineCap = 'round';
+  for (const a of arms) { path(c, F(a), false); c.stroke(); }
+  c.fillStyle = '#8e939c'; path(c, F([[-head, -0.06], [0.06, -0.06], [0.06, 0.06], [-head, 0.06]])); c.fill();
+  c.fillStyle = 'rgba(16,18,22,.95)'; c.strokeStyle = '#ebe8df'; c.lineWidth = 1.5; path(c, F(boxCorners(t))); c.fill(); c.stroke();
+  c.fillStyle = 'rgba(70,92,116,.35)'; path(c, F([[x0, -iw / 2], [x0, iw / 2], [x0 - il, iw / 2], [x0 - il, -iw / 2]])); c.fill();
+  c.fillStyle = '#ebe8df'; for (const w of t.wheels) { path(c, F(w)); c.fill(); }
 }
 
 /** Lights and indicators flash: on for 0.45 s of every 0.8 s. */
@@ -565,13 +622,14 @@ function drawKerbCloseUp(c: CanvasRenderingContext2D, kw: KerbWheel): void {
 /** The numbers layer: the car's angle to the space, the gap to a kerb, and the gaps either side. */
 function numbersHtml(sim: Sim, kw: KerbWheel | null): string {
   const b = sim.scene.bays[sim.options.bay] ?? sim.scene.bays[sim.scene.defaultBay], out: string[] = [];
-  const a = (h: number) => Math.abs(wrapPi(sim.th - h - (b?.frame?.rot ?? 0))) / DEG;   // a turned bay's headings are in its own frame
+  const tow = !!b?.towed && !!sim.trailer, th = tow ? sim.tth : sim.th, gaps = tow ? sim.trailerGaps : sim.gaps;   // a trailer's space: the trailer's angle and gaps
+  const a = (h: number) => Math.abs(wrapPi(th - h - (b?.frame?.rot ?? 0))) / DEG;   // a turned bay's headings are in its own frame
   if (b) {   // on the street there is no space to aim for until Park mode picks one
     const ang = b.face === 'in' ? a(b.inHeading) : b.face === 'out' ? a(b.inHeading + Math.PI) : Math.min(a(b.inHeading), a(b.inHeading + Math.PI));
-    out.push(`<span>${b.kind === 'kerb' || b.kind === 'exit' ? 'To kerb' : 'To bay'}</span><b>${ang.toFixed(0)}°</b>`);
+    out.push(`<span>${b.kind === 'kerb' || b.kind === 'exit' ? 'To kerb' : tow ? 'Trailer to bay' : 'To bay'}</span><b>${ang.toFixed(0)}°</b>`);
   }
   if (kw && kw.gap < 2) out.push(`<span>Kerb</span><b>${Math.max(0, Math.round(kw.gap * 100))} cm</b>`);
-  for (const [k, label] of [['left', 'Left'], ['right', 'Right']] as const) if (sim.gaps[k] < 3) out.push(`<span>${label}</span><b>${sim.gaps[k] < 1 ? Math.round(sim.gaps[k] * 100) + ' cm' : sim.gaps[k].toFixed(2) + ' m'}</b>`);
+  for (const [k, label] of [['left', 'Left'], ['right', 'Right']] as const) if (gaps[k] < 3) out.push(`<span>${label}</span><b>${gaps[k] < 1 ? Math.round(gaps[k] * 100) + ' cm' : gaps[k].toFixed(2) + ' m'}</b>`);
   return out.join('');
 }
 

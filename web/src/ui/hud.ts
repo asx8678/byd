@@ -1,6 +1,9 @@
-// The readouts between the wheel and the pedals (speed and gear; your moves, or the speed limit when driving), the
-// wheel's turns on its hub, and the message banner.
+// The readouts between the wheel and the pedals (speed and gear; your moves, or the speed limit when driving; with a
+// trailer on, the angle it makes with the car), the wheel's turns on its hub, the coach's target on its rim in a towing
+// lesson, and the message banner.
+import { DEG } from '../core/math';
 import type { Sim } from '../core/sim';
+import { hitchAngle, jackknifeAngle } from '../core/trailer';
 import { $ } from './dom';
 
 const banner = $('banner');
@@ -35,7 +38,24 @@ export function bannerCar(lo: number, hi: number): void {
   room.lo = lo; room.hi = hi; placeBanner();
 }
 
-const wheelSvg = $('wheelSvg');
+const wheelSvg = $('wheelSvg'), guideSvg = $('wheelGuide');
+/** A towing lesson's coach: where it wants the wheel (degrees, + clockwise), drawn as a mark outside the rim with an arc
+ *  from the wheel's own mark; null hides it. Within OK degrees the wheel counts as set. */
+let wheelTarget: number | null = null;
+export const WHEEL_OK = 25;
+export function setWheelTarget(deg: number | null): void { wheelTarget = deg; }
+/** A point at a degrees clockwise from the top, r out from the wheel's middle (the wheel's own units: 200 across). */
+const rim = (a: number, r: number): string => `${(100 + r * Math.sin(a * Math.PI / 180)).toFixed(1)} ${(100 - r * Math.cos(a * Math.PI / 180)).toFixed(1)}`;
+function drawGuide(wa: number): void {
+  // an SVG element has no hidden property: set the attribute itself
+  if (wheelTarget === null) { if (!guideSvg.hasAttribute('hidden')) guideSvg.setAttribute('hidden', ''); return; }
+  guideSvg.removeAttribute('hidden');
+  const want = wheelTarget, d = Math.max(-330, Math.min(330, want - wa)), ok = Math.abs(want - wa) <= WHEEL_OK, r = 104;
+  guideSvg.classList.toggle('ok', ok);
+  $('wgMark').setAttribute('transform', `rotate(${want.toFixed(1)} 100 100)`);
+  $('wgArc').setAttribute('d', ok ? '' : `M ${rim(wa, r)} A ${r} ${r} 0 ${Math.abs(d) > 180 ? 1 : 0} ${d > 0 ? 1 : 0} ${rim(wa + d, r)}`);
+}
+const hitchTile = $('hitchTile');
 let par = 0, limit: number | null = null;
 /** On the street in Drive mode, the speed limit where you are: shown in place of the moves (null: the moves). */
 export function setLimit(l: number | null): void { limit = l; }
@@ -45,6 +65,15 @@ export function setPar(n: number): void { par = n; $('parV').textContent = n ? `
 export function updateHud(sim: Sim): void {
   const wa = sim.wheelAngle, tgt = sim.targetSpeed();
   wheelSvg.style.transform = `rotate(${wa}deg)`;
+  drawGuide(wa);
+  // with a trailer on: the hitch angle, warning as it nears where the trailer folds into the car
+  const t = sim.trailer; hitchTile.hidden = !t;
+  if (t) {
+    const a = hitchAngle(sim.th, sim.tth) / DEG, jack = jackknifeAngle(sim.vehicle, t) / DEG;
+    $('hitchV').textContent = `${Math.abs(a).toFixed(0)}°${Math.abs(a) < 0.5 ? '' : a > 0 ? ' L' : ' R'}`;
+    $('hitchS').textContent = `/ ${jack.toFixed(0)}°`;
+    hitchTile.classList.toggle('bad', Math.abs(a) > jack - 15); hitchTile.classList.toggle('near', Math.abs(a) > jack - 30 && Math.abs(a) <= jack - 15);
+  }
   $('steerTurns').textContent = (Math.abs(wa) / 360).toFixed(1) + (wa > 1 ? ' R' : wa < -1 ? ' L' : '');
   const kmh = Math.abs(sim.v) * 3.6, drive = sim.mode === 'drive', over = limit !== null && drive && kmh > limit + 3;
   const spd = $('spd'); spd.textContent = drive && kmh >= 10 ? kmh.toFixed(0) : kmh.toFixed(1); spd.className = over ? 'over' : ''; $('gear').textContent = sim.gear;

@@ -3,13 +3,15 @@
 // loads the scene. On the street you drive in Drive mode and park in Park mode.
 import './style.css';
 import { CoachRun, Tracker, feedback, timingCause, type CoachEvent, type CoachSnap, type Feedback, type Step } from './core/coach';
+import { TowCoach, axleAt, towFeedback, type TowEvent, type TowSnap } from './core/towing';
+import { towDrive } from './core/robot';
 import type { CheckDone, CheckJob, ParDone, ParJob } from './cityCheck.worker';
 import CheckWorker from './cityCheck.worker?worker&inline';
 import { buildCity, checkSlot, localScene, lotAt, parkStart, slotMid, slotNear, slotPlace, streetAt, type CityMap, type MapSpec, type Slot } from './core/city';
 import { districtId, districtLevel, generateDistrict } from './core/district';
 import { alongHeading, lotFit } from './core/lot';
 import { facesRight, parkedIn } from './core/parking';
-import { ATTO2, GARAGE_561, MAPS, VEHICLES, vehicleFor } from './core/content';
+import { ATTO2, GARAGE_561, MAPS, TOW_CAR, VEHICLES, vehicleFor } from './core/content';
 import { V_KIN } from './core/dynamics';
 import { generate, parseKey, timeLimit, type Level } from './core/generator/level';
 import type { TemplateId } from './core/generator/templates';
@@ -26,15 +28,15 @@ import { COUNTRIES, theftNote } from './core/country';
 import { DENSITY, TYPES, Traffic, diveFor, networkOf } from './core/traffic';
 import { beep, horn, toot, updateBeeper } from './ui/audio';
 import { renderCarFacts, renderCarPicker, syncCarPicker } from './ui/cars';
-import { bindCard, renderCard } from './ui/coachCard';
+import { bindCard, renderCard, renderTowCard } from './ui/coachCard';
 import { bindControls, pedals, releasePedals, setPedalMode, tickPedals } from './ui/controls';
 import { bindCourse, courseTab, notFor, renderCourse, setCourseCar, setState, showLesson, showLessonResult, stateOf } from './ui/course';
 import { $, MAX_DPR, closeSheets, openSheet, screen } from './ui/dom';
 import { parkedCard, touchTitle } from './ui/format';
-import { setLimit, setPar, showBanner, updateHud } from './ui/hud';
+import { setLimit, setPar, setWheelTarget, showBanner, updateHud } from './ui/hud';
 import { bindLevels, hideResult, renderLevels, showResult } from './ui/levels';
 import { updatePdcDisplay, layoutPdc } from './ui/pdcDisplay';
-import { drawPlan, forgetPrediction, layoutPlan, setCoachDraw, setDriveInfo, setGuide, setStreet, snapView, upRot, viewMoving, type Guide } from './ui/plan';
+import { drawPlan, forgetPrediction, layoutPlan, setCoachDraw, setDriveInfo, setGuide, setStreet, setTowDraw, snapView, upRot, viewMoving, type Guide } from './ui/plan';
 import { TEMPLATE_NAMES, bestStars, citySeed, progress, recordStars, seedFor, setCitySeed, setPlaying, setStarsCar } from './ui/progress';
 import { lockDeg, saveSettings, settings } from './ui/settings';
 
@@ -74,7 +76,12 @@ interface LessonPlay {
   over: boolean;           // this try has its result
   track: Pt[] | null; drift: Pt | null;   // after a try: your path, and where it first drifted 30 cm
   rewound: boolean;        // this try went back in time: practice
-  mark0: { coach: CoachSnap | null; track: number };   // the coach and the path when the recording last began, for rewinding
+  mark0: { coach: CoachSnap | null; tow: TowSnap | null; track: number };   // the coaches and the path when the recording last began, for rewinding
+  /** A towing lesson: the trailer's coach for this try (null with less help), the trailer's line and where it should end
+   *  up (drawn on the floor), and whether the rig has folded up in this try. */
+  tow: TowCoach | null; towPath: Pt[]; towGoal: [number, number, number] | null; jack: boolean;
+  /** A towing lesson: where the trailer's axle went in this try (every 5 cm), drawn over its line afterwards. */
+  towTrack: Pt[];
 }
 let lesson: LessonPlay | null = null;
 
@@ -166,7 +173,7 @@ function afterPaint(f: () => void): void {
 /** Start recording from the car as it is; in a lesson, remember the coach and the path too, for a rewind. */
 function beginRecording(): void {
   recorder.begin(sim);
-  if (lesson) lesson.mark0 = { coach: lesson.run?.snapshot() ?? null, track: lesson.tracker.pts.length };
+  if (lesson) lesson.mark0 = { coach: lesson.run?.snapshot() ?? null, tow: lesson.tow?.snapshot() ?? null, track: lesson.tracker.pts.length };
 }
 function setRoute(route: Piece[]): void { parRoute = route; par = route.length ? moves(route) : 0; limit = route.length ? timeLimit(route) : 0; setPar(par); }
 /** Where the garage try starts: the chosen start, moved back for a car too long to stand there. */
@@ -196,7 +203,7 @@ function resetCar(): void {
   showBanner('', `Park in bay ${settings.bay}${v === ATTO2 ? '' : ` · ${v.short}`}`, from + (settings.bay === '561' ? ' Mind pillar 560 and the bench; the plan shows where each move ends.' : ' Pillar 560 runs along its left side.') + parText, null, 8000);
 }
 
-function leaveLesson(): void { lesson = null; setCoachDraw(null); renderCard(null); useCar(chosenCar()); layout(); }
+function leaveLesson(): void { lesson = null; setCoachDraw(null); setTowDraw(null); setWheelTarget(null); renderCard(null); sim.setTrailer(null); useCar(chosenCar()); layout(); }
 function enterLevel(L: Level): void {
   leaveLesson(); leaveCity(); level = L; sim.load(L.scene); setRoute(L.route); setPlaying(L.key, L.template, L.level, L.seed);
   snapView(); resetCar(); refreshLevels();
@@ -426,14 +433,20 @@ bindLevels({ playLevel, playGarage, playCity, playDistrict: fresh => playCity(fr
 /** Into a lesson in the chosen car: its scene, its route, where you are in it; then the lesson card, or straight into a
  *  try. False when the lesson is not for this car. */
 function enterLesson(id: string, then: 'card' | 'drive' = 'card'): boolean {
-  const def = lessonById(id), v = chosenCar(); if (!def) return false;
+  const def = lessonById(id); if (!def) return false;
+  const v = def.tow ? vehicleFor(TOW_CAR) : chosenCar();   // a towing lesson brings the car with the tow bar
   if (!lessonFor(v, def)) { showBanner('bad', `Lesson ${def.n} is not for the ${v.short}`, notFor(def, v, true), null, 5000); return false; }
   stopReplay(); hideGuide(); closeSheets(); leaveCity();
   useCar(v);
-  const L = loadLesson(v, def);
+  const L = loadLesson(v, def), T = L.tow;
+  sim.setTrailer(T ? T.trailer : null); renderCarFacts(v, sim.trailer);
   level = null;
-  lesson = { L, steps: lessonSteps(v, L), tips: tipsFor(def, L.route), routePts: sample(v, L.route, 0.1), st: stateOf(id), run: null, tracker: new Tracker(), fault: '', fb: null, summoned: false, watching: false, over: false, track: null, drift: null, rewound: false, mark0: { coach: null, track: 0 } };
-  sim.load(L.scene); setRoute(L.route); setPlaying(`lesson:${id}`);
+  const end = T?.path.pts[T.path.pts.length - 1];
+  lesson = {
+    L, steps: T ? [] : lessonSteps(v, L), tips: T ? {} : tipsFor(def, L.route), routePts: T ? [] : sample(v, L.route, 0.1), st: stateOf(id), run: null, tracker: new Tracker(), fault: '', fb: null, summoned: false, watching: false, over: false, track: null, drift: null, rewound: false, mark0: { coach: null, tow: null, track: 0 },
+    tow: null, towPath: T ? T.path.pts.map((p): Pt => [p.x, p.z]) : [], towGoal: T && end ? [end.x + T.trailer.L1 * Math.cos(end.th), end.z - T.trailer.L1 * Math.sin(end.th), end.th] : null, jack: false, towTrack: [],
+  };
+  sim.load(L.scene); if (T) { parRoute = []; par = L.par; limit = L.limit; setPar(par); } else setRoute(L.route); setPlaying(`lesson:${id}`);
   snapView(); startTry(); refreshLevels();
   if (then === 'card') lessonCard();
   return true;
@@ -447,16 +460,34 @@ function lessonCard(): void {
   }, sim.vehicle, ls.L, routeNote(ls.L.def, sim.vehicle, ls.L.route));
 }
 /** A new try from the lesson's start, with as much help as you are at. */
+/** Where the trailer's axle has gone in a towing lesson, a point every 5 cm. */
+function trackTrailer(ls: LessonPlay): void {
+  const T = ls.L.tow; if (!T || !sim.trailer) return;
+  const a = axleAt(sim.vehicle, sim.trailer, sim.x, sim.z, sim.th, sim.tth), l = ls.towTrack[ls.towTrack.length - 1];
+  if (!l || Math.hypot(a[0] - l[0], a[1] - l[1]) >= 0.05) ls.towTrack.push(a);
+}
+/** A towing lesson's coach for this try, its hand starting from the wheel as it is. */
+function towCoach(ls: LessonPlay, passive: boolean): TowCoach {
+  const T = ls.L.tow!, c = new TowCoach(sim.vehicle, T.trailer, T.path, () => sim.options.lockDeg, passive);
+  c.pilot.hold(sim.wheelAngle);
+  return c;
+}
 function startTry(): void {
   const ls = lesson!; stopReplay(); hideGuide(); hideResult(); applySettings();
-  const s = ls.L.route[0].from; sim.resetAt(s.x, s.z, s.th); forgetPrediction(); clearPedals();
+  const T = ls.L.tow;
+  if (T) sim.resetAt(T.start.x, T.start.z, T.start.th, T.start.tth); else { const s = ls.L.route[0].from; sim.resetAt(s.x, s.z, s.th); }
+  forgetPrediction(); clearPedals();
   settledT = 0; tryOver = false; tryRewound = false;
-  Object.assign(ls, { fault: '', fb: null, summoned: false, watching: false, over: false, track: null, drift: null, rewound: false });
-  ls.tracker.reset(); ls.tracker.add(sim);
-  ls.run = ls.st.help <= 1 ? new CoachRun(sim.vehicle, ls.steps, () => sim.options.lockDeg, ls.st.help === 1) : null;
+  Object.assign(ls, { fault: '', fb: null, summoned: false, watching: false, over: false, track: null, drift: null, rewound: false, jack: false, towTrack: [] });
+  ls.tracker.reset(); ls.tracker.add(sim); trackTrailer(ls);
+  ls.run = !T && ls.st.help <= 1 ? new CoachRun(sim.vehicle, ls.steps, () => sim.options.lockDeg, ls.st.help === 1) : null;
+  ls.tow = T && ls.st.help <= 1 ? towCoach(ls, ls.st.help === 1) : null;
   beginRecording();
   const h = ls.st.help, def = ls.L.def;
-  const how = h === 0 ? 'Set the wheel as the card says, then hold the pedal: the coach keeps you at walking pace and stops you on each mark.'
+  const how = T ? (h === 0 ? 'Hold Reverse and keep your hand on the wheel: turn it to the blue mark on its rim. The coach keeps the trailer to a crawl and stops it in the space.'
+    : h === 1 ? 'The trailer\u2019s line is on the plan: keep the trailer on it yourself, with small corrections, early.'
+    : h === 2 ? 'No line now. Show me and the coach are there if you need them.' : 'The test: no help, and the stars count.')
+    : h === 0 ? 'Set the wheel as the card says, then hold the pedal: the coach keeps you at walking pace and stops you on each mark.'
     : h === 1 ? 'Only the marks now: stop on each one yourself, then set the wheel for the next.'
     : h === 2 ? 'No marks now. Show me and the coach are there if you need them.' : 'The test: no help, and the stars count.';
   showBanner('', `Lesson ${def.n} · ${HELP[h].name}`, how + (ls.st.slow ? ' Slow motion is on.' : ''), null, 6000);
@@ -464,12 +495,30 @@ function startTry(): void {
 /** Watch: the ghost drives the route from the start, pausing on each mark while the card says what happens there. */
 function startWatch(): void {
   const ls = lesson!; startTry(); ls.watching = true;
+  if (ls.L.tow) { towGhost(clock(), true); return; }
   const pts = sample(sim.vehicle, ls.L.route, 0.05), times: number[] = [];
   let t = 0.8;
   pts.forEach((p, i) => { if (i) { t += Math.hypot(p.x - pts[i - 1].x, p.z - pts[i - 1].z) / 1.4; if (p.i !== pts[i - 1].i) t += 1.8; } times.push(t); });
   guide = { pts, at: 0, times, t0: clock(), watch: true }; setGuide(guide);
   btnShow.textContent = 'Stop'; btnShow.classList.add('on');
   showBanner('', `Watch: ${ls.steps.length} steps`, 'The ghost drives the route and stops on each mark. The card says what to do there.', null, 4000);
+}
+/** Show me in a towing lesson (and its Watch): the coach's guided driver backs the trailer in from where the rig is now,
+ *  and a ghost rig plays that drive at three times the speed. */
+function towGhost(now: number, watch: boolean): void {
+  const ls = lesson!, T = ls.L.tow!, pts: Guide['pts'] = [], times: number[] = [];
+  const from = { x: sim.x, z: sim.z, th: sim.th, tth: sim.tth };
+  let t = 0.8;
+  const res = towDrive(sim.vehicle, T.trailer, ls.L.scene, ls.L.bay, from, T.path, {}, s => {
+    const l = pts[pts.length - 1];
+    if (l && Math.hypot(s.x - l.x, s.z - l.z) < 0.05) return;
+    if (l) t += Math.hypot(s.x - l.x, s.z - l.z) / 1.5;
+    pts.push({ x: s.x, z: s.z, th: s.th, tth: s.tth, dir: s.v < 0 ? -1 : 1, i: 0 }); times.push(t);
+  });
+  if (!res.r || pts.length < 2) { showBanner('bad', 'No way in from here', 'Pull forward to straighten the trailer, or tap Reset to start again.', null, 4000); if (watch) ls.watching = false; return; }
+  guide = { pts, at: 0, times, t0: now, watch, follow: true }; setGuide(guide);
+  btnShow.textContent = watch ? 'Stop' : 'Hide'; btnShow.classList.add('on');
+  showBanner('', watch ? 'Watch' : 'Show me', `The ghost backs the trailer into the space${res.lost ? ', pulling forward to straighten it first' : ''}, three times as fast as you will. Watch how little the wheel moves once the trailer is on its line.`, null, 5000);
 }
 function endWatch(): void {
   hideGuide(); if (!lesson) return;
@@ -486,7 +535,11 @@ function backToMark(): void {
 bindCard({
   back: backToMark,
   restart: () => startTry(),
-  summon: () => { const ls = lesson; if (!ls) return; ls.summoned = true; ls.run = new CoachRun(sim.vehicle, ls.steps, () => sim.options.lockDeg, true); ls.run.jumpTo(sim); beginRecording(); },
+  summon: () => {
+    const ls = lesson; if (!ls) return; ls.summoned = true;
+    if (ls.L.tow) { ls.tow = towCoach(ls, true); beginRecording(); return; }
+    ls.run = new CoachRun(sim.vehicle, ls.steps, () => sim.options.lockDeg, true); ls.run.jumpTo(sim); beginRecording();
+  },
   slow: () => { const ls = lesson; if (!ls) return; ls.st = { ...ls.st, slow: false }; setState(ls.L.def.id, ls.st); },
 });
 bindCourse({ open: id => enterLesson(id, 'card'), tab: () => refreshLevels() });
@@ -502,6 +555,15 @@ function coachEvents(evs: CoachEvent[]): void {
   }
 }
 
+function towEvents(evs: TowEvent[]): void {
+  const ls = lesson; if (!ls) return;
+  for (const e of evs) {
+    if (e.type === 'lost') { beep(220, 0.25, 0.1); showBanner('bad', 'The trailer got away', 'Stop, then pull forward with the wheels straight until it is back in line behind the car.', null, 4000); }
+    else if (e.type === 'lined') { beep(660, 0.06, 0.05); showBanner('', 'Back in line', 'Reverse again, your hand at the bottom of the wheel.', null, 2500); }
+    else if (e.type === 'done' && ls.tow && !ls.tow.passive) finishTry(sim.parkedResult());
+  }
+}
+
 /** A try in a lesson is over: pass or not, what to work on, and whether the help steps back or comes back. */
 function finishTry(r: ParkedResult | null): void {
   const ls = lesson; if (!ls || ls.over) return;
@@ -512,8 +574,8 @@ function finishTry(r: ParkedResult | null): void {
   const pass = chk.pass && !ls.fault, practice = ls.rewound;
   // what to work on: the first place the try left the route by 30 cm and why; failing without that (or with no clear
   // why), the switch whose timing moved the finish most; failing that, what the result missed
-  let fb = pass ? null : (ls.fb ?? feedback(sim.vehicle, ls.L.route, ls.steps, ls.tracker.pts));
-  if (fb && (!fb.at || fb.text.startsWith('You drifted'))) fb = timingCause(sim.vehicle, ls.L.route, ls.steps, ls.tracker.pts) ?? (fb.at ? fb : { ...fb, text: (r && endHint(r, rule, ls.L.par)) ?? fb.text });
+  let fb = pass ? null : ls.L.tow ? { text: towFeedback(r, rule, ls.L.par, ls.jack), step: 0, at: null, off: 0 } : (ls.fb ?? feedback(sim.vehicle, ls.L.route, ls.steps, ls.tracker.pts));
+  if (fb && !ls.L.tow && (!fb.at || fb.text.startsWith('You drifted'))) fb = timingCause(sim.vehicle, ls.L.route, ls.steps, ls.tracker.pts) ?? (fb.at ? fb : { ...fb, text: (r && endHint(r, rule, ls.L.par)) ?? fb.text });
   const stars = test && r ? starsFor(r, ls.L.par, ls.L.limit) : null;
   const { state, change } = practice ? { state: { ...ls.st }, change: null } : afterTry(ls.st, pass);
   const better = !!stars && pass && stars.count > state.best;
@@ -588,6 +650,7 @@ function showMe(now: number): void {
   if (replay) return;
   if (lesson?.st.help === 3) { showBanner('', 'No help in the test', 'Two misses bring the help back. Tap Reset to start the try again.', null, 3500); return; }
   if (city && !city.slot) { showBanner('', 'Show me parks you', sim.mode === 'drive' ? `Stop beside a free space on your ${kerbSide()}: Park mode takes over, and Show me has the route in.` : 'There is no space here to show the way into: tap Drive and find one.', null, 4000); return; }
+  if (lesson?.L.tow) { if (lesson.over) return; towGhost(now, false); return; }
   const from: Pose = { x: sim.x, z: sim.z, th: sim.th }, s0 = parRoute[0]?.from;
   if (s0 && Math.hypot(from.x - s0.x, from.z - s0.z) < 0.05 && Math.abs(wrapPi(from.th - s0.th)) < DEG) { if (lesson) startWatch(); else startGuide(parRoute, now); return; }
   showBanner('', 'Working out a route…', 'From where your car is now.', null);
@@ -664,15 +727,17 @@ const canRewind = (): boolean => {
 function rewind(): void {
   if (!canRewind()) return;
   const rec = recorder.rec!, n = Math.max(0, rec.steps - REWIND), ls = lesson;
-  let run: CoachRun | null = null;
+  let run: CoachRun | null = null, trun: TowCoach | null = null;
   if (ls) {
     run = ls.run ? new CoachRun(sim.vehicle, ls.steps, () => sim.options.lockDeg, ls.run.passive) : null;
     if (run && ls.mark0.coach) run.restore(ls.mark0.coach);
+    trun = ls.tow ? towCoach(ls, ls.tow.passive) : null;
+    if (trun && ls.mark0.tow) trun.restore(ls.mark0.tow);
     ls.tracker.pts.length = Math.min(ls.tracker.pts.length, ls.mark0.track);
   }
-  const p = ls ? replayTo(rec, sim.scene, VEHICLES[rec.vehicle] ?? sim.vehicle, n, s => run?.sync(s), s => { ls.tracker.add(s); run?.observe(s); }) : replayTo(rec, sim.scene, VEHICLES[rec.vehicle] ?? sim.vehicle, n);
+  const p = ls ? replayTo(rec, sim.scene, VEHICLES[rec.vehicle] ?? sim.vehicle, n, s => run?.sync(s), s => { ls.tracker.add(s); run?.observe(s); trun?.observe(s, STEP); }) : replayTo(rec, sim.scene, VEHICLES[rec.vehicle] ?? sim.vehicle, n);
   restoreState(sim, simState(p)); clearPedals(); setPedalMode(sim.mode === 'drive'); recorder.truncate(n, sim); forgetPrediction();
-  if (ls) { ls.run = run; ls.rewound = true; }
+  if (ls) { ls.run = run; ls.tow = trun; ls.rewound = true; }
   tryRewound = true; settledT = 0;
   showBanner('', 'Back 5 seconds', ls ? 'Try that bit again. A try with a rewind is practice: it counts neither way.' : 'Try that bit again. Stars after a rewind are shown but not saved.', null, 3500);
 }
@@ -682,8 +747,8 @@ function handle(events: SimEvent[]): void {
   for (const e of events) {
     if (e.type === 'touch') {
       $('flash').classList.add('on'); setTimeout(() => $('flash').classList.remove('on'), 60); beep(160, 0.2, 0.15);
-      showBanner('bad', touchTitle(e.name, e.part), 'Stop, straighten up and back away. Touches: ' + e.hits, null, 2200);
-      if (lesson && !replay && !lesson.over) lesson.fault ||= 'touch';
+      showBanner('bad', touchTitle(e.name, e.part), e.part === 'jackknife' ? 'The rig has folded up. Pull forward with the wheels straight to straighten it, then reverse again.' : 'Stop, straighten up and back away. Touches: ' + e.hits, null, e.part === 'jackknife' ? 4000 : 2200);
+      if (lesson && !replay && !lesson.over) { lesson.fault ||= 'touch'; if (e.part === 'jackknife') lesson.jack = true; }
     } else if (e.type === 'parked') {
       beep(880, 0.12, 0.08); setTimeout(() => beep(1320, 0.18, 0.08), 140);
       if (replay) { const c = parkedCard(e.result); showBanner('good', c.title, c.text, c.stats); }
@@ -702,7 +767,7 @@ function settle(dt: number): void {
   const still = Math.abs(sim.v) < 0.02 && !sim.input.fwd && !sim.input.rev;
   settledT = still ? settledT + dt : 0;
   if (settledT < SETTLE || tryOver) return;
-  if (lesson && (lesson.watching || (lesson.run && !lesson.run.passive))) return;
+  if (lesson && (lesson.watching || (lesson.run && !lesson.run.passive) || (lesson.tow && !lesson.tow.passive))) return;
   tryOver = true;
   const r = sim.parkedResult(); if (!r) return;
   if (lesson) finishTry(r); else parked(r);
@@ -724,6 +789,7 @@ function drawLesson(): string {
     return want ? 'ghost' : '';
   }
   ghostOf = null;
+  if (ls.L.tow) return drawTowLesson(ls);
   const run = ls.run, h = ls.st.help, coachOn = !!run && (!run.passive || ls.summoned), marksOn = !!run && run.phase !== 'missed' && run.phase !== 'done' && !ls.over;
   const watchK = ls.watching && guide ? guide.pts[Math.min(guide.at, guide.pts.length - 1)].i : -1;
   setCoachDraw({
@@ -735,6 +801,20 @@ function drawLesson(): string {
   const ch = $('coach').hidden ? 0 : $('coach').offsetHeight;
   if (ch !== cardH) { cardH = ch; layout(); }
   return [run?.k, run?.phase, run?.left.toFixed(2), run?.hint, run?.note, ls.over, watchK, h, ls.summoned].join(',');
+}
+
+/** A towing lesson on the screen: the trailer's line and the space (with the full coach or the line only, and after a
+ *  try), the coach's target on the wheel's rim, and the card. */
+function drawTowLesson(ls: LessonPlay): string {
+  const trun = ls.over ? null : ls.tow, h = ls.st.help, lineOn = h <= 1 || ls.summoned || ls.watching || ls.over;
+  setCoachDraw(ls.over && ls.towTrack.length > 1 ? { route: null, marks: [], from: 0, cur: null, track: ls.towTrack, drift: null } : null);
+  setTowDraw({ path: lineOn ? ls.towPath : null, goal: lineOn ? ls.towGoal : null });
+  const guiding = !!trun && (!trun.passive || ls.summoned) && !ls.watching && trun.phase !== 'done';
+  setWheelTarget(guiding ? trun!.wheelWant : null);
+  renderTowCard({ def: ls.L.def, help: h, run: trun, summoned: ls.summoned, watching: ls.watching, over: ls.over, slow: ls.st.slow, wheel: sim.wheelAngle, v: sim.v, pathLen: ls.L.tow!.path.len });
+  const ch = $('coach').hidden ? 0 : $('coach').offsetHeight;
+  if (ch !== cardH) { cardH = ch; layout(); }
+  return [trun?.phase, trun?.left.toFixed(2), trun?.wheelWant.toFixed(0), trun?.hint, trun?.note, ls.over, ls.watching, h, ls.summoned].join(',');
 }
 
 // frame loop: the simulation steps at a fixed 60 Hz (so attempts replay exactly); drawing at 30 fps is plenty
@@ -754,13 +834,14 @@ function tick(now: number): void {
     if (replay) { const evs = replay.step(); if (!evs) { stopReplay(); showBanner('', 'Replay finished', 'Back to your car, where you left it.', null, 2500); break; } handle(evs); continue; }
     // the pedals as held, passed on to the car unless the coach is holding one back; then recorded as the car saw them
     let fwd = pedals.fwd, rev = pedals.rev;
-    const run = lesson && !lesson.over ? lesson.run : null;
+    const run = lesson && !lesson.over ? lesson.run : null, trun = lesson && !lesson.over ? lesson.tow : null;
     if (lesson?.watching || lesson?.over) fwd = rev = false;   // watching, or the try is over: the car waits for Try again
     else if (run && !run.passive) ({ fwd, rev } = run.gate({ fwd, rev }, sim));
     else if (run) run.sync(sim);
+    else if (trun) ({ fwd, rev } = trun.gate({ fwd, rev }, sim));
     sim.input.fwd = fwd; sim.input.rev = rev; sim.input.acc = pedals.acc; sim.input.brk = pedals.brk;
     recorder.before(sim); const evs = sim.step(STEP); recorder.after(sim);
-    if (lesson && !lesson.over && !lesson.watching) { lesson.tracker.add(sim); if (run) coachEvents(run.observe(sim)); }
+    if (lesson && !lesson.over && !lesson.watching) { lesson.tracker.add(sim); trackTrailer(lesson); if (run) coachEvents(run.observe(sim)); if (trun) towEvents(trun.observe(sim, STEP)); }
     handle(evs);
     settle(STEP);
   }

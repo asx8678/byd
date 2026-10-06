@@ -20,7 +20,7 @@ export function layoutPdc(band: { top: number; carY: number } | null): void {
 
 const zoneOf = (sim: Sim, g: Side, d: number): number => d < 0.3 ? 9 : sim.vehicle.pdc.bands[g].reduce((n, b, i) => i && d < b ? n + 1 : n, 0);   // bands lit for one sensor, 9 = under 30 cm
 
-function drawPdcIcon(sim: Sim, g: 'front' | 'rear', armed: boolean, blinkOn: boolean, dpr: number): void {   // top-view car with the zone bands around it
+function drawPdcIcon(sim: Sim, g: 'front' | 'rear', armed: boolean, blinkOn: boolean, dpr: number): void {   // top-view car with the zone bands around it (the rear ones off with a trailer on)
   const size = fitCanvas(pdcCv); if (!size) return;
   const { w, h } = size, c = pdcCtx; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, w, h);
   const cx = w / 2, cw = w * 0.30, cl = cw * sim.vehicle.L / sim.vehicle.W, band = w * 0.065, gap = w * 0.03, top = h / 2 - cl / 2, bot = h / 2 + cl / 2;
@@ -31,7 +31,7 @@ function drawPdcIcon(sim: Sim, g: 'front' | 'rear', armed: boolean, blinkOn: boo
   c.lineCap = 'butt';
   // bumpers: four sectors around a centre inside the nose / tail, three bands each, lit from the outside in
   for (const [grp, sign, ccy] of [['front', -1, top + cl * 0.42], ['rear', 1, bot - cl * 0.42]] as ['front' | 'rear', number, number][]) {
-    const list = reading.filter(s => s.g === grp).sort((a, b) => a.lz - b.lz), bands = BANDS[grp], r0 = cl * 0.42 + gap, listening = armed && grp === g;
+    const list = reading.filter(s => s.g === grp).sort((a, b) => a.lz - b.lz), bands = BANDS[grp], r0 = cl * 0.42 + gap, listening = armed && grp === g && !(sim.trailer && grp === 'rear');
     list.forEach((sd, k) => {
       const ca = [-42, -14, 14, 42][k], hw = 12.5, base = sign < 0 ? -90 + ca : 90 - ca, aA = (base - hw) * DEG, aB = (base + hw) * DEG;
       for (let i = 0; i < bands.length - 1; i++) { c.beginPath(); c.arc(cx, ccy, r0 + i * band + band / 2, aA, aB); c.lineWidth = band - 1.5; c.strokeStyle = paint(i, sd.d < bands[i + 1], listening); c.stroke(); }
@@ -81,14 +81,15 @@ export function updatePdcDisplay(sim: Sim, now: number, dpr: number): void {
   if (!show) { pdcKey = ''; return; }
   // caption: the nearest reading of any side, or clear
   let tg: Side | null = null; for (const k of SIDES) if (inRange(k) && pdc[k] < (tg ? pdc[tg] : 9)) tg = k;
-  const tk = tg ? tg + pdc[tg].toFixed(2) : 'clear';
+  const tk = tg ? tg + pdc[tg].toFixed(2) : sim.trailer && g === 'rear' ? 'towing' : 'clear';
   if (tk !== pdcTxtKey) {
     pdcTxtKey = tk; const txt = $('pdcTxt');
     if (tg) { $('pdcTg').textContent = tg; $('pdcTd').textContent = pdc[tg].toFixed(2) + ' m'; txt.className = pdc[tg] < 0.35 ? 'bad' : pdc[tg] < 0.7 ? 'warn' : 'ok'; }
+    else if (sim.trailer && g === 'rear') { $('pdcTg').textContent = 'Rear'; $('pdcTd').textContent = 'off'; txt.className = ''; }   // a trailer on
     else { $('pdcTg').textContent = 'Sensors'; $('pdcTd').textContent = 'clear'; txt.className = ''; }
   }
   // redraw the graphic only when a zone changes (or while the 30 cm band blinks)
-  const blinkOn = Math.floor(now * 3) % 2 === 0; let key = g + (armed ? 'A' : 'a') + (dmin < 0.3 ? (blinkOn ? 'B' : 'b') : '-');
+  const blinkOn = Math.floor(now * 3) % 2 === 0; let key = g + (armed ? 'A' : 'a') + (dmin < 0.3 ? (blinkOn ? 'B' : 'b') : '-') + (sim.trailer ? 'T' : '');
   sim.vehicle.sensors.forEach((sd, i) => { key += zoneOf(sim, sd.g, sim.sensorReadings[i]); });
   if (key !== pdcKey) { pdcKey = key; drawPdcIcon(sim, g, armed, blinkOn, dpr); }
 }

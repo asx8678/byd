@@ -106,15 +106,20 @@ src/ui/        the browser side: drawing, controls, sound, settings
   plan.ts        the map (canvas 2D): north up, or in Drive mode turned so you drive up and zoomed by speed;
                  pinch, the mouse wheel or + and - to zoom yourself, a double tap (or 0) to give it back; on the
                  street the pavements, blocks and their hatched buildings, car parks, kerbs, zones and names, with
-                 detail that fades in as you zoom in (lane lines, bays and parked cars from 2.6 px/m, labels from 7.8)
-  pdcDisplay.ts  sensor graphic, STOP card, red screen-edge glow
-  hud.ts         speed and moves (between the wheel and pedals), the wheel's turns, the banner
+                 detail that fades in as you zoom in (lane lines, bays and parked cars from 2.6 px/m, labels from 7.8);
+                 a trailer, where it goes at the current wheel, and in a towing lesson its line and the space (the
+                 view frames the whole rig, or the ghost while it shows the way)
+  pdcDisplay.ts  sensor graphic, STOP card, red screen-edge glow (the rear group off with a trailer on)
+  hud.ts         speed and moves (between the wheel and pedals), with a trailer on its angle to the car, the
+                 wheel's turns, a towing coach's target on the wheel's rim, the banner
   controls.ts    steering wheel, pedals (hold to move; in Drive mode an accelerator and a brake pressed harder
                  higher up), keyboard, the Park/Drive button, Setup, Levels and Info
   levels.ts      the Levels tab of the Play sheet and the result card with its stars
   course.ts      the Course tab, the lesson card and a lesson's result card (localStorage key `atto2-course`)
-  cars.ts        the car picker in Setup and the chosen car's facts, estimates and sources in Info
-  coachCard.ts   the coach card at the top of the screen in a lesson
+  cars.ts        the car picker in Setup and the chosen car's facts, estimates and sources in Info (and the
+                 trailer's, with where it folds into the car, when one is on)
+  coachCard.ts   the coach card at the top of the screen in a lesson (a towing lesson's from its own coach: where
+                 your hand at the bottom of the wheel should go)
   progress.ts    best stars per car, last layouts and what you were playing (localStorage key `atto2-levels`)
   audio.ts       the beeper
   settings.ts    saved choices (localStorage key `atto2-garage`)
