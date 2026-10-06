@@ -44,6 +44,9 @@ describe('turning circles against the spec sheets', () => {
     expect(Math.abs(c.kerb - 6.95)).toBeLessThan(0.03);
     expect(Math.abs(c.wall - 7.30)).toBeLessThan(0.05);
   });
+  it('Peugeot 208: 10.4 m (ADAC, taken as kerb to kerb)', () => {
+    expect(Math.abs(circles(vehicleFor('peugeot-208-p21')).kerb - 10.4)).toBeLessThan(0.03);
+  });
   it('Octavia Combi: 10.4 m (Škoda, taken as kerb to kerb)', () => {
     expect(Math.abs(circles(vehicleFor('skoda-octavia-combi-nx')).kerb - 10.4)).toBeLessThan(0.03);
   });
@@ -84,7 +87,7 @@ describe('every car', () => {
       expect(v.WB + v.OVF + v.OVR, v.id).toBeCloseTo(v.L, 9);
       for (const [x, z] of v.body) expect(Math.hypot(x, z), v.id).toBeLessThanOrEqual(v.REACH);
     }
-    expect(Object.keys(VEHICLES).sort()).toEqual(['byd-atto2', 'mercedes-s-class-w223@0', 'mercedes-s-class-w223@10', 'mercedes-s-class-w223@4.5', 'ram-1500-dt', 'skoda-octavia-combi-nx', 'smart-fortwo-c453']);
+    expect(Object.keys(VEHICLES).sort()).toEqual(['byd-atto2', 'mercedes-s-class-w223@0', 'mercedes-s-class-w223@10', 'mercedes-s-class-w223@4.5', 'peugeot-208-p21', 'ram-1500-dt', 'skoda-octavia-combi-nx', 'smart-fortwo-c453']);
     expect(CAR_SPECS.map(s => s.id)[0]).toBe('byd-atto2');
   });
   it('feels a wall at the tip of the Ram\'s bonnet, 4.6 m ahead of its rear axle', () => {

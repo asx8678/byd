@@ -13,7 +13,7 @@ import { Sim } from '../src/core/sim';
 import type { Vehicle } from '../src/core/vehicle';
 
 const open = makeScene({ format: 1, id: 'open', name: 'Open', layoutVersion: 1, areaView: [-3000, 3000, -3000, 3000], defaultBay: 'x', bays: {}, defaultStart: 'o', starts: { o: { x: 0, z: 0, th: 0 } }, lines: [], obstacles: [] });
-const CARS = ['byd-atto2', 'smart-fortwo-c453', 'skoda-octavia-combi-nx', 'ram-1500-dt', 'mercedes-s-class-w223@10', 'mercedes-s-class-w223@0'];
+const CARS = ['byd-atto2', 'smart-fortwo-c453', 'peugeot-208-p21', 'skoda-octavia-combi-nx', 'ram-1500-dt', 'mercedes-s-class-w223@10', 'mercedes-s-class-w223@0'];
 const G = 9.81;
 
 /** The car in Drive mode on an open square, rolling at speed m/s, the wheel held where it is put. */
@@ -45,7 +45,7 @@ function cornering(v: Vehicle, kmh: number, wheel: number): { R: number; Rk: num
 }
 
 describe('Drive mode against the published figures', () => {
-  it.each([['byd-atto2', 100, 7.5], ['smart-fortwo-c453', 100, 14.4], ['skoda-octavia-combi-nx', 100, 8.3], ['mercedes-s-class-w223@10', 96.56, 3.9]] as const)('%s: 0 to %s km/h in the published %s s', (id, kmh, t) => {
+  it.each([['byd-atto2', 100, 7.5], ['smart-fortwo-c453', 100, 14.4], ['peugeot-208-p21', 100, 10.8], ['skoda-octavia-combi-nx', 100, 8.3], ['mercedes-s-class-w223@10', 96.56, 3.9]] as const)('%s: 0 to %s km/h in the published %s s', (id, kmh, t) => {
     expect(Math.abs(timeTo(VEHICLES[id], kmh) / t - 1)).toBeLessThan(0.03);
   });
   it.each(CARS)('%s: tops out at its published top speed', id => {

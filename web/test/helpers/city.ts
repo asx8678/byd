@@ -7,7 +7,7 @@ import { STEP } from '../../src/core/replay';
 import type { Obstacle } from '../../src/core/scene';
 import type { Sim } from '../../src/core/sim';
 
-export const CARS = ['byd-atto2', 'smart-fortwo-c453', 'skoda-octavia-combi-nx', 'ram-1500-dt', 'mercedes-s-class-w223@10'];
+export const CARS = ['byd-atto2', 'smart-fortwo-c453', 'peugeot-208-p21', 'skoda-octavia-combi-nx', 'ram-1500-dt', 'mercedes-s-class-w223@10'];
 export const city = (id: string, seed: number): CityMap => buildCity(MAPS.harbour, VEHICLES[id], seed);
 export const kerbSlots = (m: CityMap): KerbSlot[] => m.slots.filter((s): s is KerbSlot => s.kind === 'kerb');
 export const lotSlots = (m: CityMap): LotSlot[] => m.slots.filter((s): s is LotSlot => s.kind === 'lot');

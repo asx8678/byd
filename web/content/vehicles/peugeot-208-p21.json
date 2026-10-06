@@ -1,0 +1,33 @@
+{
+  "format": 1,
+  "id": "peugeot-208-p21",
+  "name": "Peugeot 208",
+  "short": "208",
+  "basedOn": "Peugeot 208 II (P21), 1.2 PureTech 100 Allure EAT8 (12/19-08/20)",
+  "sources": [
+    "ADAC car catalogue, 208 1.2 PureTech 100 Allure EAT8 (12/19-08/20): length 4055, width 1745 (1960 with mirrors), height 1430, wheelbase 2540 mm; turning circle 10.4 m; 74 kW (100 PS), 205 Nm, front-wheel drive, 8-speed automatic; 0-100 km/h 10.8 s, top speed 188 km/h; kerb weight (EU) 1165 kg; it may tow 1200 kg with brakes or 580 kg without, 55 kg on the ball; 195/55 R16 tyres; rear parking aid standard. https://www.adac.de/rund-ums-fahrzeug/autokatalog/marken-modelle/peugeot/208/2generation/301239/"
+  ],
+  "notes": "Rear-axle frame: x forward from the rear axle, z to the right, metres. The black 208 parked beside bay 561 in your garage is one of these.",
+  "estimates": [
+    "the turning circle is taken as kerb to kerb: ADAC gives only 'Wendekreis'",
+    "the track (1.50 m) and the overhangs (0.825 m front, 0.69 m rear): car databases, not Peugeot",
+    "the outline between the published length and width",
+    "the mirrors' size, place and height (only the width across them is published)",
+    "Drive mode: the weight split, the height of the centre of gravity, the drag area, the tyres' grip, the pull from rest and the slowing with no pedal; the share of the power the model gets is tuned so 0-100 km/h takes the published 10.8 s"
+  ],
+  "dims": { "length": 4.055, "width": 1.745, "widthMirrors": 1.96, "height": 1.43, "wheelbase": 2.54, "track": 1.50, "overhangFront": 0.825, "overhangRear": 0.69, "wheelRadius": 0.310, "wheelWidth": 0.195, "mass": 1165 },
+  "turning": { "by": "ADAC", "circles": [{ "kerbDiameter": 10.4 }] },
+  "outline": { "half": [[3.365, 0.50], [3.28, 0.72], [3.05, 0.84], [2.75, 0.8705], [0, 0.8725], [-0.45, 0.85], [-0.62, 0.76], [-0.69, 0.60]] },
+  "mirrors": { "height": 1.0, "box": [1.60, 0.84, 1.80, 0.98] },
+  "planCorners": [[3.28, -0.72], [3.28, 0.72], [-0.62, -0.76], [-0.62, 0.76]],
+  "glass": [2.15, -0.35],
+  "drive": { "creepForward": 1.2, "maxForward": 5.5, "rampForward": 1.1, "creepReverse": 0.9, "maxReverse": 2.8, "rampReverse": 0.6, "holdTime": 1.0, "accel": 2.0, "brake": 3.5 },
+  "dynamics": { "power": 74, "driven": "front", "frontShare": 0.62, "cgHeight": 0.52, "cdA": 0.62, "grip": 1.0, "launch": 3.0, "coast": 0.7, "powerShare": 0.90, "topSpeed": 188, "zeroTo100": 10.8 },
+  "parkingSensors": {
+    "layout": "4-rear",
+    "ranges": { "front": 0, "rear": 1.5, "side": 0 },
+    "coneDeg": 60,
+    "cornerZ": 0.62,
+    "bands": { "front": [], "rear": [0.3, 0.7, 1.1, 1.5], "left": [], "right": [] }
+  }
+}

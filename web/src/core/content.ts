@@ -3,6 +3,7 @@ import atto2 from '../../content/vehicles/byd-atto2.json';
 import sclass from '../../content/vehicles/mercedes-s-class-w223.json';
 import ram from '../../content/vehicles/ram-1500-dt.json';
 import smart from '../../content/vehicles/smart-fortwo-c453.json';
+import p208 from '../../content/vehicles/peugeot-208-p21.json';
 import octavia from '../../content/vehicles/skoda-octavia-combi-nx.json';
 import boxTrailer from '../../content/trailers/boeckmann-tl-al-2513-75.json';
 import garage561 from '../../content/scenes/garage-561.json';
@@ -13,7 +14,7 @@ import { makeTrailer, type Trailer, type TrailerSpec } from './trailer';
 import { makeVehicle, variantId, type Vehicle, type VehicleSpec } from './vehicle';
 
 /** The car files in the order the app lists them; the Atto 2 first. */
-export const CAR_SPECS: readonly VehicleSpec[] = [atto2, smart, octavia, ram, sclass] as unknown as VehicleSpec[];
+export const CAR_SPECS: readonly VehicleSpec[] = [atto2, smart, p208, octavia, ram, sclass] as unknown as VehicleSpec[];
 
 export const ATTO2: Vehicle = makeVehicle(atto2 as unknown as VehicleSpec);
 export const GARAGE_561: Scene = makeScene(garage561 as unknown as SceneSpec);
