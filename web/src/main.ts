@@ -18,7 +18,8 @@ import { generateTow } from './core/generator/towLevels';
 import type { Scene } from './core/scene';
 import type { TemplateId } from './core/generator/templates';
 import type { Vehicle } from './core/vehicle';
-import { COURSE, HELP, afterTry, checkPass, endHint, lessonById, lessonFor, loadLesson, type Lesson, type LessonState, type Para, type TowLesson } from './core/lesson';
+import { COURSE, HELP, afterTry, checkPass, endHint, lessonById, lessonFor, loadLesson, type Lesson, type LessonDef, type LessonState, type Para, type TowLesson } from './core/lesson';
+import { STREET_HELP, StreetCoach, checkStreetPass, loadStreetLesson, wayWords, type StreetLesson } from './core/streetLesson';
 import { lessonSteps, routeNote, tipsFor } from './core/lessonRoutes';
 import { DEG, clamp, wrapPi, type Pt } from './core/math';
 import { clearStart, fitsBay, moves, planBack, planToBay, sample, type Piece, type Plan, type Pose, type RoutePoint } from './core/planner';
@@ -94,6 +95,10 @@ let lesson: LessonPlay | null = null;
  *  banner pointed out, the street or car park you are on (for the speed limit) and the car park last introduced. */
 interface CityPlay { map: CityMap; slot: Slot | null; from: Pose | null; lockRot: number | null; declined: string; hinted: string; streetId: string; lotHint: string; told: Set<string> }
 let city: CityPlay | null = null;
+/** A street lesson being played (on the street: city is its district): the lesson, where you are in it, its coach for
+ *  this try (null in the test), whether this try has its result, and whether Show me has the way on the plan. */
+interface StreetPlay { L: StreetLesson; st: LessonState; coach: StreetCoach | null; over: boolean; showWay: boolean; wayAt: number }
+let streetLs: StreetPlay | null = null;
 const cityKey = (m: CityMap) => `city:${m.spec.id}:${m.seed}`;
 /** The side you park on in the street: the side traffic keeps to. */
 const kerbSide = (): string => (city?.map.drive ?? settings.drive);
@@ -126,6 +131,7 @@ function setMode(m: Mode): void {
 }
 /** Off the street: Park mode, north up, no speed limit. */
 function leaveCity(): void {
+  streetLs = null;
   if (!city) return;
   city = null; sim.traffic = null; sim.rules = null; horn(false);
   setStreet(null); setDriveInfo(null); setLimit(null); setMode('park'); checker?.terminate(); checker = null; parWorker?.terminate(); parWorker = null;
@@ -137,12 +143,17 @@ function leaveCity(): void {
 function spawnTraffic(c: CityPlay, at: { x: number; z: number } = c.map.start): void {
   const net = networkOf(c.map), busy = settings.traffic === 'busy', level = districtLevel(c.map.spec.id) ?? 5;
   c.map.scene.net = net;
+  if (streetLs && streetLs.L.map === c.map) {   // a street lesson brings its own traffic, whatever Setup says (and with or without Pro)
+    sim.traffic = Traffic.spawn(net, streetLs.L.seed, streetLs.L.perKm, at, streetLs.L.extras);
+    sim.rules = new Rules(net, COUNTRIES[settings.country]);
+    return;
+  }
   sim.traffic = settings.traffic === 'off' ? Traffic.spawn(net, c.map.seed, 0, at)
     : Traffic.spawn(net, c.map.seed, DENSITY[settings.traffic], at, { leavers: busy ? 5 : 3, couriers: busy ? 2 : 1, thieves: !isPro() ? 0 : level >= 8 ? 2 : 1, patience: level <= 3 ? 8 : level >= 8 ? 3 : 5 });   // spot thieves come with Pro
   sim.rules = new Rules(net, COUNTRIES[settings.country]);
 }
 /** Whether a space is free now: none parked in it for the moment. */
-const freeNow = (s: Slot): boolean => !sim.traffic?.taken(s.id);
+const freeNow = (s: Slot): boolean => !sim.traffic?.taken(s.id) && (!streetLs || s.id === streetLs.L.slot.id);   // a street lesson: only its space
 /** The district's free spaces checked in the background, nearest the start first: can the planner park this car there?
  *  Without a worker (or before its answer comes) a space is checked the moment you slow down beside it. A second worker
  *  works out par for each try, so the map never stops while the planner thinks (a car park's bay can take a second or
@@ -166,7 +177,10 @@ function checkSpaces(c: CityPlay): void {
   checker.onerror = () => { checker?.terminate(); checker = null; };
   checker.postMessage({ kind: 'check', spec: c.map.spec, car: v.spec, rearDeg: v.REAR_DEG, seed: c.map.seed, drive: c.map.drive, order } satisfies CheckJob);
 }
-const syncStreet = () => setStreet(city ? { slots: city.map.slots, target: city.slot, lockRot: city.lockRot } : null);
+const syncStreet = () => {
+  const sl = streetLs, way = sl && !sl.over && sim.mode === 'drive' && sl.coach && (sl.st.help <= 1 || sl.showWay) ? sl.coach.ahead().map((p): Pt => [p.x, p.z]) : null;
+  setStreet(city ? { slots: sl ? [] : city.map.slots, target: city.slot, lockRot: city.lockRot, way, goal: sl && !city.slot ? sl.L.slot : null } : null);
+};
 /** Paint a message first, then do the slow part (generating a level, planning a route) on the next frame,
  *  or after 150 ms where frames are held back (a hidden tab, some embedded views). */
 function afterPaint(f: () => void): void {
@@ -189,6 +203,7 @@ function garagePar(): void {
 
 function resetCar(): void {
   if (lesson) { startTry(); return; }
+  if (streetLs && city) { startStreetTry(); return; }
   if (city) { resetCity(); return; }
   stopReplay(); hideGuide(); hideResult(); applySettings();
   if (level?.tow) { const s = level.tow.start; sim.resetAt(s.x, s.z, s.th, s.tth); }
@@ -244,7 +259,7 @@ const refreshLevels = () => {
     { name: gen.name, sub: `Made up for you, ${word} · ${gen.roads.length} streets${gen.lots?.length ? `, ${gen.lots.length === 1 ? 'a car park' : `${gen.lots.length} car parks`}` : ''} · layout ${gSeed}`, stars: bestStars(`city:${gid}`) },
     (t, n) => !isPro() && levelIsPro(t, n, 1));
   markLocked();
-  renderCourse(lesson ? lesson.L.def.id : null, v);
+  renderCourse(lesson ? lesson.L.def.id : streetLs ? streetLs.L.def.id : null, v);
   $('lvCar').textContent = v === ATTO2 ? '' : `Built for the ${v.short}: the bays grow for a car bigger than the ${ATTO2.short}, the aisles and kerb spaces stay as they are.`; $('lvCar').hidden = v === ATTO2;
   $('crsCar').textContent = `Worked out for the ${v.short}: its own routes, marks and numbers, and its own progress. A lesson it cannot do here is greyed out.`; $('crsCar').hidden = v === ATTO2;
 };
@@ -257,7 +272,7 @@ const mapFor = (id: string, seed: number): MapSpec | null => MAPS[id] ?? (distri
 /** A district for the chosen car (its free spaces are worked out for it): its last layout, or a new one. */
 function playCity(fresh: boolean, id = 'harbour', seed = fresh ? newSeed() : citySeed(id)): void {
   if (!isPro() && districtIsPro(districtLevel(id) ?? 0)) { openPro('The tight districts are part of Pro.'); return; }
-  stopReplay(); hideGuide(); closeSheets();
+  stopReplay(); hideGuide(); closeSheets(); streetLs = null;
   const map = mapFor(id, seed) ?? MAPS.harbour;
   showBanner('', 'Building the district…', `${map.name}, layout ${seed}`, null);
   afterPaint(() => enterCity(buildCity(map, chosenCar(), seed, settings.drive)));
@@ -285,6 +300,7 @@ function resetCity(): void {
   c.declined = slotNear(c.map, sim.vehicle, s.x, s.z, s.th, freeNow)?.id ?? '';   // a space beside the start waits until you have driven on
   setMode('drive'); applySettings(); setRoute([]); syncStreet(); forgetPrediction(); clearPedals(); snapView();
   settledT = 0; tryOver = false; tryRewound = false; beginRecording();
+  if (streetLs) { streetBanner(); return; }
   showBanner('', c.map.spec.name, `Drive along the streets and park in a free space on your ${kerbSide()}, between the cars${c.map.lots.length ? ', or in a car park' : ''}. Stop beside one and Park mode takes over. Accelerator and brake: higher up on the button for more.`, null, 9000);
 }
 const fmtLen = (m: number) => `${(m + 1e-9).toFixed(1)} m`;
@@ -391,6 +407,7 @@ function cityFrame(): void {
     // a thief dived into the space you were after: you lose it, not points (and once you have stopped, you drive on)
     const thief = c.slot?.kind === 'kerb' ? sim.traffic?.thiefIn(c.slot.id) : null;
     if (thief) {
+      if (streetLs && !streetLs.over) { finishStreetTry(null, 'A thief took the space: signal and start reversing in sooner.'); return; }
       if (!c.told.has(`took:${c.slot!.id}`)) {
         c.told.add(`took:${c.slot!.id}`);
         showBanner('bad', 'A thief took the space', `The ${TYPES[thief.type].name} dived in nose first while you waited. ${theftNote(sim.rules?.country ?? COUNTRIES[settings.country])} You lose the space, not points: find another. Next time signal and start reversing sooner.`, null, 8000);
@@ -402,6 +419,7 @@ function cityFrame(): void {
     if (sim.v > PDC_MAX && pedals.fwd) { enterDrive(); showBanner('', 'Drive mode', 'Your finger on Forward is now the accelerator.', null, 3000); }
   }
   cityHints(c);
+  streetFrame();
   const st = sim.mode === 'drive' ? streetAt(c.map, sim.x, sim.z, sim.th) : null, inLot = sim.mode === 'drive' && !st ? lot : null, id = st?.id ?? inLot?.id ?? '';
   if (id !== c.streetId) {
     c.streetId = id;
@@ -412,7 +430,7 @@ function cityFrame(): void {
 /** What the traffic round you is up to, once each: a parked car ahead of you signalling to pull out (how to wait for its
  *  space), a thief waiting for the space you are after (how to claim it in time), and one giving up on it. */
 function cityHints(c: CityPlay): void {
-  const t = sim.traffic; if (!t) return;
+  const t = sim.traffic; if (!t || streetLs?.st.help === 3) return;   // no help in a street lesson's test
   const v = sim.vehicle, ux = Math.cos(sim.th), uz = -Math.sin(sim.th), fx = sim.x + (v.L - v.OVR) * ux, fz = sim.z + (v.L - v.OVR) * uz, side = kerbSide();
   for (const car of t.cars) {
     const dx = car.x - fx, dz = car.z - fz, along = dx * ux + dz * uz, across = Math.abs(dx * uz - dz * ux);
@@ -445,12 +463,87 @@ function streetSounds(): void {
 }
 bindLevels({ playLevel, playGarage, playCity, playDistrict: fresh => playCity(fresh, districtId(+settings.district)) });
 
+// ---- street lessons ----
+
+/** Into a street lesson in the chosen car: its district (worked out for the car, on the side of the road the country
+ *  drives on), its traffic and space, where you are in it; then the lesson card, or straight into a try. */
+function playStreetLesson(def: LessonDef, then: 'card' | 'drive'): void {
+  stopReplay(); hideGuide(); closeSheets();
+  showBanner('', 'Building the street…', `Lesson ${def.n} · ${def.title}`, null);
+  afterPaint(() => {
+    const v = chosenCar(), L = loadStreetLesson(v, def, settings.drive);
+    if (!L) { showBanner('bad', `Lesson ${def.n} is not for the ${v.short}`, 'Its street has no space for this car.', null, 5000); return; }
+    leaveCity(); leaveLesson(); level = null;
+    streetLs = { L, st: stateOf(def.id), coach: null, over: false, showWay: false, wayAt: -1 };
+    enterCity(L.map); setPlaying(`lesson:${def.id}`); refreshLevels();
+    if (then === 'card') streetCard();
+  });
+}
+/** The lesson card for a street lesson: the way in words with the lesson's text. */
+function streetCard(): void {
+  const sl = streetLs; if (!sl) return;
+  const L = sl.L, asLesson: Lesson = { def: L.def, scene: L.map.scene, bay: L.slot.id, route: [], par: 0, limit: 0 };
+  showLesson(L.def, sl.st, { watch: () => {}, drive: () => { closeSheets(); startStreetTry(); }, test: () => { sl.st = { ...sl.st, help: 3, passes: 0, fails: 0, slow: false }; setState(L.def.id, sl.st); closeSheets(); startStreetTry(); } },
+    sim.vehicle, asLesson, `The way: ${wayWords(L, kerbSide() as 'left' | 'right')}`);
+}
+/** A new try from the lesson's start, its traffic as it was, with as much help as you are at. */
+function startStreetTry(): void {
+  const sl = streetLs!, c = city!;
+  stopReplay(); hideGuide(); hideResult();
+  c.slot = null; c.from = null; c.told = new Set();
+  Object.assign(sl, { over: false, showWay: false, wayAt: -1, coach: new StreetCoach(sl.L, sl.st.help, kerbSide() as 'left' | 'right') });
+  resetCity();
+}
+function streetBanner(): void {
+  const sl = streetLs!, h = sl.st.help, def = sl.L.def, way = wayWords(sl.L, kerbSide() as 'left' | 'right');
+  const how = h === 0 ? 'Follow the blue line: the coach says what is coming at each junction, and when to signal.'
+    : h === 1 ? 'The blue line only, and a word before each junction: the signals are up to you.'
+    : h === 2 ? 'No line now: Show me puts it back.' : 'The test: no help. The faults on the way count.';
+  showBanner('', `Lesson ${def.n} · ${HELP[h].name}`, `${way} ${how}`, null, 9000);
+}
+/** Each frame of a street lesson in Drive mode: what the coach says, and the way ahead on the plan. */
+function streetFrame(): void {
+  const sl = streetLs; if (!sl || sl.over || !sl.coach || sim.mode !== 'drive') return;
+  for (const e of sl.coach.observe(sim.vehicle, sim.x, sim.z, sim.th, sim.ind)) if (e.type === 'say') showBanner(e.tone, e.title, e.text, null, e.ms);
+  const at = Math.round(sl.coach.s);
+  if (at !== sl.wayAt) { sl.wayAt = at; syncStreet(); }
+}
+/** The end of a try in a street lesson: parked (in its space or not), or the space lost to a thief (why). */
+function finishStreetTry(r: ParkedResult | null, why: string | null): void {
+  const sl = streetLs; if (!sl || sl.over) return;
+  sl.over = true; tryOver = true;
+  const def = sl.L.def, triedAt = sl.st.help, test = triedAt === 3, practice = tryRewound, faults = sim.rules?.faults ?? [];
+  const chk = checkStreetPass(r, sl.L.slot.id, faults);
+  if (why) { chk.lines.push({ ok: false, text: why }); chk.pass = false; }
+  const pass = chk.pass, stars = test && pass && r ? starsFor(r, par || r.moves, limit || r.elapsed) : null;
+  const { state, change } = practice ? { state: { ...sl.st }, change: null } : afterTry(sl.st, pass);
+  state.slow = false;   // no slow motion on the street
+  const better = !!stars && state.best < stars.count;
+  if (better) state.best = stars!.count;
+  sl.st = state; setState(def.id, state); syncStreet();
+  const first = faults.find(f => f.kind !== 'hazard'), fb = pass ? null : why ?? (first ? first.text : r && r.bay !== sl.L.slot.id ? 'Park in the space marked in blue: Park mode takes over when you stop beside it.' : r?.hits ? 'Stop, straighten up and back away before you touch: the plan shows where the car would touch first.' : null);
+  const next = COURSE.lessons.find(l => l.n > def.n && lessonFor(sim.vehicle, l));
+  const changeText = change === 'less' ? (state.help === 3 ? 'Two passes: next is the test, with no help.' : `Two passes: next try with ${HELP[state.help].name.toLowerCase()}: ${STREET_HELP[state.help]}.`)
+    : change === 'more' ? `Two misses: back to ${HELP[state.help].name.toLowerCase()}: ${STREET_HELP[state.help]}.` : change === 'done' ? 'Lesson complete.' : null;
+  showBanner(pass ? 'good' : 'bad', pass ? (test ? 'Passed the test' : 'Pass') : 'Not yet', fb ?? (pass ? 'Within the rules all the way.' : ''), null, 3000);
+  setTimeout(() => {
+    if (streetLs !== sl || !sl.over) return;
+    showLessonResult(r, {
+      title: practice ? 'Practice try (rewound)' : change === 'done' ? `Lesson ${def.n} complete` : pass ? 'Pass' : 'Not a pass yet', sub: `Lesson ${def.n} · ${def.title} · ${HELP[triedAt].name}`,
+      pass, test, stars, better, lines: chk.lines, feedback: fb, change: practice ? 'A try with a rewind is practice: it counts neither way.' : changeText,
+      retry: () => startStreetTry(), watch: null, course: () => { courseTab(); refreshLevels(); openSheet('sheetLevels'); },
+      next: state.done && next ? () => enterLesson(next.id, 'card') : null,
+    });
+  }, 700);
+}
+
 // ---- lessons ----
 
 /** Into a lesson in the chosen car: its scene, its route, where you are in it; then the lesson card, or straight into a
  *  try. False when the lesson is not for this car. */
 function enterLesson(id: string, then: 'card' | 'drive' = 'card'): boolean {
   const def = lessonById(id); if (!def) return false;
+  if (def.street) { playStreetLesson(def, then); return true; }
   const v = def.tow ? vehicleFor(TOW_CAR) : chosenCar();   // a towing lesson brings the car with the tow bar
   if (!lessonFor(v, def)) { showBanner('bad', `Lesson ${def.n} is not for the ${v.short}`, notFor(def, v, true), null, 5000); return false; }
   stopReplay(); hideGuide(); closeSheets(); leaveCity();
@@ -635,8 +728,8 @@ bindControls(sim, {
   settingChanged: key => {
     if (key === 'car' || key === 'ras') {
       const v = chosenCar(); syncCarPicker(v);
-      if (lesson) {   // the same lesson in the new car, or back to the garage when it is not for this car
-        const id = lesson.L.def.id;
+      if (lesson || streetLs) {   // the same lesson in the new car, or back to the garage when it is not for this car
+        const id = lesson ? lesson.L.def.id : streetLs!.L.def.id;
         if (!enterLesson(id, 'card')) playGarage();
         return;
       }
@@ -648,10 +741,12 @@ bindControls(sim, {
     }
     if (key === 'country') {   // the same layout under the other country's rules (and on its side of the road)
       settings.drive = COUNTRIES[settings.country].drive; saveSettings();
+      if (streetLs) { enterLesson(streetLs.L.def.id, 'card'); return; }   // the lesson again, on the country's side of the road
       if (city) playCity(false, city.map.spec.id, city.map.seed);
       return;
     }
     if (key === 'district') { refreshLevels(); return; }
+    if (key === 'traffic' && streetLs) { showBanner('', 'This lesson has its own traffic', 'The traffic setting is for driving around the districts.', null, 3000); return; }
     if (key === 'traffic') { if (city && !replay) { spawnTraffic(city, sim); beginRecording(); } return; }   // the new traffic round where you are
     if (key === 'start' || key === 'bay') { if (level || lesson || city) playGarage(); else { garagePar(); resetCar(); } }
     else { applySettings(); if (!replay && (key === 'steer' || key === 'center')) beginRecording(); }   // only these change how the car steps
@@ -673,7 +768,13 @@ function startGuide(pieces: Piece[], now: number): void {
  *  In a lesson the plan keeps to full lock or straight, as the coach does; the test has no help. */
 function showMe(now: number): void {
   if (replay) return;
-  if (lesson?.st.help === 3) { showBanner('', 'No help in the test', 'Two misses bring the help back. Tap Reset to start the try again.', null, 3500); return; }
+  if (lesson?.st.help === 3 || (streetLs?.st.help === 3 && !city?.slot)) { showBanner('', 'No help in the test', 'Two misses bring the help back. Tap Reset to start the try again.', null, 3500); return; }
+  if (streetLs && city && !city.slot && sim.mode === 'drive') {   // a street lesson in Drive mode: the way to the space, on the plan or off it
+    if (streetLs.st.help <= 1) { showBanner('', 'The way is on the plan', 'Follow the blue line to the space marked in blue.', null, 3000); return; }
+    streetLs.showWay = !streetLs.showWay; syncStreet();
+    showBanner('', streetLs.showWay ? 'The way' : 'The way is hidden', streetLs.showWay ? 'The blue line runs to the space marked in blue. Tap Show me again to hide it.' : 'Find your way to the space marked in blue.', null, 3000);
+    return;
+  }
   if (city && !city.slot) { showBanner('', 'Show me parks you', sim.mode === 'drive' ? `Stop beside a free space on your ${kerbSide()}: Park mode takes over, and Show me has the route in.` : 'There is no space here to show the way into: tap Drive and find one.', null, 4000); return; }
   // with a trailer: the coach's driver works out the way in from here (a moment on a phone), then the ghost shows it
   const tow = lesson?.L.tow ? { scene: lesson.L.scene, bay: lesson.L.bay, T: lesson.L.tow } : level?.tow ? { scene: level.scene, bay: level.scene.defaultBay, T: level.tow } : null;
@@ -735,6 +836,7 @@ function parked(r: ParkedResult): void {
 
 /** Parked on the street: the stars for this space (best per district), and the card: try again, a new layout, or drive on. */
 function parkedOnStreet(r: ParkedResult, c: CityPlay, slot: Slot): void {
+  if (streetLs) { finishStreetTry(r, null); return; }
   const st = starsFor(r, par || r.moves, limit || Infinity), id = c.map.spec.id;
   const better = !tryRewound && recordStars(`city:${id}`, st.count) && st.count > 0;
   showBanner('good', `Parked · ${'★'.repeat(st.count)}${'☆'.repeat(3 - st.count)}`, tryRewound ? 'After a rewind: stars shown, not saved.' : st.count === 3 ? 'Three stars: clean, neat and efficient.' : 'The card below says what each star needs.', null, 3000);
@@ -752,7 +854,7 @@ function parkedOnStreet(r: ParkedResult, c: CityPlay, slot: Slot): void {
 
 const canRewind = (): boolean => {
   const rec = recorder.rec;
-  return !!rec && rec.steps >= 30 && !replay && !tryOver && !(lesson && (lesson.over || lesson.watching || lesson.st.help === 3));
+  return !!rec && rec.steps >= 30 && !replay && !tryOver && !(lesson && (lesson.over || lesson.watching || lesson.st.help === 3)) && !(streetLs && (streetLs.over || streetLs.st.help === 3));
 };
 /** Back 5 s: replay this try's recording to then on a second simulation, rebuilding the coach and your path as it
  *  goes (exactly as they were), and carry on from there. */
@@ -941,7 +1043,7 @@ function start(saved: Saved = {}): void {
   resize(); setTimeout(layout, 300); setTimeout(layout, 1500);
   requestAnimationFrame(t => { last = t; frame(t); });
 }
-try { hot?.snapshot?.(() => ({ x: sim.x, z: sim.z, th: sim.th, wheelAngle: sim.wheelAngle, hits: sim.hits, elapsed: sim.elapsed, moves: sim.moves, layout: sim.scene.layoutVersion, scene: sim.scene.id, play: lesson ? `lesson:${lesson.L.def.id}` : level ? level.key : city ? cityKey(city.map) : 'garage', car: sim.vehicle.id, mode: sim.mode })); } catch { /* not in the viewer */ }
+try { hot?.snapshot?.(() => ({ x: sim.x, z: sim.z, th: sim.th, wheelAngle: sim.wheelAngle, hits: sim.hits, elapsed: sim.elapsed, moves: sim.moves, layout: sim.scene.layoutVersion, scene: sim.scene.id, play: lesson ? `lesson:${lesson.L.def.id}` : streetLs ? `lesson:${streetLs.L.def.id}` : level ? level.key : city ? cityKey(city.map) : 'garage', car: sim.vehicle.id, mode: sim.mode })); } catch { /* not in the viewer */ }
 // the store edition checks the licence key kept in this browser first, so a Pro player comes back to where they were
 const boot = (saved: Saved = {}) => (isStore() ? void checkStoredKey().then(() => start(saved)) : start(saved));
 if (hot?.ready) hot.ready(boot); else boot(hot?.data ?? {});
@@ -950,7 +1052,7 @@ $('btnPro').addEventListener('click', () => openPro(''));
 
 // browser checks only (`vite build --mode harness`); other builds drop this
 if (import.meta.env.MODE === 'harness') Object.assign(window, { __game: {
-  sim, level: () => level, route: () => parRoute, lesson: () => lesson, city: () => city, pedals, enterLesson, playCity, switchMode, parkStart, diveFor, playLevel,
+  sim, level: () => level, route: () => parRoute, lesson: () => lesson, city: () => city, street: () => streetLs, pedals, enterLesson, playCity, switchMode, parkStart, diveFor, playLevel,
   /** Become the store edition with this public licence key (null: Pro not on sale) and shop page, as after a fresh start. */
   storeEdition: (jwk: JsonWebKey | null, url = '') => { storeForTest(jwk, url); relabelCarPicker(); freeFallback('garage'); syncSettings(); useCar(chosenCar()); refreshLevels(); playGarage(); },
   /** Time the planner's check of a free space (ms), as the game runs it when you slow down beside one. */

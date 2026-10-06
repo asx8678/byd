@@ -11,6 +11,7 @@ import { draft, type TemplateId } from './generator/templates';
 import { drive, moves, type Piece, type Pose } from './planner';
 import { makeScene, type Scene } from './scene';
 import type { ParkedResult } from './sim';
+import type { StreetDef } from './streetLesson';
 import type { Vehicle } from './vehicle';
 
 export interface Source { name: string; url: string }
@@ -25,6 +26,9 @@ export interface LessonDef {
   /** A towing lesson: always in the car with a tow bar (TOW_CAR) pulling this trailer, in one of the trailer yards; the
    *  coach steers by the trailer's path (core/towing.ts), so it has no stored route. */
   tow?: { trailer: string };
+  /** A street lesson: a drive in a district's traffic to a space, by the way it sets (core/streetLesson.ts); no stored
+   *  route, and any car. */
+  street?: StreetDef;
   scene?: { template: TemplateId; level: number; seed: number; kerbGap?: number } | { garage: string; start: string } | { build: LessonSceneId; level?: number; seed?: number } | { tow: TowSceneId };
   /** authored: written for the lesson (a cone course), not found by the planner. The Atto 2's; the lessons' words are about it. */
   route?: StoredRoute & { authored?: boolean };
@@ -47,8 +51,9 @@ export interface TowLesson { car: Vehicle; trailer: Trailer; start: RigPose; pat
 export function routeFor(v: Vehicle, def: LessonDef): StoredRoute | null | undefined {
   return v.id === ATTO2.id ? def.route : def.routes?.[v.id];
 }
-/** Whether the car can do the lesson (a towing lesson is for everyone: it brings its own car). */
-export const lessonFor = (v: Vehicle, def: LessonDef): boolean => !def.soon && (!!def.tow || !!routeFor(v, def));
+/** Whether the car can do the lesson (a towing lesson is for everyone: it brings its own car; a street lesson finds a
+ *  space for the car you drive). */
+export const lessonFor = (v: Vehicle, def: LessonDef): boolean => !def.soon && (!!def.tow || !!def.street || !!routeFor(v, def));
 
 /** The route from its stored pieces, driven out from the stored start. */
 export function storedRoute(v: Vehicle, r: StoredRoute): Piece[] {

@@ -318,7 +318,13 @@ const THIEF_TYPES: readonly { t: number; share: number }[] = [{ t: 0, share: 2 }
 export const DENSITY = { light: 12, busy: 24 } as const;
 /** The cars besides the traffic itself: parked ones that will pull out, couriers and spot thieves, and how long a thief
  *  waits for you to claim a space before it dives in (s; on easy levels 8, on hard ones 3). */
-export interface Extras { leavers?: number; couriers?: number; thieves?: number; patience?: number }
+export interface Extras {
+  leavers?: number; couriers?: number; thieves?: number; patience?: number;
+  /** A lesson's own cars, the same every time: a calm driver parked at the back of this free space who pulls out as your
+   *  car comes wakeD metres behind it (and only then), and a thief in a small car on lane el, s metres along it, going
+   *  on by `via` (the path and the lanes after it) until you are after a space. */
+  leaveAt?: { slot: string; wakeD: number }; thiefAt?: { el: number; s: number; via: number[] };
+}
 
 /** Driving; parked at the kerb (el and s say where its rear axle is along its lane: one that will pull out, or a thief
  *  that has taken a space); pulling out of its space (el and s likewise, as it goes); diving into a space; stopped in its
@@ -569,6 +575,8 @@ export class Traffic {
     if (more.leavers) T.addLeavers(more.leavers);
     if (more.couriers) T.addCouriers(more.couriers, avoid);
     if (more.thieves) T.addThieves(more.thieves, avoid);
+    if (more.leaveAt) T.leaverAt(more.leaveAt.slot, more.leaveAt.wakeD);
+    if (more.thiefAt) T.thiefAt(more.thiefAt.el, more.thiefAt.s, more.thiefAt.via);
     T.patience = more.patience ?? 5; T.pair = (more.thieves ?? 0) > 1;
     return T;
   }
@@ -615,6 +623,24 @@ export class Traffic {
         ...FRESH, imp: rand(this.rx) < 0.5, x, z, h, box: boxAt(ty, x, z, h) };
       this.extend(c); this.signal(c); this.cars.push(c); k++;
     }
+  }
+
+  /** A lesson's leaver: the most common size that can pull out of the space, a calm driver, waking only as you come. */
+  private leaverAt(slot: string, wakeD: number): void {
+    const sl = this.kerbSlots.get(slot), sizes = TYPES.map((_, t) => t).filter(t => TYPES[t].share > 0).sort((a, b) => TYPES[b].share - TYPES[a].share);
+    const t = sl && sizes.find(q => exitFor(this.net, sl, q));
+    if (!sl || t === undefined) throw new Error(`no car can pull out of ${slot}`);
+    const ex = exitFor(this.net, sl, t)!, [x, z, h] = poseOn(ex, 0);
+    const c: TCar = { id: this.cars.length, type: t, drv: 0, el: ex.el, s: ex.s0, v: 0, acc: 0, route: [], ind: 0, wait: false, commit: -1, inAt: NEVER, jams: 0, moved: 0,
+      ...FRESH, state: 'parked', place: this.places.length, until: 1e9, wakeD, imp: false, x, z, h, box: boxAt(TYPES[t], x, z, h) };
+    this.places.push(ex); this.extend(c); this.cars.push(c);
+  }
+  /** A lesson's thief, in the commonest size a thief drives, cruising until you are after a space. */
+  private thiefAt(el: number, s: number, via: number[]): void {
+    const type = THIEF_TYPES.slice().sort((a, b) => b.share - a.share)[0].t, ty = TYPES[type], [x, z, h] = poseOn(this.net.els[el], s);
+    const c: TCar = { id: this.cars.length, type, drv: THIEF, el, s, v: 0.6 * DRIVERS[THIEF].v0 * this.net.els[el].limit / 3.6, acc: 0, route: [], ind: 0, wait: false, commit: -1, inAt: NEVER, jams: 0, moved: 0,
+      ...FRESH, imp: false, x, z, h, box: boxAt(ty, x, z, h) };
+    c.route = via.slice(); this.extend(c); this.signal(c); this.cars.push(c);
   }
 
   snapshot(): TrafficSnap {

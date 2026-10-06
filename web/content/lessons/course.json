@@ -105,6 +105,14 @@
     "mto-alley": {
       "name": "Ontario MTO Truck Handbook: alley dock",
       "url": "https://www.ontario.ca/document/official-ministry-transportation-mto-truck-handbook/alley-dock"
+    },
+    "highway-code-general": {
+      "name": "The Highway Code, rules 103–158",
+      "url": "https://www.gov.uk/guidance/the-highway-code/general-rules-techniques-and-advice-for-all-drivers-and-riders-103-to-158"
+    },
+    "stvo-12": {
+      "name": "StVO §12: Halten und Parken",
+      "url": "https://www.gesetze-im-internet.de/stvo_2013/__12.html"
     }
   },
   "lessons": [
@@ -2684,6 +2692,115 @@
         "moves": "par+1",
         "face": "out"
       }
+    },
+    {
+      "id": "street-traffic",
+      "n": 14,
+      "title": "Street with traffic",
+      "chapter": "On the street",
+      "learn": "Through the lights and a give-way line to a space, signalling each turn and pulling in.",
+      "street": {
+        "map": "harbour",
+        "seed": 3,
+        "perKm": 12,
+        "turns": [
+          "left",
+          "right"
+        ],
+        "space": "promised",
+        "left": {
+          "seed": 4,
+          "turns": [
+            "left",
+            "left"
+          ]
+        }
+      },
+      "explain": [
+        {
+          "text": "Mirrors, signal, manoeuvre: know what is behind you, then signal well before you turn, so the drivers round you know what you are going to do.",
+          "sources": [
+            "highway-code"
+          ]
+        },
+        {
+          "text": "Give clear signals in plenty of time, and cancel them after use. In the game, as in a car, the indicator cancels itself once the wheel comes back after a turn.",
+          "sources": [
+            "highway-code-general"
+          ]
+        },
+        {
+          "text": "At the lights, stop behind the white line unless the light is green. On amber, go on only if you have already crossed the line or are so close to it that stopping might cause a collision.",
+          "sources": [
+            "highway-code"
+          ]
+        },
+        {
+          "text": "Broken white lines across your road mean give way to the traffic on the main road. The game counts it a fault if a car on the main road is less than 3 seconds from the junction as your front crosses the line.",
+          "sources": [
+            "highway-code"
+          ]
+        },
+        {
+          "text": "Signal towards the kerb before you stop beside the space, and keep it on as you reverse in: the game checks it as you first reverse. If the space comes just after a side road, wait until you are passing the side road before you signal, or drivers may think you are turning into it.",
+          "sources": [
+            "highway-code-general"
+          ]
+        },
+        {
+          "text": "These rules are the UK's, where traffic keeps left, so its left and right swap for Morocco and Germany. What the game holds you to (the faults it counts) is the same in every country; Morocco's own Code de la route wording is not in the game yet."
+        }
+      ]
+    },
+    {
+      "id": "street-leavers",
+      "n": 15,
+      "title": "Leavers and spot thieves",
+      "learn": "Wait for a parked car to pull out, then claim its space before a thief does.",
+      "street": {
+        "map": "harbour",
+        "seed": 25,
+        "perKm": 12,
+        "turns": [
+          "straight"
+        ],
+        "space": "leaver",
+        "wakeD": 25,
+        "thief": {
+          "behind": 30,
+          "patience": 8
+        },
+        "left": {
+          "seed": 2,
+          "turns": [
+            "straight"
+          ]
+        }
+      },
+      "explain": [
+        {
+          "text": "A parked car with its indicator on is about to pull out. Watch other drivers' signals and go on only when you are sure it is safe: an indicator may also just not have been cancelled.",
+          "sources": [
+            "highway-code-general"
+          ]
+        },
+        {
+          "text": "Stop a little behind it, leaving it room to pull out, and signal towards the kerb, so the drivers behind you see you are waiting for the space."
+        },
+        {
+          "text": "Once it has gone, pull forward until you are level with the car in front of the space: Park mode takes over. Then reverse in without waiting."
+        },
+        {
+          "text": "A spot thief may pull up behind you to dive in nose first. In this lesson it gives up if you signal and start reversing within 8 seconds; wait longer and the space is gone."
+        },
+        {
+          "text": "Whose space it is depends on the country. In Germany it belongs to whoever reaches it first, also while they pull past it to reverse in or wait for a car to leave it. In the UK signalling gives you no priority. Morocco's rule is not in the game yet.",
+          "sources": [
+            "stvo-12",
+            "highway-code-general"
+          ]
+        }
+      ]
     }
   ]
 }

@@ -115,7 +115,11 @@ bindGestures();
 
 /** On the street: the free spaces the car fits, the one it is parking in, and where the map stays turned in Park mode
  *  (locked to the space, so it holds still while you manoeuvre); null in a car park. */
-export interface StreetDraw { slots: readonly Slot[]; target: Slot | null; lockRot: number | null }
+export interface StreetDraw {
+  slots: readonly Slot[]; target: Slot | null; lockRot: number | null;
+  /** A street lesson: the way still ahead (null when the help level hides it) and the lesson's space. */
+  way?: readonly Pt[] | null; goal?: Slot | null;
+}
 let street: StreetDraw | null = null;
 export function setStreet(d: StreetDraw | null): void { street = d; }
 /** Instead of the wheel angles, what Drive mode shows at the top left (the street and its speed limit); null for the wheel. */
@@ -304,6 +308,21 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
     c.stroke(); c.setLineDash([]);
   }
   if (sim.traffic) drawJunctionLines(c, sim.traffic, s, d1);
+  // a street lesson: the way ahead, and its space
+  if (street?.goal) {
+    const g = street.goal, q = bayRect(g.bay, [g.bay.x0 + 0.08, g.bay.x1 - 0.08, g.bay.z0 + 0.05, g.bay.z1 - 0.05]);
+    c.fillStyle = 'rgba(77,163,255,.22)'; path(c, q); c.fill();
+    c.strokeStyle = 'rgba(77,163,255,.9)'; c.lineWidth = Math.max(1.5, 0.12 * s); path(c, q); c.stroke();
+  }
+  if (street?.way && street.way.length > 1) {
+    c.strokeStyle = 'rgba(77,163,255,.5)'; c.lineWidth = Math.max(3, 0.9 * s); c.lineCap = 'round'; c.lineJoin = 'round';
+    path(c, street.way as Pt[], false); c.stroke();
+    // an arrowhead at its end, pointing along it
+    const n = street.way.length, [ax, ay] = PS(...street.way[n - 2]), [bx, by] = PS(...street.way[n - 1]), h = Math.atan2(by - ay, bx - ax), r = Math.max(7, 1.2 * s);
+    c.fillStyle = 'rgba(77,163,255,.85)'; c.beginPath(); c.moveTo(bx + r * Math.cos(h), by + r * Math.sin(h));
+    c.lineTo(bx + r * Math.cos(h + 2.5), by + r * Math.sin(h + 2.5)); c.lineTo(bx + r * Math.cos(h - 2.5), by + r * Math.sin(h - 2.5)); c.fill();
+    c.lineCap = 'butt'; c.lineJoin = 'miter';
+  }
   // painted lines (bays, detail level 1), numbers, the drain cover
   if (d1 > 0) {
     c.strokeStyle = '#d9ab2b'; c.lineWidth = Math.max(1, 0.1 * s); c.lineCap = 'butt'; c.beginPath();

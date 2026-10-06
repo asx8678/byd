@@ -3,6 +3,7 @@
 // Where you are in each lesson is kept in this browser (localStorage key `atto2-course`).
 import { TOW_CAR, vehicleFor } from '../core/content';
 import { COURSE, HELP, fillText, freshState, lessonFor, type Lesson, type LessonDef, type LessonState, type PassLine, type PassRule } from '../core/lesson';
+import { STREET_HELP } from '../core/streetLesson';
 import type { Vehicle } from '../core/vehicle';
 import type { Stars } from '../core/score';
 import type { ParkedResult } from '../core/sim';
@@ -20,6 +21,8 @@ const save = () => { try { localStorage.setItem(KEY, JSON.stringify(saved)); } c
 let carKey = '';
 export function setCourseCar(id: string): void { carKey = id === 'byd-atto2' ? '' : id + '|'; }
 const keyOf = (id: string): string => (COURSE.lessons.find(l => l.id === id)?.tow ? id : carKey + id);
+/** What passing a street lesson takes. */
+export const STREET_PASS = 'To pass: no faults on the way (a red light, speeding, not giving way, a turn or pulling in without signalling, blocking a junction, stopping where you may not), then parked in the lesson\'s space without touching anything.';
 export const stateOf = (id: string): LessonState => ({ ...freshState(), ...saved.lessons[keyOf(id)] });
 export function setState(id: string, s: LessonState): void { saved.lessons[keyOf(id)] = s; save(); }
 /** Why a lesson is not for this car, in a few words (the course list) or a sentence (when it is asked for). */
@@ -63,7 +66,7 @@ export function renderCourse(current: string | null, v: Vehicle): void {
     b.append(el('b', 'crsN', String(l.n)), t, el('em', s.done && ok ? 'crsS done' : 'crsS', l.soon ? 'Next update' : !ok ? notFor(l, v) : started ? statusText(s) : 'Start'));
     if (l.id === current) b.classList.add('cur');
     if (!l.chapter) return [b];
-    const h = el('div', 'crsChapter'); h.append(el('b', '', l.chapter), el('small', '', l.tow ? `In the ${vehicleFor(TOW_CAR).name} with a box trailer, whichever car you have chosen` : ''));
+    const h = el('div', 'crsChapter'); h.append(el('b', '', l.chapter), el('small', '', l.tow ? `In the ${vehicleFor(TOW_CAR).name} with a box trailer, whichever car you have chosen` : l.street ? 'In Harbour\'s traffic, in the car you have chosen, keeping to the side the country you chose drives on' : ''));
     return [h, b];
   }));
 }
@@ -91,13 +94,13 @@ export function showLesson(def: LessonDef, s: LessonState, go: { watch(): void; 
     for (const id of p.sources ?? []) { const a = el('a', 'src', `[${num(id)}]`); a.href = COURSE.sources[id].url; a.target = '_blank'; a.rel = 'noopener'; para.append(' ', a); }
     return para;
   }), ...(note ? [el('p', 'lsCar', note)] : []));
-  $('lsPass').textContent = passText(def.pass);
-  const h = HELP[s.help];
+  $('lsPass').textContent = def.street ? STREET_PASS : passText(def.pass);
+  const h = { name: HELP[s.help].name, what: def.street ? STREET_HELP[s.help] : HELP[s.help].what };
   $('lsNow').textContent = s.done ? `Done, best ${starText(Math.max(0, s.best))}. Take the test again any time.`
     : `Now: ${h.name}, ${h.what}.` + (s.help < 3 ? ` ${s.passes} of 2 passes${s.slow ? ', in slow motion' : ''}.` : '');
   $('lsSources').replaceChildren(...order.map((id, i) => { const li = el('li'), a = el('a', '', COURSE.sources[id].name); a.href = COURSE.sources[id].url; a.target = '_blank'; a.rel = 'noopener'; li.append(`${i + 1}. `, a); return li; }));
   $('lsSourcesWrap').hidden = !order.length;
-  $('lsWatch').onclick = () => go.watch();
+  $('lsWatch').onclick = () => go.watch(); $('lsWatch').hidden = !!def.street;   // a street lesson has no ghost to watch
   $('lsDrive').onclick = () => go.drive();
   $('lsDrive').textContent = s.help === 3 ? 'Take the test' : 'Drive';
   const t = $('lsTest'); t.hidden = s.help === 3; t.onclick = () => go.test();
@@ -107,7 +110,7 @@ export function showLesson(def: LessonDef, s: LessonState, go: { watch(): void; 
 export interface LessonResult {
   title: string; sub: string; pass: boolean; test: boolean; stars: Stars | null; better: boolean;
   lines: PassLine[]; feedback: string | null; change: string | null;
-  retry(): void; watch(): void; course(): void; next: (() => void) | null;
+  retry(): void; watch: (() => void) | null; course(): void; next: (() => void) | null;
 }
 
 /** The result card after a try in a lesson: pass or not (stars in the test), why, what to work on, what changes next. */
@@ -130,7 +133,7 @@ export function showLessonResult(r: ParkedResult | null, info: LessonResult): vo
   $('resStats').hidden = !stats.length;
   $('resStats').replaceChildren(...stats.map(([k, v]) => { const d = el('div'); d.append(el('span', '', k), el('b', '', v)); return d; }));
   const nb = $('resNew'), nx = $('resNext'), rt = $('resRetry');
-  nb.hidden = false; nb.textContent = 'Watch'; nb.onclick = () => info.watch();
+  nb.hidden = !info.watch; nb.textContent = 'Watch'; nb.onclick = () => info.watch?.();
   rt.textContent = 'Try again'; rt.onclick = () => info.retry();
   nx.textContent = info.next ? 'Next lesson' : 'Course'; nx.onclick = () => (info.next ?? info.course)();
   nx.classList.toggle('primary', !!info.next); rt.classList.toggle('primary', !info.next);
