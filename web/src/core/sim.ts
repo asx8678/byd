@@ -28,6 +28,8 @@ export interface SimInput {
 export type Mode = 'park' | 'drive';
 /** Drive mode's parking sensors (and the gaps the numbers show) switch off above this speed, as real ones do (m/s). */
 export const PDC_MAX = 10 / 3.6;
+/** Holding Reverse with a trailer on: a slower creep and top speed than the car's own (m/s). */
+export const TOW_REV = { creep: 0.5, max: 1.0 };
 
 export interface ParkedResult {
   bay: string; noseIn: boolean;
@@ -260,10 +262,11 @@ export class Sim {
     if (w.rules) (this.rules ??= new Rules(net, COUNTRIES[w.rules.country ?? 'ma'])).restore(w.rules);
   }
 
-  /** Speed the pedals ask for, m/s (0 when none is held). */
+  /** Speed the pedals ask for, m/s (0 when none is held). With a trailer on, reversing creeps at TOW_REV.creep and
+   *  goes no faster than TOW_REV.max: a trailer is reversed slowly. */
   targetSpeed(ramp = Math.max(0, this.holdT - this.vehicle.drive.HOLD_T)): number {
-    const D = this.vehicle.drive, inp = this.input;
-    return inp.fwd ? Math.min(D.VMAX_F, D.V_CREEP_F + ramp * D.RAMP_F) : inp.rev ? -Math.min(D.VMAX_R, D.V_CREEP_R + ramp * D.RAMP_R) : 0;
+    const D = this.vehicle.drive, inp = this.input, tow = !!this.trailer;
+    return inp.fwd ? Math.min(D.VMAX_F, D.V_CREEP_F + ramp * D.RAMP_F) : inp.rev ? -Math.min(tow ? TOW_REV.max : D.VMAX_R, (tow ? TOW_REV.creep : D.V_CREEP_R) + ramp * D.RAMP_R) : 0;
   }
 
   /** All four corners inside the target bay, stopped, within 6° of straight, the way round the bay asks for. */

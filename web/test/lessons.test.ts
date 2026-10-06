@@ -18,7 +18,7 @@ import { type ParkedResult, type Sim } from '../src/core/sim';
 import type { Vehicle } from '../src/core/vehicle';
 
 const V = ATTO2, CARS = Object.values(VEHICLES);
-const LESSONS = COURSE.lessons.filter(l => !l.soon);
+const LESSONS = COURSE.lessons.filter(l => !l.soon && !l.tow);   // the towing lessons have no routes: test/towing.test.ts
 const fmt = (r: readonly Piece[]) => r.map(p => `${p.dir > 0 ? 'F' : 'R'}${p.lvl}:${p.len.toFixed(2)}`).join(' ');
 const picks = (def: LessonDef) => Object.fromEntries(Object.entries(def.tips ?? {}).map(([k, t]) => [k, t.cue]));
 const stepsOf = (L: Lesson) => stepsFor(V, L.scene, L.bay, L.route, picks(L.def));
@@ -51,9 +51,10 @@ if (process.env.UPDATE_ROUTES) it('writes the other cars\' routes into course.js
 }, 600000);
 
 describe('lesson routes', () => {
-  it('ten lessons to drive, numbered 1 to 10', () => {
+  it('ten lessons to drive, numbered 1 to 10, then three with a trailer', () => {
     expect(LESSONS.map(l => l.n)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-    expect(COURSE.lessons.map(l => l.n)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(COURSE.lessons.map(l => l.n)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+    expect(COURSE.lessons.filter(l => l.tow).map(l => l.n)).toEqual([11, 12, 13]);
     for (const l of COURSE.lessons) for (const p of [...(l.explain ?? []), ...Object.values(l.tips ?? {})]) for (const s of p.sources ?? []) expect(COURSE.sources[s], `${l.id}: ${s}`).toBeDefined();
   });
   for (const def of LESSONS) for (const v of CARS) {

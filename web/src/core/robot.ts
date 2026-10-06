@@ -1,6 +1,11 @@
 // A driver who does what the coach shows and nothing else, for checking that a lesson can be driven as it is taught:
 // the tests drive every lesson in every car with them, and a route for another car is only kept if they pass.
 import { CoachRun, MARK, Tracker, type Step, type TrackPt } from './coach';
+import type { RigPose } from './generator/towScenes';
+import { DEG } from './math';
+import type { Scene } from './scene';
+import { TOW_CRAWL, TowCoach, TowPilot, type PilotOpts, type TowPath } from './towing';
+import type { Trailer } from './trailer';
 import { checkPass, type Lesson } from './lesson';
 import { STEP } from './replay';
 import { Sim, type ParkedResult } from './sim';
@@ -84,4 +89,48 @@ export function failures(v: Vehicle, L: Lesson, steps: Step[], drivers: readonly
     if (misses || touches || !res?.pass) out.push(`${name}: ${misses ? 'missed a mark' : touches ? `${touches} touches` : !r ? 'never parked' : res!.lines.filter(l => !l.ok).map(l => l.text).join('; ')}`);
   }
   return out;
+}
+
+// ---- towing lessons ----
+
+/** A driver in a towing lesson. guided: the hand follows the coach's target on the wheel (`hands` degrees a second,
+ *  `late` steps behind it) and the coach gates the pedals; otherwise the driver steers by eye with a pilot of their own
+ *  (`pilot`: how they judge the curve) and keeps to a crawl themselves. */
+export interface TowDriver { guided?: boolean; hands?: number; late?: number; pilot?: PilotOpts }
+export const TOW_DRIVERS: readonly (readonly [string, TowDriver])[] = [
+  ['guided', {}],
+  ['guided, with slow hands a little late', { hands: 180, late: 18 }],
+  ['guided, a tenth of a second late', { hands: 300, late: 6 }],
+  ['cue marks only, steering by eye', { guided: false, pilot: { look: 5.0, gain: 0.6, rate: 220 } }],
+];
+
+/** A try at a towing lesson from its start, the way the game ends it: the coach's done (guided), or parked and still for
+ *  a second. lost: how often the trailer got away and had to be straightened. */
+export function towDrive(v: Vehicle, t: Trailer, scene: Scene, bay: string, start: RigPose, path: TowPath, o: TowDriver = {}, each?: (sim: Sim) => void): { r: ParkedResult | null; touches: number; lost: number; sim: Sim; secs: number } {
+  const guided = o.guided ?? true, sim = new Sim(scene, v);
+  sim.setTrailer(t); sim.options.bay = bay; sim.resetAt(start.x, start.z, start.th, start.tth);
+  const coach = new TowCoach(v, t, path, () => sim.options.lockDeg, !guided), own = guided ? null : new TowPilot(v, t, path, o.pilot);
+  const hist: number[] = [];
+  let touches = 0, lost = 0, still = 0, r: ParkedResult | null = null, n = 0;
+  for (; n < 60 * 240 && !r; n++) {
+    // the hand: towards the coach's target (guided) or the driver's own idea, pulling forward with the wheels straight
+    if (own && coach.phase === 'reverse') own.steer(sim.x, sim.z, sim.th, sim.tth, sim.options.lockDeg, STEP);
+    hist.push(coach.phase === 'forward' ? 0 : own ? own.needle : coach.wheelWant);
+    const want = hist[Math.max(0, hist.length - 1 - (o.late ?? 0))], d = want - sim.wheelAngle;
+    sim.input.wheelHeld = true; sim.wheelAngle += Math.sign(d) * Math.min(Math.abs(d), (o.hands ?? 360) * STEP);
+    // the pedal: reverse along the path (at a crawl, letting go to stop at its end), or forward to straighten
+    const brake = sim.v * sim.v / (2 * v.drive.BRAKE), ownLeft = own ? own.progress(sim.x, sim.z, sim.th, sim.tth).left : coach.left;
+    let raw = { fwd: false, rev: false };
+    if (coach.phase === 'reverse') raw.rev = guided || (ownLeft > brake + 0.03 && Math.abs(sim.v) < TOW_CRAWL);
+    else if (coach.phase === 'forward') raw.fwd = Math.abs(sim.wheelAngle) < 20 && Math.abs(coach.phi) >= 3 * DEG;
+    raw = coach.gate(raw, sim);
+    sim.input.fwd = raw.fwd; sim.input.rev = raw.rev;
+    for (const e of sim.step(STEP)) if (e.type === 'touch') touches++;
+    each?.(sim);
+    for (const e of coach.observe(sim, STEP)) if (e.type === 'lost') { lost++; own?.restart(sim.wheelAngle); } else if (e.type === 'lined') own?.restart(sim.wheelAngle);
+    still = sim.parked && Math.abs(sim.v) < 0.02 && !raw.fwd && !raw.rev ? still + 1 : 0;
+    if (guided ? coach.phase === 'done' : still >= 60) r = sim.parkedResult();
+    if (touches > 3) break;
+  }
+  return { r, touches, lost, sim, secs: n / 60 };
 }

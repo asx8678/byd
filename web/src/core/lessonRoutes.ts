@@ -131,6 +131,7 @@ export function planLesson(v: Vehicle, def: LessonDef): Piece[] | null {
     const plan = (shape?: Shape) => () => planToBay(v, scene, B.start, B.bay, { lvls: LOCK, maxNodes: 60000, shape }).pieces;
     return first(shapes.map(plan), r => (exit && !atto ? intoLane(v, loadLesson(v, def, r), r) : r));
   }
+  if ('tow' in sc) return null;   // a towing lesson has no stored route: its coach steers by the trailer's path
   if ('garage' in sc) {
     const s = clearStart(v, GARAGE_561, GARAGE_561.starts[sc.start]);
     return first(shapes.map(shape => () => planToBay(v, GARAGE_561, s, sc.garage, { lvls: LOCK, shape }).pieces));

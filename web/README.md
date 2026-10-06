@@ -86,15 +86,22 @@ src/core/      the game itself, no browser code: easy to test, and the part to p
   generator/     levels from (template, level, seed): templates.ts builds the scene, level.ts solves it
                  outward from the parked poses, checks it with the exact collision test and measures it;
                  lessonScenes.ts builds the lessons' own scenes (cone course, swept-path U-turn, leaving a
-                 tight space with an exit lane, 60° angled bays)
+                 tight space with an exit lane, 60° angled bays); towScenes.ts the trailer yards (a straight lane,
+                 a corner, a space between cars), each with the path the trailer's axle follows
   coach.ts       a route as steps said with what you see ("until your mirror is 55 cm short of the near
                  line"); CoachRun, which follows a try (guided: the wheel first, walking pace, brakes on the
                  mark; marks that follow the car so earlier errors are taken out); and the feedback after a
                  try (the first 30 cm drift and why, or the switch whose timing moved the finish most)
-  lesson.ts      the course from content/lessons: loading a lesson, pass rules, help that steps back
+  towing.ts      reversing a trailer: a path for its axle, a pilot that steers the car to keep the trailer on it
+                 (pure pursuit on the trailer, the hitch angle that holds that curve, the car's curvature that
+                 brings the hitch angle there; its hand no faster than a person's), and TowCoach, which shows its
+                 wheel as a target, keeps the rig to a crawl and has you pull forward when the trailer gets away
+  lesson.ts      the course from content/lessons: loading a lesson (a towing lesson in its own car and trailer),
+                 pass rules, help that steps back
   lessonRoutes.ts each lesson in each car: the route worked out for the car (keeping the Atto 2's moves where
                  coached drivers can follow them), and the lesson's tips matched to its steps
-  robot.ts       drivers who do only what the coach shows, guided or on cue marks, a little early, late or off
+  robot.ts       drivers who do only what the coach shows, guided or on cue marks, a little early, late or off;
+                 for the towing lessons, drivers who follow the target on the wheel or steer by eye
 src/ui/        the browser side: drawing, controls, sound, settings
   plan.ts        the map (canvas 2D): north up, or in Drive mode turned so you drive up and zoomed by speed;
                  pinch, the mouse wheel or + and - to zoom yourself, a double tap (or 0) to give it back; on the

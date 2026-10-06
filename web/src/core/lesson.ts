@@ -1,9 +1,12 @@
 // The course: lessons as data (content/lessons/course.json), each a scene, a stored route, words with their
 // sources and a rule for passing; and how the help steps back as you pass. Pure logic, like the rest of core/.
 import course from '../../content/lessons/course.json';
-import { ATTO2, GARAGE_561 } from './content';
+import { ATTO2, GARAGE_561, TOW_CAR, TRAILERS, vehicleFor } from './content';
 import { areaOf, timeLimit } from './generator/level';
 import { lessonScene, type LessonSceneId } from './generator/lessonScenes';
+import { towScene, type RigPose, type TowSceneId } from './generator/towScenes';
+import type { TowPath } from './towing';
+import type { Trailer } from './trailer';
 import { draft, type TemplateId } from './generator/templates';
 import { drive, moves, type Piece, type Pose } from './planner';
 import { makeScene, type Scene } from './scene';
@@ -17,7 +20,12 @@ export interface Para { text: string; sources?: string[]; cue?: { part?: string;
 export interface PassRule { angle?: number; centre?: number; kerb?: number; moves?: 'par+1'; face?: 'in' | 'out' }
 export interface LessonDef {
   id: string; n: number; title: string; learn: string; soon?: boolean;
-  scene?: { template: TemplateId; level: number; seed: number; kerbGap?: number } | { garage: string; start: string } | { build: LessonSceneId; level?: number; seed?: number };
+  /** A heading in the course list before this lesson. */
+  chapter?: string;
+  /** A towing lesson: always in the car with a tow bar (TOW_CAR) pulling this trailer, in one of the trailer yards; the
+   *  coach steers by the trailer's path (core/towing.ts), so it has no stored route. */
+  tow?: { trailer: string };
+  scene?: { template: TemplateId; level: number; seed: number; kerbGap?: number } | { garage: string; start: string } | { build: LessonSceneId; level?: number; seed?: number } | { tow: TowSceneId };
   /** authored: written for the lesson (a cone course), not found by the planner. The Atto 2's; the lessons' words are about it. */
   route?: StoredRoute & { authored?: boolean };
   /** The same lesson in other cars, by vehicle id (see planLesson): null where the car cannot do it. */
@@ -29,16 +37,18 @@ export interface Course { format: 1; sources: Record<string, Source>; lessons: L
 export const COURSE = course as unknown as Course;
 export const lessonById = (id: string): LessonDef | undefined => COURSE.lessons.find(l => l.id === id && !l.soon);
 
-/** A lesson ready to drive: its scene, the bay, the route the coach teaches, par and the time for the efficiency star. */
-export interface Lesson { def: LessonDef; scene: Scene; bay: string; route: Piece[]; par: number; limit: number }
+/** A lesson ready to drive: its scene, the bay, the route the coach teaches, par and the time for the efficiency star.
+ *  A towing lesson has no route (route is empty): its trailer, where the rig starts and the trailer's path instead. */
+export interface Lesson { def: LessonDef; scene: Scene; bay: string; route: Piece[]; par: number; limit: number; tow?: TowLesson }
+export interface TowLesson { car: Vehicle; trailer: Trailer; start: RigPose; path: TowPath }
 
 /** A lesson's stored route for a car: the Atto 2's own, or the one the course file keeps for another car. null when the
  *  car cannot do the lesson (it does not fit the bay), undefined when the file has none for it. */
 export function routeFor(v: Vehicle, def: LessonDef): StoredRoute | null | undefined {
   return v.id === ATTO2.id ? def.route : def.routes?.[v.id];
 }
-/** Whether the car can do the lesson. */
-export const lessonFor = (v: Vehicle, def: LessonDef): boolean => !def.soon && !!routeFor(v, def);
+/** Whether the car can do the lesson (a towing lesson is for everyone: it brings its own car). */
+export const lessonFor = (v: Vehicle, def: LessonDef): boolean => !def.soon && (!!def.tow || !!routeFor(v, def));
 
 /** The route from its stored pieces, driven out from the stored start. */
 export function storedRoute(v: Vehicle, r: StoredRoute): Piece[] {
@@ -48,8 +58,10 @@ export function storedRoute(v: Vehicle, r: StoredRoute): Piece[] {
   return out;
 }
 
-/** The lesson's scene (a template's first draft for its level and seed, or your garage) with the car at the route's start. */
+/** The lesson's scene (a template's first draft for its level and seed, or your garage) with the car at the route's start.
+ *  A towing lesson is loaded in its own car, whatever v is (see loadTowLesson). */
 export function loadLesson(v: Vehicle, def: LessonDef, pieces?: Piece[]): Lesson {
+  if (def.tow) return loadTowLesson(def);
   const stored = routeFor(v, def);
   if (!pieces && !stored) throw new Error(`lesson ${def.id} has no route for the ${v.id}`);
   const route = pieces ?? storedRoute(v, stored!), s = route[0].from, sc = def.scene!;
@@ -61,11 +73,21 @@ export function loadLesson(v: Vehicle, def: LessonDef, pieces?: Piece[]): Lesson
     const scene = makeScene(B.spec);
     return { def, scene, bay: B.bay, route, par: moves(route), limit: timeLimit(route) };
   }
+  if ('tow' in sc) throw new Error(`lesson ${def.id} is a towing lesson without tow`);
   const d = draft(v, sc.template, sc.level, sc.seed);
   d.spec.starts = { start: { x: s.x, z: s.z, th: s.th, label: def.learn } };
   d.spec.areaView = areaOf(v, makeScene(d.spec), route);
   const scene = makeScene(d.spec);
   return { def, scene, bay: scene.defaultBay, route, par: moves(route), limit: timeLimit(route) };
+}
+
+/** A towing lesson: the trailer yard for the car with the tow bar and the lesson's trailer, the rig at its start. Par is
+ *  one move (the trailer reversed in, as the coach drives it); the time allowed comes from the path's length. */
+export function loadTowLesson(def: LessonDef): Lesson {
+  const sc = def.scene as { tow: TowSceneId }, car = vehicleFor(TOW_CAR), trailer = TRAILERS[def.tow!.trailer], S = towScene(car, trailer, sc.tow);
+  S.spec.starts = { start: { x: S.start.x, z: S.start.z, th: S.start.th, label: def.learn } };
+  const scene = makeScene(S.spec);
+  return { def, scene, bay: S.bay, route: [], par: 1, limit: Math.ceil((20 + 2.5 * S.path.len + 12) / 5) * 5, tow: { car, trailer, start: S.start, path: S.path } };
 }
 
 /** A lesson's words for the car being driven: {car} is its name, {circle} its turning circle and whose figure that is,

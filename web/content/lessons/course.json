@@ -6,7 +6,8 @@
     "Every claim in explain and tips comes from docs/research/parking-tips.md and lists its sources; where sources disagree, the text says so. tips are keyed by step number and shown with that step's mark.",
     "scene.kerbGap: in a space along a kerb, the route was planned to finish with the body this far from the kerb (the template also allows 0.2 m); 0.15 puts the tyres about 17 cm out, in the middle of the 30 cm the pass allows.",
     "scene.build: a scene made for a lesson (core/generator/lessonScenes.ts): first-metres, turning, leaving (a kerb level with the car parked and an exit lane), angled (60° bays). route.authored: written for the lesson rather than found by the planner (the cone course, the U-turn, the one-turn angled entry); the test checks it clears everything and passes.",
-    "pass: angle (degrees off straight), centre (metres off centre), kerb (tyres to the kerb, metres), moves ('par+1'), face ('in' or 'out'). Nothing touched is always required, and so is finishing in the target (a bay, or for leaving, the lane ahead)."
+    "pass: angle (degrees off straight), centre (metres off centre), kerb (tyres to the kerb, metres), moves ('par+1'), face ('in' or 'out'). Nothing touched is always required, and so is finishing in the target (a bay, or for leaving, the lane ahead).",
+    "tow: a towing lesson, always in the car with a tow bar (the Octavia) with this trailer; scene.tow is one of the trailer yards (core/generator/towScenes.ts), each with the path the trailer's axle follows. The coach steers by that path (core/towing.ts): no stored route. chapter: a heading in the course list before this lesson."
   ],
   "sources": {
     "dvsa-parallel": {
@@ -84,6 +85,26 @@
     "dvsa-lgv": {
       "name": "DVSA Safe Driving for Life: junctions for lorry drivers",
       "url": "https://www.safedrivingforlife.info/advice/lgv-driving/develop-lgv-driving-skills/junctions-advice-lgv-drivers/"
+    },
+    "ca-rv": {
+      "name": "California DMV: Recreational Vehicles and Trailers Handbook",
+      "url": "https://www.dmv.ca.gov/portal/file/recreational-vehicles-trailers-handbook-pdf"
+    },
+    "oregon-cdl": {
+      "name": "Oregon CDL Manual, section 6: combination vehicles",
+      "url": "https://www.oregon.gov/odot/DMV/Pages/Online_CDL_Manual_2/Section_6.aspx"
+    },
+    "sgi-backing": {
+      "name": "SGI Professional Driver Handbook: steering backward",
+      "url": "https://sgi.sk.ca/pro-driver/-/knowledge_base/pro-drivers/steering-backward"
+    },
+    "discover-boating": {
+      "name": "Discover Boating: how to back up a boat trailer",
+      "url": "https://www.discoverboating.com/ownership/towing-and-trailering/back-up-a-boat-trailer"
+    },
+    "mto-alley": {
+      "name": "Ontario MTO Truck Handbook: alley dock",
+      "url": "https://www.ontario.ca/document/official-ministry-transportation-mto-truck-handbook/alley-dock"
     }
   },
   "lessons": [
@@ -2266,6 +2287,142 @@
       ],
       "pass": {
         "face": "in"
+      }
+    },
+    {
+      "id": "tow-straight",
+      "n": 11,
+      "chapter": "Car and trailer",
+      "title": "Reversing a trailer straight",
+      "learn": "Keep a trailer straight as you back it 13 m into a space.",
+      "tow": {
+        "trailer": "boeckmann-tl-al-2513-75"
+      },
+      "scene": {
+        "tow": "tow-straight"
+      },
+      "explain": [
+        {
+          "text": "Pushed backwards, a trailer goes the opposite way to the car: turn the car's wheels to the right and the trailer goes left. The other way to think of it: put your hand at the bottom of the steering wheel, and the trailer goes the way your hand moves.",
+          "sources": [
+            "ca-rv"
+          ]
+        },
+        {
+          "text": "Back slowly, so there is time to correct, and correct as soon as the trailer starts to drift. Sharp corrections make the trailer jackknife, which can damage the back of the car and the front of the trailer.",
+          "sources": [
+            "ca-rv",
+            "oregon-cdl",
+            "discover-boating"
+          ]
+        },
+        {
+          "text": "This trailer is short, about 2.3 m from the ball to its axle (an estimate: its maker does not give it), so a small angle grows quickly. Here it starts 3° off. With a trailer on, holding Reverse creeps at 0.5 m/s, and the car's rear parking sensors are off."
+        },
+        {
+          "text": "If the trailer gets away from you, stop and pull forward to straighten it, then try again.",
+          "sources": [
+            "discover-boating",
+            "oregon-cdl"
+          ]
+        },
+        {
+          "text": "In a guided try a yellow mark on the wheel's rim shows where to hold it: keep your hand on the wheel and follow the mark."
+        }
+      ],
+      "pass": {
+        "angle": 3,
+        "centre": 0.25,
+        "moves": "par+1",
+        "face": "out"
+      }
+    },
+    {
+      "id": "tow-corner",
+      "n": 12,
+      "title": "Reversing round a corner",
+      "learn": "Back the trailer round a corner into a side lane, and into the space at its end.",
+      "tow": {
+        "trailer": "boeckmann-tl-al-2513-75"
+      },
+      "scene": {
+        "tow": "tow-corner"
+      },
+      "explain": [
+        {
+          "text": "To send the back of the trailer one way, turn the car's front wheels the other way. Then the car has to follow the trailer round, or the rig keeps folding until it jackknifes: round a right angle, the car's path is an S.",
+          "sources": [
+            "sgi-backing",
+            "ca-rv"
+          ]
+        },
+        {
+          "text": "So: steer to start the trailer turning, steer back to follow it round the corner, and straighten as it lines up with the lane.",
+          "sources": [
+            "sgi-backing"
+          ]
+        },
+        {
+          "text": "Oregon's manual says it the other way round: when the trailer drifts off its line, turn the top of the steering wheel towards the drift. That moves your hand at the bottom of the wheel the other way, the way you want the trailer to go.",
+          "sources": [
+            "oregon-cdl",
+            "ca-rv"
+          ]
+        },
+        {
+          "text": "The corner is on your left, the driver's side, so you can watch the trailer through your own window as well as in the mirrors.",
+          "sources": [
+            "mto-alley"
+          ]
+        }
+      ],
+      "pass": {
+        "angle": 4,
+        "centre": 0.3,
+        "moves": "par+1",
+        "face": "out"
+      }
+    },
+    {
+      "id": "tow-bay",
+      "n": 13,
+      "title": "Reversing into a space",
+      "learn": "Back the trailer into a space between two parked cars.",
+      "tow": {
+        "trailer": "boeckmann-tl-al-2513-75"
+      },
+      "scene": {
+        "tow": "tow-bay"
+      },
+      "explain": [
+        {
+          "text": "Ontario's truck handbook: back in from the driver's side, set up with the trailer angled the way you want it to go, and back slowly, watching the trailer through your window and in the mirrors.",
+          "sources": [
+            "mto-alley"
+          ]
+        },
+        {
+          "text": "If the trailer turns too early or too sharply, ease the steering off; if it turns too late or too wide, steer more.",
+          "sources": [
+            "mto-alley"
+          ]
+        },
+        {
+          "text": "Here you start past the space with the trailer straight behind the car: the first metres of reversing angle it towards the space."
+        },
+        {
+          "text": "If it goes wrong, pull forward to straighten up and start again: Oregon's manual calls these pull-ups.",
+          "sources": [
+            "oregon-cdl",
+            "discover-boating"
+          ]
+        }
+      ],
+      "pass": {
+        "angle": 4,
+        "centre": 0.3,
+        "moves": "par+1",
+        "face": "out"
       }
     }
   ]
