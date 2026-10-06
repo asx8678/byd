@@ -6,7 +6,7 @@ import { ackermann, footprint, rearAngles } from '../core/car';
 import { roundRect, type CityLayers, type Slot } from '../core/city';
 import { wheelsOf } from '../core/collision';
 import { lookAhead } from '../core/dynamics';
-import { bayRect, besideKerb, type Rect } from '../core/scene';
+import { bayRect, besideKerb, type Kerb, type Rect } from '../core/scene';
 import { DEG, clamp, wrapPi, type Pt } from '../core/math';
 import type { Pose, RoutePoint } from '../core/planner';
 import type { Prediction, TowPrediction } from '../core/predict';
@@ -203,8 +203,9 @@ function hatchOf(c: CanvasRenderingContext2D): CanvasPattern | null {
 }
 /** The street map under everything else: pavements, the roads inside the ring, the blocks and their buildings, the car
  *  parks and their driveways, water, the kerbs, the zones painted along them and the arrows on one-way aisles. */
-function drawCity(c: CanvasRenderingContext2D, L: CityLayers, s: number, inView: (x0: number, x1: number, z0: number, z1: number) => boolean, d1: number, d2: number): void {
+function drawCity(c: CanvasRenderingContext2D, L: CityLayers, s: number, inView: (x0: number, x1: number, z0: number, z1: number) => boolean, d1: number, d2: number, kerbs: readonly Kerb[]): void {
   c.fillStyle = '#25282f'; path(c, rectPts(L.bounds)); c.fill();
+  if (L.surface) { drawGraph(c, L, s, inView, kerbs); return; }
   const ring = roundRect(L.ring.rect, L.ring.r, 6);
   c.fillStyle = '#1c1e24'; path(c, ring); c.fill();
   if (L.water) { c.fillStyle = '#122636'; path(c, rectPts(L.water)); c.fill(); }
@@ -238,6 +239,18 @@ function drawCity(c: CanvasRenderingContext2D, L: CityLayers, s: number, inView:
     }
   }
   c.globalAlpha = 1;
+}
+/** A graph map (from OpenStreetMap): the road surface, the buildings as they are, and the kerbs. */
+function drawGraph(c: CanvasRenderingContext2D, L: CityLayers, s: number, inView: (x0: number, x1: number, z0: number, z1: number) => boolean, kerbs: readonly Kerb[]): void {
+  const seen = (pts: readonly Pt[]) => { let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity; for (const [x, z] of pts) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z; } return inView(x0, x1, z0, z1); };
+  c.fillStyle = '#1c1e24';
+  for (const q of L.surface!) if (seen(q)) { path(c, q); c.fill(); }
+  const pat = hatchOf(c);
+  c.lineWidth = 1; c.strokeStyle = '#4b515b';
+  for (const b of L.buildings) { if (!seen(b)) continue; path(c, b); c.fillStyle = '#1d2026'; c.fill(); if (pat) { c.fillStyle = pat; c.fill(); } c.stroke(); }
+  c.strokeStyle = '#8e939c'; c.lineWidth = Math.max(1, 0.15 * s); c.lineCap = 'round'; c.beginPath();
+  for (const k of kerbs) { if (!inView(Math.min(k.a[0], k.b[0]), Math.max(k.a[0], k.b[0]), Math.min(k.a[1], k.b[1]), Math.max(k.a[1], k.b[1]))) continue; const a = PS(k.a[0], k.a[1]), b = PS(k.b[0], k.b[1]); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); }
+  c.stroke(); c.lineCap = 'butt';
 }
 /** The street names and the car parks' (zoomed out), over everything on the ground. */
 function drawCityLabels(c: CanvasRenderingContext2D, L: CityLayers, s: number): void {
@@ -279,7 +292,7 @@ export function drawPlan(sim: Sim, now: number, dt: number, dpr: number): void {
   const inView = (x0: number, x1: number, z0: number, z1: number) => !(x1 < vx0 || x0 > vx1 || z1 < vz0 || z0 > vz1);
   const city = sc.city, drive = sim.mode === 'drive', fast = drive && Math.abs(sim.v) > PDC_MAX;
   const d1 = city ? fadeIn(s, 2.6) : 1, d2 = city ? fadeIn(s, 7.8) : 1;   // detail levels: only a street map is ever zoomed out that far
-  if (city) drawCity(c, city, s, inView, d1, d2);
+  if (city) drawCity(c, city, s, inView, d1, d2, sc.kerbs);
   else {
     // floors, the lower level over the low wall, pavements with their kerbs
     c.fillStyle = '#1c1e24'; for (const f of sc.floors) { path(c, rectPts(f)); c.fill(); }

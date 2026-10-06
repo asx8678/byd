@@ -7,8 +7,9 @@ import p208 from '../../content/vehicles/peugeot-208-p21.json';
 import octavia from '../../content/vehicles/skoda-octavia-combi-nx.json';
 import boxTrailer from '../../content/trailers/boeckmann-tl-al-2513-75.json';
 import garage561 from '../../content/scenes/garage-561.json';
+import agadir from '../../content/maps/agadir.json';
 import harbour from '../../content/maps/harbour.json';
-import type { MapSpec } from './city';
+import type { AnyMapSpec, MapSpec } from './city';
 import { makeScene, type Scene, type SceneSpec } from './scene';
 import { makeTrailer, type Trailer, type TrailerSpec } from './trailer';
 import { makeVehicle, variantId, type Vehicle, type VehicleSpec } from './vehicle';
@@ -24,7 +25,7 @@ export const VEHICLES: Readonly<Record<string, Vehicle>> = Object.fromEntries(CA
   s.id === ATTO2.id ? [[ATTO2.id, ATTO2]] : (s.rearSteer?.options ?? [0]).map(deg => [variantId(s, deg), makeVehicle(s, deg)])));
 export const SCENES: Readonly<Record<string, Scene>> = { [GARAGE_561.id]: GARAGE_561 };
 /** The street maps, by id (see core/city.ts). */
-export const MAPS: Readonly<Record<string, MapSpec>> = { harbour: harbour as unknown as MapSpec };
+export const MAPS: Readonly<Record<string, AnyMapSpec> & { harbour: MapSpec }> = { harbour: harbour as unknown as MapSpec, agadir: agadir as unknown as AnyMapSpec };
 
 /** The trailers, by id; and the box trailer the towing lessons and levels use, on the Octavia (the one car with a
  *  published towing limit). */

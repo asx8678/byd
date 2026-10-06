@@ -35,3 +35,15 @@ export function nearby(obs: readonly Obstacle[], x: number, z: number, r: number
   for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) for (const k of g.cells[j * g.nx + i]) ks.add(k);
   return [...ks].sort((a, b) => a - b).map(k => obs[k]);
 }
+
+/** Whether any obstacle whose bounding box reaches the rectangle [x0, x1] × [z0, z1] passes `test` (each looked at
+ *  once or more, in no particular order: for a yes or no). */
+export function anyIn(obs: readonly Obstacle[], x0: number, x1: number, z0: number, z1: number, test: (o: Obstacle) => boolean): boolean {
+  const hit = (o: Obstacle) => !(o.bx1 < x0 || o.bx0 > x1 || o.bz1 < z0 || o.bz0 > z1) && test(o);
+  if (obs.length <= SMALL) return obs.some(hit);
+  const g = gridOf(obs);
+  const i0 = Math.max(0, Math.floor((x0 - g.x0) / CELL)), i1 = Math.min(g.nx - 1, Math.floor((x1 - g.x0) / CELL));
+  const j0 = Math.max(0, Math.floor((z0 - g.z0) / CELL)), j1 = Math.min(g.nz - 1, Math.floor((z1 - g.z0) / CELL));
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) for (const k of g.cells[j * g.nx + i]) if (hit(obs[k])) return true;
+  return false;
+}

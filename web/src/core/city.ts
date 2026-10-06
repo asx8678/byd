@@ -11,6 +11,7 @@ import { wrapPi, type Pt } from './math';
 import { exactCheck, planBack, type Pose } from './planner';
 import { makeScene, type Bay, type Kerb, type Obstacle, type Rect, type Scene, type SceneObstacleSpec, type SceneSpec } from './scene';
 import type { Vehicle } from './vehicle';
+import { buildGraphCity, frameDir, framePt, frameST, type GraphInfo, type GraphMapSpec, type StreetFrame } from './graphMap';
 
 export interface SideSpec { park?: number; walk: number }
 export interface RoadSpec { id: string; name: string; axis: 'x' | 'y'; at: number; lane: number; limit: number; right: SideSpec; left: SideSpec }
@@ -44,6 +45,8 @@ export interface StreetSide { park: number; walk: number; th: number; hw: number
 export interface Street {
   id: string; name: string; limit: number; along: 'x' | 'z'; c: number; lane: number; s0: number; s1: number;
   side: Record<1 | -1, StreetSide>;
+  /** A street on a graph map (core/graphMap.ts), at any angle: its frame. along and c then mean nothing. */
+  f?: StreetFrame;
 }
 /** A free space the chosen car fits: guaranteed when the fill promised it, parkable once someone has asked whether the
  *  route planner can park the car in it (see checkSlot). th is the heading you drive along when you stop beside it, length
@@ -67,17 +70,26 @@ export interface CityLayers {
   streets: Street[];
   lots: { name: string; rect: Rect; gate: Rect; at: Pt; th: number }[];   // the surface, the driveway, where the name goes
   arrows: { x: number; z: number; th: number }[];                        // on one-way aisles, the way they are driven
+  /** A graph map: the road surface (each street between its corners, and each junction), drawn instead of the ring and
+   *  blocks, and whose map it is. */
+  surface?: Pt[][]; credit?: string;
 }
-export interface CityMap { spec: MapSpec; seed: number; drive: Drive; scene: Scene; streets: Street[]; lots: Lot[]; slots: Slot[]; start: Pose; junctions: Rect[] }
+export interface CityMap { spec: AnyMapSpec; seed: number; drive: Drive; scene: Scene; streets: Street[]; lots: Lot[]; slots: Slot[]; start: Pose; junctions: Rect[]; graph?: GraphInfo }
+/** A map file: a grid district (format 1) or a graph of streets (format 2, from OpenStreetMap). */
+export type AnyMapSpec = MapSpec | GraphMapSpec;
+export const isGraph = (spec: AnyMapSpec): spec is GraphMapSpec => (spec as { format: number }).format === 2;
 
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
 /** No parking this close to a junction: 5 m from where the kerbs would meet, and clear of the corner's curve. */
 export const clearOf = (corner: number): number => Math.max(5, corner + 1);
 
 /** A point of a street at a distance s along it and t across (towards side +1). */
-export function streetPt(st: Street, s: number, t: number): Pt { return st.along === 'x' ? [s, st.c + t] : [st.c + t, s]; }
+export function streetPt(st: Street, s: number, t: number): Pt { return st.f ? framePt(st.f, s, t) : st.along === 'x' ? [s, st.c + t] : [st.c + t, s]; }
+/** A map point's s along a street and t across it (towards side +1). */
+export function streetST(st: Street, x: number, z: number): [number, number] { return st.f ? frameST(st.f, x, z) : st.along === 'x' ? [x, z - st.c] : [z, x - st.c]; }
 /** Which way along the street the traffic on a side drives: +1 towards s1, -1 towards s0. */
 export function sideDir(st: Street, side: 1 | -1): 1 | -1 {
+  if (st.f) return frameDir(st, side);
   const th = st.side[side].th;
   return (st.along === 'x' ? Math.cos(th) > 0 : Math.sin(th) < 0) ? 1 : -1;
 }
@@ -112,7 +124,8 @@ export function roundRect([x0, x1, z0, z1]: Rect, r: number, n: number): Pt[] {
  * the road, or to `drive`: driving on the left, everything that faces the traffic turns round (the parked cars, the
  * spaces, where you start), and the roads, kerbs and who is parked where stay as they are.
  */
-export function buildCity(spec: MapSpec, v: Vehicle, seed: number, drive: Drive = spec.drive): CityMap {
+export function buildCity(spec: AnyMapSpec, v: Vehicle, seed: number, drive: Drive = spec.drive): CityMap {
+  if (isGraph(spec)) return buildGraphCity(spec, v, seed, drive);
   const rnd = mulberry32(seed * 7907 + 17), r = (a: number, b: number) => a + (b - a) * rnd();
   const R = spec.corner ?? 6, [bx0, by0, bx1, by1] = spec.bounds, bounds: Rect = [bx0, bx1, -by1, -by0];
   const streets = spec.roads.map(r => toStreet(r, drive));
@@ -359,6 +372,16 @@ function row([x0, x1, z0, z1]: Rect, horizontal: boolean, rnd: () => number, bui
 
 /** The street a point is on (its carriageway), preferring the one running the way th points. */
 export function streetAt(city: CityMap, x: number, z: number, th = 0): Street | null {
+  if (city.graph) {   // a graph map: the street whose carriageway it is on, the one running most nearly the way th points
+    let best: Street | null = null, bc = -1;
+    for (const st of city.streets) {
+      const [s, t] = frameST(st.f!, x, z);
+      if (s < 0 || s > st.f!.len || t < -st.side[-1].hw || t > st.side[1].hw) continue;
+      const c = Math.abs(Math.cos(th - Math.atan2(-st.f!.uz, st.f!.ux)));
+      if (c > bc) { bc = c; best = st; }
+    }
+    return best;
+  }
   const on = city.streets.filter(st => {
     const [s, t] = st.along === 'x' ? [x, z - st.c] : [z, x - st.c];
     return s >= st.s0 && s <= st.s1 && t >= -st.side[-1].hw && t <= st.side[1].hw;
@@ -440,7 +463,7 @@ export function slotNear(city: CityMap, v: Vehicle, x: number, z: number, th: nu
     }
     if (Math.abs(wrapPi(th - s.th)) > 25 * Math.PI / 180) continue;
     const st = s.street, sd = st.side[s.side], dir = sideDir(st, s.side);
-    const [along, across] = st.along === 'x' ? [rx, mz - st.c] : [rz, mx - st.c];
+    const [along, across] = st.f ? [frameST(st.f, rx, rz)[0], frameST(st.f, mx, mz)[1]] : st.along === 'x' ? [rx, mz - st.c] : [rz, mx - st.c];
     const lat = sd.hw - s.side * across;   // the car's middle from the kerb
     if (lat < sd.park + v.W / 2 - 0.4 || lat > sd.park + st.lane + 1.0) continue;
     const front = dir > 0 ? s.a1 : s.a0, u = (along - front) * dir;   // the back bumper past the space's front end
@@ -509,6 +532,23 @@ export function localScene(city: CityMap, slot: Slot): Scene {
     return local;
   }
   const st = slot.street;
+  if (st.f) {   // a street at an angle: 25 m either side of the space along it, as a box round that (the planner's area)
+    const f = st.f, s0 = Math.max(-1, slot.a0 - 25), s1 = Math.min(f.len + 1, slot.a1 + 25), t0 = -st.side[-1].hw - 1.5, t1 = st.side[1].hw + 1.5, key = `${st.id}:${Math.round(s0)}:${Math.round(s1)}`, had = byKey.get(key);
+    if (had) return had;
+    const cs = [streetPt(st, s0, t0), streetPt(st, s1, t0), streetPt(st, s1, t1), streetPt(st, s0, t1)];
+    const lot: Rect = [Math.min(...cs.map(p => p[0])), Math.max(...cs.map(p => p[0])), Math.min(...cs.map(p => p[1])), Math.max(...cs.map(p => p[1]))];
+    const inLot = (o: Obstacle) => !(o.bx1 < lot[0] || o.bx0 > lot[1] || o.bz1 < lot[2] || o.bz0 > lot[3]);
+    const kerbs = sc.kerbs.filter((k: Kerb) => {
+      const dx = k.b[0] - k.a[0], dz = k.b[1] - k.a[1], l = Math.hypot(dx, dz);
+      if (l <= 2 || Math.abs(dx * f.ux + dz * f.uz) / l <= 0.999) return false;
+      const [sa, ta] = streetST(st, k.a[0], k.a[1]), [sb] = streetST(st, k.b[0], k.b[1]);
+      return ta >= t0 && ta <= t1 && Math.max(sa, sb) > s0 && Math.min(sa, sb) < s1;
+    });
+    const bays = Object.fromEntries(city.slots.filter(q => q.kind === 'kerb' && q.street === st && q.a1 > s0 && q.a0 < s1).map(q => [q.id, q.bay]));
+    const local: Scene = { ...sc, id: `${sc.id}:${key}`, obstacles: sc.obstacles.filter(inLot), kerbs, bays, defaultBay: slot.id, lot, areaView: lot, city: undefined };
+    byKey.set(key, local);
+    return local;
+  }
   const xs = (st.along === 'x' ? city.junctions.map(j => [j[0], j[1]]) : city.junctions.map(j => [j[2], j[3]])).sort((a, b) => a[0] - b[0]);
   let s0 = st.s0, s1 = st.s1;
   for (const [j0, j1] of xs) { if (j1 <= slot.a0 && j1 > s0) s0 = j1; if (j0 >= slot.a1 && j0 < s1) s1 = j0; }

@@ -3,11 +3,11 @@
 // always give the same district) and kept for the next job. A check job has the route planner try to park the car in
 // each space in the order asked (nearest your start first), reporting each as it goes; a par job plans the route into
 // one space from where the try began. The game runs one worker for each kind, so par never waits behind the checks.
-import { buildCity, checkSlot, localScene, type CityMap, type Drive, type MapSpec } from './core/city';
+import { buildCity, checkSlot, localScene, type AnyMapSpec, type CityMap, type Drive } from './core/city';
 import { planBack, type Piece, type Pose } from './core/planner';
 import { makeVehicle, type Vehicle, type VehicleSpec } from './core/vehicle';
 
-interface Job { spec: MapSpec; car: VehicleSpec; rearDeg: number; seed: number; drive: Drive }
+interface Job { spec: AnyMapSpec; car: VehicleSpec; rearDeg: number; seed: number; drive: Drive }
 export interface CheckJob extends Job { kind: 'check'; order: string[] }
 export interface CheckDone { kind: 'check'; seed: number; id: string; parkable: boolean }
 export interface ParJob extends Job { kind: 'par'; slot: string; from: Pose; ticket: number }

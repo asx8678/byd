@@ -14,6 +14,7 @@ export interface LevelHooks {
   playGarage(): void;
   playCity(fresh: boolean): void;   // the street map, its last layout or a new one
   playDistrict(fresh: boolean): void;   // a made-up district at the chosen level, the last one or a new one
+  playReal(fresh: boolean): void;       // the map of real streets (OpenStreetMap), its last layout or a new one
 }
 let hooks: LevelHooks;
 
@@ -23,7 +24,7 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''):
 /** The street map's entry: its name, a line under it, the best stars there. */
 export interface CityEntry { name: string; sub: string; stars: number }
 /** Refresh the sheet: best stars, and which one is being played (a level key, "garage", "city" or "district"). */
-export function renderLevels(playing: string, garageName: string, garageSlot: string, city: CityEntry, district: CityEntry, locked: (t: TemplateId, n: number) => boolean = () => false): void {
+export function renderLevels(playing: string, garageName: string, garageSlot: string, city: CityEntry, district: CityEntry, real: CityEntry & { credit: string }, locked: (t: TemplateId, n: number) => boolean = () => false): void {
   const d = daily();
   $('lvDailyName').textContent = `${TEMPLATE_NAMES[d.template].long} · level ${d.level}`;
   $('lvGarageName').textContent = garageName;
@@ -33,6 +34,8 @@ export function renderLevels(playing: string, garageName: string, garageSlot: st
   $('lvCity').classList.toggle('cur', playing === 'city');
   $('lvGenName').textContent = district.name; $('lvGenSub').textContent = district.sub; $('lvGenStars').textContent = starText(district.stars);
   $('lvGen').classList.toggle('cur', playing === 'district');
+  $('lvRealName').textContent = real.name; $('lvRealSub').textContent = real.sub; $('lvRealStars').textContent = starText(real.stars); $('lvRealCredit').textContent = real.credit;
+  $('lvReal').classList.toggle('cur', playing === 'real');
   const cur = /^([a-z-]+):(\d+):/.exec(playing);
   $('lvGroups').replaceChildren(...[...TEMPLATES, 'tow' as const].map(t => {
     const g = el('div', 'lvGroup'), grid = el('div', 'lvGrid');
@@ -66,6 +69,8 @@ export function bindLevels(h: LevelHooks): void {
   $('lvCityNew').addEventListener('click', () => hooks.playCity(true));
   $('lvGen').addEventListener('click', () => hooks.playDistrict(false));
   $('lvGenNew').addEventListener('click', () => hooks.playDistrict(true));
+  $('lvReal').addEventListener('click', () => hooks.playReal(false));
+  $('lvRealNew').addEventListener('click', () => hooks.playReal(true));
 }
 
 export interface ResultInfo {

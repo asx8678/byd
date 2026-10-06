@@ -7,7 +7,8 @@ import { TowCoach, axleAt, towFeedback, type TowEvent, type TowSnap } from './co
 import { towDrive } from './core/robot';
 import type { CheckDone, CheckJob, ParDone, ParJob } from './cityCheck.worker';
 import CheckWorker from './cityCheck.worker?worker&inline';
-import { buildCity, checkSlot, localScene, lotAt, parkStart, slotMid, slotNear, slotPlace, streetAt, type CityMap, type MapSpec, type Slot } from './core/city';
+import { buildCity, checkSlot, localScene, lotAt, parkStart, slotMid, slotNear, slotPlace, streetAt, type AnyMapSpec, type CityMap, type Slot } from './core/city';
+import type { GraphMapSpec } from './core/graphMap';
 import { districtId, districtLevel, generateDistrict } from './core/district';
 import { alongHeading, lotFit } from './core/lot';
 import { facesRight, parkedIn } from './core/parking';
@@ -253,10 +254,12 @@ const refreshLevels = () => {
   const v = chosenCar(), map = MAPS.harbour, made = city && districtLevel(city.map.spec.id) !== null;
   // the made-up district at the chosen level: the one you are in, or the one its last layout makes
   const gl = +settings.district, gid = districtId(gl), gSeed = made && city!.map.spec.id === gid ? city!.map.seed : citySeed(gid), gen = generateDistrict(gSeed, gl);
+  const real = MAPS.agadir as GraphMapSpec, onReal = city?.map.spec.id === real.id && !streetLs;
   const word = gl <= 3 ? 'roomy' : gl >= 8 ? 'tight' : 'average';
-  renderLevels(level ? level.key : lesson ? '' : city ? (made ? 'district' : 'city') : 'garage', garageName(), garageSlot(),
+  renderLevels(level ? level.key : lesson || streetLs ? '' : city ? (made ? 'district' : onReal ? 'real' : 'city') : 'garage', garageName(), garageSlot(),
     { name: map.name, sub: `Drive around, then park on the street${map.lots?.length ? ' or in a car park' : ''} · layout ${city && !made ? city.map.seed : citySeed(map.id)}`, stars: bestStars(`city:${map.id}`) },
     { name: gen.name, sub: `Made up for you, ${word} · ${gen.roads.length} streets${gen.lots?.length ? `, ${gen.lots.length === 1 ? 'a car park' : `${gen.lots.length} car parks`}` : ''} · layout ${gSeed}`, stars: bestStars(`city:${gid}`) },
+    { name: real.name, sub: `Real streets, from OpenStreetMap · traffic lights, one-way streets · layout ${onReal ? city!.map.seed : citySeed(real.id)}`, stars: bestStars(`city:${real.id}`), credit: `Map data ${real.credit}. Widths, speed limits and who gives way are the game's own.` },
     (t, n) => !isPro() && levelIsPro(t, n, 1));
   markLocked();
   renderCourse(lesson ? lesson.L.def.id : streetLs ? streetLs.L.def.id : null, v);
@@ -268,7 +271,7 @@ const newSeed = () => 1 + Math.floor(Math.random() * 99999);
 // ---- the street ----
 
 /** A street map by its id: a hand-made one, or a made-up district (gen5: level 5) from its layout number. */
-const mapFor = (id: string, seed: number): MapSpec | null => MAPS[id] ?? (districtLevel(id) !== null ? generateDistrict(seed, districtLevel(id)!) : null);
+const mapFor = (id: string, seed: number): AnyMapSpec | null => MAPS[id] ?? (districtLevel(id) !== null ? generateDistrict(seed, districtLevel(id)!) : null);
 /** A district for the chosen car (its free spaces are worked out for it): its last layout, or a new one. */
 function playCity(fresh: boolean, id = 'harbour', seed = fresh ? newSeed() : citySeed(id)): void {
   if (!isPro() && districtIsPro(districtLevel(id) ?? 0)) { openPro('The tight districts are part of Pro.'); return; }
@@ -461,7 +464,7 @@ function streetSounds(): void {
     if (t.t - c.honk < 0.3 && d < 80) toot(1 / (1 + d / 15), c.imp);
   }
 }
-bindLevels({ playLevel, playGarage, playCity, playDistrict: fresh => playCity(fresh, districtId(+settings.district)) });
+bindLevels({ playLevel, playGarage, playCity, playDistrict: fresh => playCity(fresh, districtId(+settings.district)), playReal: fresh => playCity(fresh, 'agadir') });
 
 // ---- street lessons ----
 

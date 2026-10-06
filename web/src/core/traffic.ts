@@ -35,13 +35,15 @@
 // Everything steps with the simulation's fixed steps and draws random numbers only from its own seed, so the same
 // district and seed give the same traffic, and a snapshot between steps brings it back exactly (replays, rewinds).
 import { footprint } from './car';
-import { sideDir, streetPt, type CityMap, type Drive, type KerbSlot, type Street } from './city';
+import { sideDir, streetPt, streetST, type CityMap, type Drive, type KerbSlot, type Street } from './city';
 import type { CarPart } from './collision';
 import { circleHitsPoly, polysOverlap } from './geometry';
+import { inPoly } from './graphMap';
+import { buildGraphNetwork } from './graphNet';
 import { wrapPi, type Pt } from './math';
 import type { Obstacle, Rect } from './scene';
 import type { Vehicle } from './vehicle';
-import { nearby } from './world';
+import { anyIn, nearby } from './world';
 
 /** A line (k = 0) or an arc of curvature k (+ turns left), starting s0 along its path at (x, z), heading h. */
 export interface Piece { s0: number; len: number; x: number; z: number; h: number; k: number }
@@ -64,12 +66,16 @@ export interface El {
   conflicts: Conflict[];         // a path: the other paths through its junction it crosses or merges with
   siblings: { el: number; shared: number }[];   // a path: the others from the same lane, and how far along them cars on the two still overlap
   name: string;                  // the street's (a lane) or the junction's (a path)
+  /** A graph map's way between its edges, well off the map (core/graphNet.ts): never a way for you. */
+  portal?: true;
 }
 export type Control = 'lights' | 'giveway' | 'none';
 /** Where a lane meets a junction with lights or a give-way line: the line across its half of the street, where the light
  *  stands (on the pavement by the line's kerb end), and which way you face. */
 export interface Approach { el: number; j: number; line: [Pt, Pt]; head: Pt; th: number; minor: boolean }
-export interface Junction { id: string; name: string; rect: Rect; control: Control; arms: number; offset: number; minor: 'x' | 'z' | null; approaches: Approach[] }
+export interface Junction { id: string; name: string; rect: Rect; control: Control; arms: number; offset: number; minor: 'x' | 'z' | null; approaches: Approach[]; poly?: Pt[] }
+/** Whether a point is in a junction: its outline on a graph map, its rectangle on the grid. */
+export const inJunction = (J: Junction, p: Pt): boolean => (J.poly ? inPoly(p, J.poly) : p[0] >= J.rect[0] && p[0] <= J.rect[1] && p[1] >= J.rect[2] && p[1] <= J.rect[3]);
 /** ok[type][el]: whether that size of car fits the lane or path (tyres off the kerbs, body clear of the parked cars and
  *  lamp posts) and can carry on from it to somewhere it fits again. */
 export interface Network { map: CityMap; drive: Drive; els: El[]; junctions: Junction[]; laneLen: number; ok: boolean[][] }
@@ -103,12 +109,15 @@ const endOf = (p: Piece): [number, number, number] => { const h = p.h + p.k * p.
 // cars keep 20 cm in from the middle of their lane. Where paths meet is found with the biggest car in traffic (a pickup,
 // 15 cm round it) placed every 50 cm along each, from where its nose reaches the junction to where its tail leaves it:
 // two paths share a zone where those boxes overlap (and 50 cm either side), measured by where the car's rear axle is.
-const OFF = 0.2, WIDE = 2, SAMPLE = 0.25, ZONE = 0.5, BIG = { L: 6.22, W: 2.38, OVR: 1.39 };
+export const OFF = 0.2, WIDE = 2, SAMPLE = 0.25, ZONE = 0.5, BIG = { L: 6.22, W: 2.38, OVR: 1.39 };
+/** How far a street's lane runs from its centre line: half a lane less OFF (keeping clear of the oncoming lane), or on a
+ *  one-way street, its middle. */
+export const laneT = (st: Street): number => (st.f?.oneway ? 0 : st.lane / 2 - OFF);
 const nets = new WeakMap<CityMap, Network>();
 /** A district's road network, made once. */
 export function networkOf(map: CityMap): Network {
   let n = nets.get(map);
-  if (!n) nets.set(map, n = buildNetwork(map));
+  if (!n) nets.set(map, n = map.graph ? buildGraphNetwork(map) : buildNetwork(map));
   return n;
 }
 
@@ -192,65 +201,75 @@ function buildNetwork(map: CityMap): Network {
       const e: El = { id: els.length, kind: 'path', pieces, len: s, limit: a.limit, kmax: Math.max(...pieces.map(p => Math.abs(p.k))), next: [b.id], from: a.id, j: ji, axis: a.axis, street: a.street, side: a.side, turn, dh, conflicts: [], siblings: [], name: J.name };
       els.push(e); paths.push(e); a.next.push(e.id);
     }
-    // each lane's line set back, 25 cm at a time, until the biggest car waiting with its nose at it is clear of everything
-    // the paths from the other lanes sweep (a turning car's front swings across the middle of a narrow street); its paths
-    // then start with that much more straight
-    const sweep = (q: El): Pt[][] => { const out: Pt[][] = []; for (let t = 0; t <= q.len + BIG.OVR + 1e-9; t += SAMPLE) { const [x, z, h] = poseOn(q, t); out.push(boxAt(BIG, x, z, h)); } return out; };
-    const swept = paths.map(sweep);
-    for (const a of ins) {
-      let back = 0;
-      for (; back < 8; back += SAMPLE) {
-        const [x, z, h] = poseOn(a, a.len - back - (BIG.L - BIG.OVR)), wait = boxAt(BIG, x, z, h);
-        if (!paths.some((q, i) => q.from !== a.id && swept[i].some(b => polysOverlap(wait, b)))) break;
-      }
-      if (back <= 0) continue;
-      a.len -= back; a.pieces[0].len -= back;
-      for (const q of paths) if (q.from === a.id) {
-        const [x, z, h] = poseOn(a, a.len);
-        for (const pc of q.pieces) pc.s0 += back;
-        q.pieces.unshift({ s0: 0, len: back, x, z, h, k: 0 }); q.len += back;
-      }
-    }
-    // where the paths come close: from the same lane they overlap at first (the car ahead on either is ahead); from
-    // different lanes they share a zone, and the junction's rules say who goes
-    const boxes = paths.map(p => { const out: { s: number; x: number; z: number; box: Pt[] }[] = []; for (let s = -(BIG.L - BIG.OVR); s <= p.len + BIG.OVR + 1e-9; s += ZONE) { const [x, z, h] = poseOn(p, s); out.push({ s, x, z, box: boxAt(BIG, x, z, h) }); } return out; });
-    const reach = Math.hypot(BIG.L - BIG.OVR, BIG.W / 2) * 2;
-    for (let i = 0; i < paths.length; i++) for (let k = i + 1; k < paths.length; k++) {
-      const p = paths[i], q = paths[k], P = boxes[i], Q = boxes[k], same = p.from === q.from;
-      if (same) {   // from the same lane: the one ahead is followed while they overlap side by side
-        let shared = 0;
-        for (let m = 0; m < Math.min(P.length, Q.length); m++) if (P[m].s >= 0 && polysOverlap(P[m].box, Q[m].box)) shared = P[m].s;
-        p.siblings.push({ el: q.id, shared }); q.siblings.push({ el: p.id, shared });
-      }
-      // a long car's tail can still be in the way of the next one from its lane, going another way: past the line, the
-      // first one in goes first
-      let a0 = Infinity, a1 = -Infinity, b0 = Infinity, b1 = -Infinity;
-      for (const A of P) for (const B of Q) {
-        if ((same && (A.s < 0 || B.s < 0)) || Math.abs(A.x - B.x) >= reach || Math.abs(A.z - B.z) >= reach || !polysOverlap(A.box, B.box)) continue;
-        a0 = Math.min(a0, A.s); a1 = Math.max(a1, A.s); b0 = Math.min(b0, B.s); b1 = Math.max(b1, B.s);
-      }
-      if (a0 === Infinity) continue;
-      // and what lies between two of the places looked at, but never before a nose is over the line: a car waiting at its
-      // line is not in anyone's way
-      const first = -(BIG.L - BIG.OVR);
-      a0 = Math.max(first, a0 - ZONE); a1 += ZONE; b0 = Math.max(first, b0 - ZONE); b1 += ZONE;
-      const rule = same ? 'first' : ruleOf(J, p, q);
-      p.conflicts.push({ el: q.id, rule, a0, a1, b0, b1 });
-      q.conflicts.push({ el: p.id, rule: rule === 'yield' ? 'go' : rule === 'go' ? 'yield' : rule, a0: b0, a1: b1, b0: a0, b1: a1 });
-    }
-    // the stop lines (lights) and give-way lines, across each lane's half of the street where it meets the junction
-    if (J.control !== 'none') for (const a of ins) {
+    settleJunction(J, ji, ins, paths, a => {
       const st = byId.get(a.street)!, [ex, ez, eh] = poseOn(a, a.len), at = st.along === 'x' ? ex : ez, hw = st.side[a.side].hw;
-      J.approaches.push({ el: a.id, j: ji, line: [streetPt(st, at, 0), streetPt(st, at, a.side * hw)], head: streetPt(st, at, a.side * (hw + 0.7)), th: eh, minor: J.control === 'giveway' && a.axis === J.minor });
-    }
+      return { line: [streetPt(st, at, 0), streetPt(st, at, a.side * hw)], head: streetPt(st, at, a.side * (hw + 0.7)), th: eh };
+    });
   });
   return { map, drive, els, junctions, laneLen: lanes.reduce((m, l) => m + l.len, 0), ok: TYPES.map(ty => fitting(map, els, ty)) };
+}
+
+/** A junction's paths made, the rest of it: each lane's line set back until a car waiting at it is clear of the other
+ *  paths, which paths share a zone and who goes first there, and the stop or give-way line of each lane in (lineOf: where
+ *  it is, across the lane's half of the street at its end). */
+export function settleJunction(J: Junction, ji: number, ins: El[], paths: El[], lineOf: (a: El) => { line: [Pt, Pt]; head: Pt; th: number }): void {
+  // each lane's line set back, 25 cm at a time, until the biggest car waiting with its nose at it is clear of everything
+  // the paths from the other lanes sweep (a turning car's front swings across the middle of a narrow street); its paths
+  // then start with that much more straight
+  const sweep = (q: El): Pt[][] => { const out: Pt[][] = []; for (let t = 0; t <= q.len + BIG.OVR + 1e-9; t += SAMPLE) { const [x, z, h] = poseOn(q, t); out.push(boxAt(BIG, x, z, h)); } return out; };
+  const swept = paths.map(sweep);
+  for (const a of ins) {
+    let back = 0;
+    for (; back < Math.min(8, a.len - 1); back += SAMPLE) {   // (never the whole lane: a graph map has short ones)
+      const [x, z, h] = poseOn(a, a.len - back - (BIG.L - BIG.OVR)), wait = boxAt(BIG, x, z, h);
+      if (!paths.some((q, i) => q.from !== a.id && swept[i].some(b => polysOverlap(wait, b)))) break;
+    }
+    if (back <= 0) continue;
+    a.len -= back; a.pieces[0].len -= back;
+    for (const q of paths) if (q.from === a.id) {
+      const [x, z, h] = poseOn(a, a.len);
+      for (const pc of q.pieces) pc.s0 += back;
+      q.pieces.unshift({ s0: 0, len: back, x, z, h, k: 0 }); q.len += back;
+    }
+  }
+  // where the paths come close: from the same lane they overlap at first (the car ahead on either is ahead); from
+  // different lanes they share a zone, and the junction's rules say who goes
+  const boxes = paths.map(p => { const out: { s: number; x: number; z: number; box: Pt[] }[] = []; for (let s = -(BIG.L - BIG.OVR); s <= p.len + BIG.OVR + 1e-9; s += ZONE) { const [x, z, h] = poseOn(p, s); out.push({ s, x, z, box: boxAt(BIG, x, z, h) }); } return out; });
+  const reach = Math.hypot(BIG.L - BIG.OVR, BIG.W / 2) * 2;
+  for (let i = 0; i < paths.length; i++) for (let k = i + 1; k < paths.length; k++) {
+    const p = paths[i], q = paths[k], P = boxes[i], Q = boxes[k], same = p.from === q.from;
+    if (same) {   // from the same lane: the one ahead is followed while they overlap side by side
+      let shared = 0;
+      for (let m = 0; m < Math.min(P.length, Q.length); m++) if (P[m].s >= 0 && polysOverlap(P[m].box, Q[m].box)) shared = P[m].s;
+      p.siblings.push({ el: q.id, shared }); q.siblings.push({ el: p.id, shared });
+    }
+    // a long car's tail can still be in the way of the next one from its lane, going another way: past the line, the
+    // first one in goes first
+    let a0 = Infinity, a1 = -Infinity, b0 = Infinity, b1 = -Infinity;
+    for (const A of P) for (const B of Q) {
+      if ((same && (A.s < 0 || B.s < 0)) || Math.abs(A.x - B.x) >= reach || Math.abs(A.z - B.z) >= reach || !polysOverlap(A.box, B.box)) continue;
+      a0 = Math.min(a0, A.s); a1 = Math.max(a1, A.s); b0 = Math.min(b0, B.s); b1 = Math.max(b1, B.s);
+    }
+    if (a0 === Infinity) continue;
+    // and what lies between two of the places looked at, but never before a nose is over the line: a car waiting at its
+    // line is not in anyone's way
+    const first = -(BIG.L - BIG.OVR);
+    a0 = Math.max(first, a0 - ZONE); a1 += ZONE; b0 = Math.max(first, b0 - ZONE); b1 += ZONE;
+    const rule = same ? 'first' : ruleOf(J, p, q);
+    p.conflicts.push({ el: q.id, rule, a0, a1, b0, b1 });
+    q.conflicts.push({ el: p.id, rule: rule === 'yield' ? 'go' : rule === 'go' ? 'yield' : rule, a0: b0, a1: b1, b0: a0, b1: a1 });
+  }
+  // the stop lines (lights) and give-way lines, across each lane's half of the street where it meets the junction
+  if (J.control !== 'none') for (const a of ins) {
+    const q = lineOf(a);
+    J.approaches.push({ el: a.id, j: ji, line: q.line, head: q.head, th: q.th, minor: J.control === 'giveway' && a.axis === J.minor });
+  }
 }
 
 /** Where a size of car fits: driven along every lane and path, 50 cm at a time, it and its tyres (a little oversize) must stay off
  *  the kerbs and its body clear of everything else; then only what it can carry on from to more of the same (a long car
  *  that cannot take a tight corner of the ring stays off the lane leading to it). */
-function fitting(map: CityMap, els: El[], ty: CarType): boolean[] {
+export function fitting(map: CityMap, els: El[], ty: CarType): boolean[] {
   const use = els.map(e => sweepClear(map, e.pieces, e.len, ty, 2 * SAMPLE));
   for (let changed = true; changed;) {
     changed = false;
@@ -261,16 +280,15 @@ function fitting(map: CityMap, els: El[], ty: CarType): boolean[] {
 
 /** Whether a size of car driven along these pieces keeps its body (a little oversize) clear of everything on the map and
  *  its tyres off the kerbs, looked at every `step` m (and its body where `inside` says it may be). */
-function sweepClear(map: CityMap, pieces: readonly Piece[], len: number, ty: CarType, step = SAMPLE, inside?: (box: Pt[]) => boolean): boolean {
+export function sweepClear(map: CityMap, pieces: readonly Piece[], len: number, ty: CarType, step = SAMPLE, inside?: (box: Pt[]) => boolean): boolean {
   const obs = map.scene.obstacles, tr = ty.W - 0.26, big = { L: ty.L + 0.1, W: ty.W + 0.06, OVR: ty.OVR + 0.05 };
   const tyres: Pt[][] = [0, ty.WB].flatMap(ax => [-1, 1].map(sg => [[ax - 0.4, sg * tr / 2 - 0.14], [ax + 0.4, sg * tr / 2 - 0.14], [ax + 0.4, sg * tr / 2 + 0.14], [ax - 0.4, sg * tr / 2 + 0.14]] as Pt[]));
   for (let s = 0; s <= len + 1e-9; s += step) {
     const [x, z, h] = poseOn({ pieces }, s), box = boxAt(big, x, z, h);
     if (inside && !inside(box)) return false;
-    for (const o of nearby(obs, x, z, ty.L + 1)) {
-      if (o.cls === 'kerb') { if (o.kind === 'poly' && tyres.some(w => polysOverlap(footprint(x, z, h, w), o.pts))) return false; continue; }
-      if (o.kind === 'poly' ? polysOverlap(box, o.pts) : circleHitsPoly(o.x, o.z, o.r, box)) return false;
-    }
+    // (the box's bounding box first: nothing outside it can touch it)
+    const bx0 = Math.min(box[0][0], box[1][0], box[2][0], box[3][0]), bx1 = Math.max(box[0][0], box[1][0], box[2][0], box[3][0]), bz0 = Math.min(box[0][1], box[1][1], box[2][1], box[3][1]), bz1 = Math.max(box[0][1], box[1][1], box[2][1], box[3][1]);
+    if (anyIn(obs, bx0, bx1, bz0, bz1, o => (o.cls === 'kerb' ? o.kind === 'poly' && tyres.some(w => polysOverlap(footprint(x, z, h, w), o.pts)) : o.kind === 'poly' ? polysOverlap(box, o.pts) : circleHitsPoly(o.x, o.z, o.r, box)))) return false;
   }
   return true;
 }
@@ -443,7 +461,7 @@ function laneOf(net: Network, sl: KerbSlot): El | null {
   const st = sl.street, dir = sideDir(st, sl.side);
   return net.els.find(e => {
     if (e.kind !== 'lane' || e.street !== st.id || e.side !== sl.side) return false;
-    const p = e.pieces[0], a = st.along === 'x' ? p.x : p.z, b = a + dir * e.len;
+    const p = e.pieces[0], a = streetST(st, p.x, p.z)[0], b = a + dir * e.len;
     return Math.min(a, b) <= sl.a0 && Math.max(a, b) >= sl.a1;
   }) ?? null;
 }
@@ -469,9 +487,9 @@ function makeExit(net: Network, sl: KerbSlot, type: number): Kerbside | null {
   if (sl.length < 0.3 + ty.L + 1.2 || !lane || !net.ok[type][lane.id]) return null;
   const rear = dir > 0 ? sl.a0 : sl.a1, [x0, z0] = streetPt(st, rear + dir * (0.3 + ty.OVR), side * (sd.hw - 0.2 - ty.W / 2)), h = sd.th;
   const ux = Math.cos(h), uz = -Math.sin(h), lp = lane.pieces[0], s0 = (x0 - lp.x) * ux + (z0 - lp.z) * uz;
-  const D = sd.hw - 0.2 - ty.W / 2 - (st.lane / 2 - OFF), k1 = net.drive === 'right' ? 1 : -1;   // away from the kerb: left, keeping right
+  const D = sd.hw - 0.2 - ty.W / 2 - laneT(st), k1 = net.drive === 'right' ? 1 : -1;   // away from the kerb: left, keeping right
   if (s0 < 12 || !clearOfTraffic(net, boxAt(ty, x0, z0, h))) return null;   // a car coming into the lane can stop behind it
-  const across = (p: Pt) => side * ((st.along === 'x' ? p[1] : p[0]) - st.c), R0 = ty.L > 5.5 ? 6 : ty.L > 4.8 ? 5 : 4.5;
+  const across = (p: Pt) => side * streetST(st, p[0], p[1])[1], R0 = ty.L > 5.5 ? 6 : ty.L > 4.8 ? 5 : 4.5;
   let best: { pieces: Piece[]; len: number; X: number } | null = null;
   for (let R1 = R0; R1 <= R0 + 2 + 1e-9; R1 += 0.5) for (const R2 of [R1, 6, 8, 10, 12, 15, 18, 22, 27]) for (let deg = 50; deg >= 10; deg -= 4) {
     const p = deg * Math.PI / 180, dl = (D - (R1 + R2) * (1 - Math.cos(p))) / Math.sin(p), X = (R1 + R2) * Math.sin(p) + dl * Math.cos(p);
@@ -486,7 +504,7 @@ function makeDive(net: Network, sl: KerbSlot, type: number): Kerbside | null {
   const ty = TYPES[type], st = sl.street, sd = st.side[sl.side], dir = sideDir(st, sl.side), side = sl.side, lane = laneOf(net, sl);
   if (sl.length < ty.L + 1 || !lane || !net.ok[type][lane.id]) return null;
   const h = sd.th, ux = Math.cos(h), uz = -Math.sin(h), lp = lane.pieces[0], k1 = net.drive === 'right' ? -1 : 1;   // towards the kerb: right, keeping right
-  const front = dir > 0 ? sl.a1 : sl.a0, back = dir > 0 ? sl.a0 : sl.a1, tLane = st.lane / 2 - OFF, nose = ty.L - ty.OVR;
+  const front = dir > 0 ? sl.a1 : sl.a0, back = dir > 0 ? sl.a0 : sl.a1, tLane = laneT(st), nose = ty.L - ty.OVR;
   let best: { pieces: Piece[]; len: number; X: number; s0: number; x0: number; z0: number } | null = null;
   for (const psi of [0, 3, 6]) for (const gF of [0.5, 0.8]) for (const gK of [0.25, 0.4]) {
     // the end: the front bumper's middle gF short of the space's front, the kerb-side front corner gK from the kerb

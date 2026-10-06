@@ -14,11 +14,12 @@
 // then, or in the 10 s before. A stop of 3 s in a junction is blocking it, unless the lights are with you or you are
 // waiting to turn across the oncoming lane, signalling; a stop of 10 s with the middle of your car where parking is not
 // allowed is parking there.
-import { clearOf, lotAt, streetAt, type KerbSlot } from './city';
+import { clearOf, lotAt, streetAt, streetPt, type KerbSlot } from './city';
+import { inPoly } from './graphMap';
 import { COUNTRIES, type Country, type CountryId } from './country';
 import { wrapPi, type Pt } from './math';
 import type { Rect } from './scene';
-import { TYPES, lightAt, type Network, type Traffic } from './traffic';
+import { TYPES, inJunction, lightAt, type Network, type Traffic } from './traffic';
 
 export type FaultKind = 'red' | 'speed' | 'crash' | 'touch' | 'giveway' | 'signal' | 'block' | 'zone' | 'hazard';
 /** A fault: what it is, when (the simulation's clock), a banner's title and line, and a few words for the card. */
@@ -40,7 +41,7 @@ export const SPEED_SLACK = 3, SPEED_HOLD = 1, SPEED_CLEAR = 2;
  *  parked in it. */
 export interface Driven { x: number; z: number; th: number; v: number; L: number; W: number; OVR: number; drive: boolean; ind: -1 | 0 | 1; hazard: boolean; bay: string; parked: boolean }
 /** Where parking is not allowed: a zone painted on a kerb, or the kerb by a junction; what it is, and its street. */
-interface NoParking { rect: Rect; what: string; street: string }
+interface NoParking { rect: Rect; what: string; street: string; poly?: Pt[] }
 
 const inRect = (r: Rect, p: Pt) => p[0] >= r[0] && p[0] <= r[1] && p[1] >= r[2] && p[1] <= r[3];
 const ZONE_WHAT = { bus: 'a bus stop', loading: 'a loading bay', none: 'a no-parking zone', disabled: 'a disabled bay', driveway: 'a driveway' } as const;
@@ -76,7 +77,18 @@ export class Rules {
     const box = (pts: Pt[]): Rect => [Math.min(...pts.map(p => p[0])), Math.max(...pts.map(p => p[0])), Math.min(...pts.map(p => p[1])), Math.max(...pts.map(p => p[1]))];
     for (const z of m.scene.city?.zones ?? []) this.noParking.push({ rect: box(z.pts), what: ZONE_WHAT[z.kind], street: streetAt(m, z.at[0], z.at[1], z.th)?.name ?? '' });
     const R = m.spec.corner ?? 6, gap = clearOf(R);
-    for (const st of m.streets) for (const side of [1, -1] as const) {
+    // a graph map: the kerb either side of each junction, as far as its corner's curve plus `gap`
+    if (m.graph) for (const st of m.streets) for (const side of [1, -1] as const) {
+      const sd = st.side[side], f = st.f!;
+      if (!sd.park) continue;
+      const t0 = side * (sd.hw - sd.park), t1 = side * sd.hw;
+      for (const [k, [s0, s1]] of [[0, [f.kerb[side][0] - 1, f.kerb[side][0] + gap]], [1, [f.kerb[side][1] - gap, f.kerb[side][1] + 1]]] as const) {
+        if (f.edge[k]) continue;
+        const poly: Pt[] = [streetPt(st, s0, t0), streetPt(st, s1, t0), streetPt(st, s1, t1), streetPt(st, s0, t1)];
+        this.noParking.push({ rect: box(poly), poly, what: 'the kerb by a junction', street: st.name });
+      }
+    }
+    else for (const st of m.streets) for (const side of [1, -1] as const) {
       const sd = st.side[side];
       if (!sd.park) continue;
       const t0 = st.c + side * (sd.hw - sd.park), t1 = st.c + side * sd.hw, [lo, hi] = [Math.min(t0, t1), Math.max(t0, t1)];
@@ -178,15 +190,20 @@ export class Rules {
         const dh = wrapPi(p.th - v.th), way = dh > 0 ? 'left' : 'right';
         if (Math.abs(dh) >= Math.PI / 3 && !(dh > 0 ? v.left : v.right)) add('signal', 'No signal', `You turned ${way} at ${J.name} without signalling.`, `turned ${way} at ${J.name} without signalling`);
         this.visit = null; this.blockT = 0;
-      } else if (Math.abs(p.v) < 0.3 && !v.blocked && (inRect(J.rect, f) || inRect(J.rect, mid) || inRect(J.rect, back))) {
+      } else if (Math.abs(p.v) < 0.3 && !v.blocked && (inJunction(J, f) || inJunction(J, mid) || inJunction(J, back))) {
         const waiting = p.ind === -kerb && Math.abs(wrapPi(p.th - v.th)) < 0.5, go = J.control === 'lights' && v.axis !== null && lightAt(J, v.axis, clock) !== 'red';
         this.blockT = waiting || go ? 0 : this.blockT + dt;
         if (this.blockT >= 3) { v.blocked = true; add('block', 'Blocking the junction', `You stopped in the junction at ${J.name}.`, `stopped in the junction at ${J.name}`); }
       } else this.blockT = 0;
     } else {
-      const j = net.junctions.findIndex(J => J.arms >= 3 && inRect(J.rect, f));
+      const j = net.junctions.findIndex(J => J.arms >= 3 && inJunction(J, f));
       if (j >= 0) this.visit = { j, th: p.th, axis: this.axis, left: this.signalled(-1, t, 3), right: this.signalled(1, t, 3), blocked: false };
-      else { const st = streetAt(net.map, p.x, p.z, p.th); if (st) this.axis = st.along; }
+      else {
+        const st = streetAt(net.map, p.x, p.z, p.th);
+        // a graph map's street: the group of the lane going your way at the junction it comes to
+        if (st?.f) { const side = ([1, -1] as const).find(sd => Math.cos(st.side[sd].th - p.th) > 0); this.axis = (side && st.f.axis?.[side]) ?? null; }
+        else if (st) this.axis = st.along;
+      }
     }
     // pulling in to park in a space on the street, and out again
     const sl = p.bay ? this.kerbSlots.get(p.bay) : undefined;
@@ -201,7 +218,7 @@ export class Rules {
       if (!this.signalled(-kerb as -1 | 1, t, 10)) add('signal', 'No signal', `You pulled out without signalling ${kerb > 0 ? 'left' : 'right'}.`, 'pulled out without signalling');
     }
     // parking where it is not allowed: stopped for 10 s with the middle of your car there
-    const mid: Pt = [p.x + (p.L / 2 - p.OVR) * ux, p.z + (p.L / 2 - p.OVR) * uz], at = Math.abs(p.v) < 0.05 ? this.noParking.findIndex(n => inRect(n.rect, mid)) : -1;
+    const mid: Pt = [p.x + (p.L / 2 - p.OVR) * ux, p.z + (p.L / 2 - p.OVR) * uz], at = Math.abs(p.v) < 0.05 ? this.noParking.findIndex(n => inRect(n.rect, mid) && (!n.poly || inPoly(mid, n.poly))) : -1;
     this.zoneT = at >= 0 && at === this.zoneAt ? this.zoneT + dt : at >= 0 ? dt : 0; this.zoneAt = at;
     if (at >= 0 && this.zoneT >= 10 && !this.zonesHit.includes(at)) {
       const n = this.noParking[at];
