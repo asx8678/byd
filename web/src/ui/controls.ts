@@ -7,7 +7,8 @@ import { initAudio, tone } from './audio';
 import { $, openSheet } from './dom';
 import { lockDeg, saveSettings, settings, type Settings } from './settings';
 
-export interface ControlHooks { reset(): void; settingChanged(key: keyof Settings): void; levels(): void; mode(): void; indicator(dir: -1 | 1): void; hazard(): void; horn(on: boolean): void }
+/** allow: whether a Setup choice may be made (the store edition keeps some for Pro: it says so itself and returns false). */
+export interface ControlHooks { reset(): void; settingChanged(key: keyof Settings): void; levels(): void; mode(): void; indicator(dir: -1 | 1): void; hazard(): void; horn(on: boolean): void; allow?(key: keyof Settings, value: string): boolean }
 
 /** The pedals as the player holds them: Forward and Reverse in Park mode, the accelerator and the brake (0 to 1) in
  *  Drive mode. The frame loop passes them on to the car each step, unless the coach is holding one back (a lesson's
@@ -55,6 +56,10 @@ export function tickPedals(dt: number): void {
   if (bottom.key && !bottom.keyStale) bottom.keyLevel = Math.min(1, Math.max(0.3, bottom.keyLevel + 1.6 * dt));
   sync();
 }
+
+const segSyncs: (() => void)[] = [];
+/** Show the Setup rows' choices again after the settings were changed from outside (a choice kept for Pro put back). */
+export function syncSettings(): void { for (const s of segSyncs) s(); }
 
 export function bindControls(sim: Sim, hooks: ControlHooks): void {
   const inp = sim.input;
@@ -129,7 +134,9 @@ export function bindControls(sim: Sim, hooks: ControlHooks): void {
   document.querySelectorAll<HTMLElement>('.seg[data-opt]').forEach(seg => {
     const key = seg.dataset.opt as keyof Settings;
     const sync = () => seg.querySelectorAll<HTMLElement>('button').forEach(b => b.classList.toggle('on', b.dataset.v === String(settings[key])));
+    segSyncs.push(sync);
     seg.querySelectorAll<HTMLElement>('button').forEach(b => b.addEventListener('click', () => {
+      if (hooks.allow && !hooks.allow(key, b.dataset.v!)) return;
       (settings as unknown as Record<string, string>)[key] = b.dataset.v!; saveSettings(); sync();
       if (key === 'pdc') { if (settings.pdc === 'on') initAudio(); else tone(false); }
       hooks.settingChanged(key);

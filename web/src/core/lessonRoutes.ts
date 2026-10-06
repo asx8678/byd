@@ -63,8 +63,8 @@ export function routeNote(def: LessonDef, v: Vehicle, route: readonly Piece[]): 
   const ref = def.route!.pieces, out: string[] = [], sc = def.scene;
   const m0 = ref.reduce((m, p, i) => m + (i === 0 || p[0] !== ref[i - 1][0] ? 1 : 0), 0), m = route.reduce((n, p, i) => n + (i === 0 || p.dir !== route[i - 1].dir ? 1 : 0), 0);
   const same = ref.length === route.length && ref.every((p, i) => p[0] === route[i].dir && p[1] === route[i].lvl);
-  if (m !== m0) out.push(`The ${v.short} needs ${m} moves here where the Atto 2 needs ${m0}: the coach shows each one.`);
-  else if (!same) out.push(`The ${v.short}'s route here has ${route.length} steps where the Atto 2's has ${ref.length}: the coach shows each one.`);
+  if (m !== m0) out.push(`The ${v.short} needs ${m} moves here where the ${ATTO2.short} needs ${m0}: the coach shows each one.`);
+  else if (!same) out.push(`The ${v.short}'s route here has ${route.length} steps where the ${ATTO2.short}'s has ${ref.length}: the coach shows each one.`);
   if (sc && 'build' in sc && sc.build === 'angled') {
     // the start is (out + half the width) across the aisle from the bays' mouths, which run through the origin at 30°
     const s = route[0].from, across = s.x * Math.sin(Math.PI / 6) + s.z * Math.cos(Math.PI / 6) - v.W / 2;

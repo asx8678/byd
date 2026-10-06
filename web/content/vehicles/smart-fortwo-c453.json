@@ -4,6 +4,7 @@
   "name": "Smart fortwo",
   "short": "Smart",
   "basedOn": "smart fortwo coupé C453, 1.0 71 PS (2014-2024)",
+  "store": { "name": "City two-seater", "short": "Two-seater" },
   "sources": [
     "ADAC car catalogue, fortwo 453 1.0 (11/14-05/18): length 2.695, width 1.663 (1.893 with mirrors), height 1.555, wheelbase 1.873 m; 52 kW (71 PS), 0-100 km/h 14.4 s, top speed 151 km/h, kerb weight 890 kg, rear engine and rear-wheel drive, 165/65 R15 front and 185/60 R15 rear tyres; rear parking sensors were an option. https://www.adac.de/rund-ums-fahrzeug/autokatalog/marken-modelle/smart/fortwo/453/242476/",
     "Daimler's 2014 launch release (reprinted by Global Brands Magazine): turning circle 6.95 m kerb to kerb, 7.30 m wall to wall. https://www.globalbrandsmagazine.com/the-new-smart-fortwo-and-forfour-adding-a-new-shine-to-a-proven-concept/",

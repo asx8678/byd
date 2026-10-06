@@ -1,5 +1,6 @@
 // The Levels sheet (today's level, your garage, ten levels per template with your best stars) and the
 // result card that comes up when you have parked: stars, what earned them, and where to go next.
+import { TOW_CAR, vehicleFor } from '../core/content';
 import { TEMPLATES, type TemplateId } from '../core/generator/templates';
 import type { Fault } from '../core/rules';
 import type { Stars } from '../core/score';
@@ -9,7 +10,7 @@ import { fmtD, parkedCard } from './format';
 import { TEMPLATE_NAMES, bestStars, daily, seedFor } from './progress';
 
 export interface LevelHooks {
-  playLevel(t: TemplateId, level: number, seed: number): void;
+  playLevel(t: TemplateId, level: number, seed: number, daily?: boolean): void;
   playGarage(): void;
   playCity(fresh: boolean): void;   // the street map, its last layout or a new one
   playDistrict(fresh: boolean): void;   // a made-up district at the chosen level, the last one or a new one
@@ -22,7 +23,7 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''):
 /** The street map's entry: its name, a line under it, the best stars there. */
 export interface CityEntry { name: string; sub: string; stars: number }
 /** Refresh the sheet: best stars, and which one is being played (a level key, "garage", "city" or "district"). */
-export function renderLevels(playing: string, garageName: string, garageSlot: string, city: CityEntry, district: CityEntry): void {
+export function renderLevels(playing: string, garageName: string, garageSlot: string, city: CityEntry, district: CityEntry, locked: (t: TemplateId, n: number) => boolean = () => false): void {
   const d = daily();
   $('lvDailyName').textContent = `${TEMPLATE_NAMES[d.template].long} · level ${d.level}`;
   $('lvGarageName').textContent = garageName;
@@ -36,13 +37,15 @@ export function renderLevels(playing: string, garageName: string, garageSlot: st
   $('lvGroups').replaceChildren(...[...TEMPLATES, 'tow' as const].map(t => {
     const g = el('div', 'lvGroup'), grid = el('div', 'lvGrid');
     g.append(el('h4', '', TEMPLATE_NAMES[t].long));
-    if (t === 'tow') g.append(el('p', 'lvNote', 'In the Škoda Octavia estate with a box trailer, whichever car you have chosen. Each level is driven by the coach before you see it.'));
+    if (t === 'tow') g.append(el('p', 'lvNote', `In the ${vehicleFor(TOW_CAR).name} with a box trailer, whichever car you have chosen. Each level is driven by the coach before you see it.`));
     g.append(grid);
     for (let n = 1; n <= 10; n++) {
       const b = el('button'), best = bestStars(`${t}:${n}`);
       b.type = 'button'; b.dataset.t = t; b.dataset.l = String(n);
       b.setAttribute('aria-label', `${TEMPLATE_NAMES[t].long}, level ${n}${best >= 0 ? `, best ${best} of 3 stars` : ''}`);
-      b.append(el('b', '', String(n)), el('small', '', starText(best) || '·'));
+      const pro = locked(t, n);
+      b.append(el('b', '', String(n)), el('small', '', pro ? 'Pro' : starText(best) || '·'));
+      if (pro) b.classList.add('pro');
       if (cur && cur[1] === t && +cur[2] === n) b.classList.add('cur');
       grid.append(b);
     }
@@ -57,7 +60,7 @@ export function bindLevels(h: LevelHooks): void {
     const t = b.dataset.t as TemplateId, n = +b.dataset.l!;
     hooks.playLevel(t, n, seedFor(t, n));
   });
-  $('lvDailyGo').addEventListener('click', () => { const d = daily(); hooks.playLevel(d.template, d.level, d.seed); });
+  $('lvDailyGo').addEventListener('click', () => { const d = daily(); hooks.playLevel(d.template, d.level, d.seed, true); });
   $('lvGarage').addEventListener('click', () => hooks.playGarage());
   $('lvCity').addEventListener('click', () => hooks.playCity(false));
   $('lvCityNew').addEventListener('click', () => hooks.playCity(true));

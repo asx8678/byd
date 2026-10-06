@@ -1,6 +1,7 @@
 // The course in the Play sheet: the ten lessons with where you are in each; the lesson card (what you learn, the
 // handbooks' words with their sources, what passing takes); and the result card after a try in a lesson.
 // Where you are in each lesson is kept in this browser (localStorage key `atto2-course`).
+import { TOW_CAR, vehicleFor } from '../core/content';
 import { COURSE, HELP, fillText, freshState, lessonFor, type Lesson, type LessonDef, type LessonState, type PassLine, type PassRule } from '../core/lesson';
 import type { Vehicle } from '../core/vehicle';
 import type { Stars } from '../core/score';
@@ -62,7 +63,7 @@ export function renderCourse(current: string | null, v: Vehicle): void {
     b.append(el('b', 'crsN', String(l.n)), t, el('em', s.done && ok ? 'crsS done' : 'crsS', l.soon ? 'Next update' : !ok ? notFor(l, v) : started ? statusText(s) : 'Start'));
     if (l.id === current) b.classList.add('cur');
     if (!l.chapter) return [b];
-    const h = el('div', 'crsChapter'); h.append(el('b', '', l.chapter), el('small', '', l.tow ? 'In the Škoda Octavia estate with a box trailer, whichever car you have chosen' : ''));
+    const h = el('div', 'crsChapter'); h.append(el('b', '', l.chapter), el('small', '', l.tow ? `In the ${vehicleFor(TOW_CAR).name} with a box trailer, whichever car you have chosen` : ''));
     return [h, b];
   }));
 }

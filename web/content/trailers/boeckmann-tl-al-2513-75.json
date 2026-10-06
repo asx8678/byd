@@ -4,6 +4,7 @@
   "name": "Box trailer",
   "short": "Box trailer",
   "basedOn": "Böckmann TL-AL 2513/75: a single-axle aluminium box trailer, 750 kg",
+  "store": { "name": "Box trailer", "short": "Box trailer" },
   "sources": [
     "Böckmann's product page, TL-AL 2513/75: overall length 3630 mm, width 1760 mm, height 845 mm; inside the box 2515 × 1300 × 350 mm; a free-standing drawbar of about 1000 mm ('freitragende Deichsellänge ca. 1000 mm'); gross weight 750 kg, payload 577 kg; one axle with rubber suspension and 13-inch wheels; loading height 500 mm. https://www.boeckmann.com/de/anhaenger/pkw-anhaenger/p/tieflader/tieflader-alu-einachsig-200/tl-al-2513-75-21--90577"
   ],

@@ -159,7 +159,20 @@
     <div class="resBtns"><button id="resRetry" type="button">Try again</button><button id="resNew" type="button">New layout</button><button id="resNext" class="primary" type="button">Next level</button></div>
   </div>
 
+  <div class="sheet" id="sheetPro" hidden>
+    <h3>Pro <button type="button" data-close="sheetPro">Close</button></h3>
+    <p class="lsLearn" id="proWhy"></p>
+    <h4>Pro adds</h4>
+    <ul class="proList" id="proList"></ul>
+    <p>One payment, no subscription. The lessons, the garage, the everyday cars and the first six levels of each kind stay free.</p>
+    <a id="proBuy" class="proBuy" target="_blank" rel="noopener" hidden>Buy Pro</a>
+    <p class="lvNote" id="proNotYet"></p>
+    <div id="proKeyWrap" hidden><label for="proKey">Licence key</label><textarea id="proKey" rows="3" spellcheck="false" autocomplete="off" placeholder="PT1.…"></textarea><button id="proUnlock" type="button">Unlock</button></div>
+    <p id="proMsg" aria-live="polite"></p>
+  </div>
+
   <div class="sheet" id="sheetInfo" hidden>
+    <p class="proInfo" id="infoPro" hidden>The special cars, the hard levels and the busy street are part of Pro. <button id="btnPro" type="button">About Pro</button></p>
     <h3>Garage layout <button type="button" data-close="sheetInfo">Close</button></h3>
     <p>The bays, pillars and walls come from the photo survey made in your other session, scaled from your Atto 2's rear track and wheelbase, the grey Clio's track and the drain cover in the aisle: about ±20 cm near 561, more further out. Your new photos of the empty bays agree on the bay widths and on where pillar 560 and 562 sit; they could not pin the depth closer than about ±0.4 m, so it keeps the survey's 4.72 m. The car's outline is traced from BYD's three-view drawing.</p>
     <div id="carFacts"></div>

@@ -11,7 +11,7 @@ import { buildCity, checkSlot, localScene, lotAt, parkStart, slotMid, slotNear, 
 import { districtId, districtLevel, generateDistrict } from './core/district';
 import { alongHeading, lotFit } from './core/lot';
 import { facesRight, parkedIn } from './core/parking';
-import { ATTO2, GARAGE_561, MAPS, TOW_CAR, VEHICLES, vehicleFor } from './core/content';
+import { ATTO2, CAR_SPECS, GARAGE_561, MAPS, TOW_CAR, VEHICLES, vehicleFor } from './core/content';
 import { V_KIN } from './core/dynamics';
 import { generate, parseKey, timeLimit, type Level } from './core/generator/level';
 import { generateTow } from './core/generator/towLevels';
@@ -29,9 +29,9 @@ import { PDC_MAX, Sim, type Mode, type ParkedResult, type SimEvent } from './cor
 import { COUNTRIES, theftNote } from './core/country';
 import { DENSITY, TYPES, Traffic, diveFor, networkOf } from './core/traffic';
 import { beep, horn, toot, updateBeeper } from './ui/audio';
-import { renderCarFacts, renderCarPicker, syncCarPicker } from './ui/cars';
+import { relabelCarPicker, renderCarFacts, renderCarPicker, syncCarPicker } from './ui/cars';
 import { bindCard, renderCard, renderTowCard } from './ui/coachCard';
-import { bindControls, pedals, releasePedals, setPedalMode, tickPedals } from './ui/controls';
+import { bindControls, pedals, releasePedals, setPedalMode, syncSettings, tickPedals } from './ui/controls';
 import { bindCourse, courseTab, notFor, renderCourse, setCourseCar, setState, showLesson, showLessonResult, stateOf } from './ui/course';
 import { $, MAX_DPR, closeSheets, openSheet, screen } from './ui/dom';
 import { parkedCard, touchTitle } from './ui/format';
@@ -39,8 +39,10 @@ import { setLimit, setPar, setWheelTarget, showBanner, updateHud } from './ui/hu
 import { bindLevels, hideResult, renderLevels, showResult } from './ui/levels';
 import { updatePdcDisplay, layoutPdc } from './ui/pdcDisplay';
 import { drawPlan, forgetPrediction, layoutPlan, setCoachDraw, setDriveInfo, setGuide, setStreet, setTowDraw, snapView, upRot, viewMoving, type Guide } from './ui/plan';
-import { TEMPLATE_NAMES, bestStars, citySeed, progress, recordStars, seedFor, setCitySeed, setPlaying, setStarsCar } from './ui/progress';
+import { TEMPLATE_NAMES, bestStars, citySeed, daily, progress, recordStars, seedFor, setCitySeed, setPlaying, setStarsCar } from './ui/progress';
 import { lockDeg, saveSettings, settings } from './ui/settings';
+import { applyStoreNames, bindPro, checkStoredKey, isPro, isStore, markLocked, openPro, storeForTest } from './ui/pro';
+import { FREE_LAYOUTS, FREE_LEVELS, carIsPro, districtIsPro, levelIsPro, nextFreeLayout, trafficIsPro } from './core/tiers';
 
 if (!CanvasRenderingContext2D.prototype.roundRect) CanvasRenderingContext2D.prototype.roundRect = function (this: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) { this.rect(x, y, w, h); };
 
@@ -136,7 +138,7 @@ function spawnTraffic(c: CityPlay, at: { x: number; z: number } = c.map.start): 
   const net = networkOf(c.map), busy = settings.traffic === 'busy', level = districtLevel(c.map.spec.id) ?? 5;
   c.map.scene.net = net;
   sim.traffic = settings.traffic === 'off' ? Traffic.spawn(net, c.map.seed, 0, at)
-    : Traffic.spawn(net, c.map.seed, DENSITY[settings.traffic], at, { leavers: busy ? 5 : 3, couriers: busy ? 2 : 1, thieves: level >= 8 ? 2 : 1, patience: level <= 3 ? 8 : level >= 8 ? 3 : 5 });
+    : Traffic.spawn(net, c.map.seed, DENSITY[settings.traffic], at, { leavers: busy ? 5 : 3, couriers: busy ? 2 : 1, thieves: !isPro() ? 0 : level >= 8 ? 2 : 1, patience: level <= 3 ? 8 : level >= 8 ? 3 : 5 });   // spot thieves come with Pro
   sim.rules = new Rules(net, COUNTRIES[settings.country]);
 }
 /** Whether a space is free now: none parked in it for the moment. */
@@ -215,7 +217,12 @@ function enterLevel(L: Level): void {
   setPlaying(L.key, L.template, L.level, L.seed);
   snapView(); resetCar(); refreshLevels();
 }
-function playLevel(t: TemplateId, n: number, seed: number): void {
+function playLevel(t: TemplateId, n: number, seed: number, daily = false): void {
+  if (!isPro()) {   // the store edition without Pro: the hard levels and the trailer levels open the Pro sheet; a level's
+    // layouts past the first few give way to its first one; today's level is free whatever it is
+    if (levelIsPro(t, n, 1, daily)) { openPro(t === 'tow' ? 'The trailer levels are part of Pro.' : `Levels ${FREE_LEVELS + 1} to 10 are part of Pro.`); return; }
+    if (!daily && seed > FREE_LAYOUTS) seed = 1;
+  }
   stopReplay(); hideGuide(); closeSheets();
   showBanner('', 'Building the level…', `${TEMPLATE_NAMES[t].long}, level ${n}`, null);
   afterPaint(() => {
@@ -234,9 +241,11 @@ const refreshLevels = () => {
   const word = gl <= 3 ? 'roomy' : gl >= 8 ? 'tight' : 'average';
   renderLevels(level ? level.key : lesson ? '' : city ? (made ? 'district' : 'city') : 'garage', garageName(), garageSlot(),
     { name: map.name, sub: `Drive around, then park on the street${map.lots?.length ? ' or in a car park' : ''} · layout ${city && !made ? city.map.seed : citySeed(map.id)}`, stars: bestStars(`city:${map.id}`) },
-    { name: gen.name, sub: `Made up for you, ${word} · ${gen.roads.length} streets${gen.lots?.length ? `, ${gen.lots.length === 1 ? 'a car park' : `${gen.lots.length} car parks`}` : ''} · layout ${gSeed}`, stars: bestStars(`city:${gid}`) });
+    { name: gen.name, sub: `Made up for you, ${word} · ${gen.roads.length} streets${gen.lots?.length ? `, ${gen.lots.length === 1 ? 'a car park' : `${gen.lots.length} car parks`}` : ''} · layout ${gSeed}`, stars: bestStars(`city:${gid}`) },
+    (t, n) => !isPro() && levelIsPro(t, n, 1));
+  markLocked();
   renderCourse(lesson ? lesson.L.def.id : null, v);
-  $('lvCar').textContent = v === ATTO2 ? '' : `Built for the ${v.short}: the bays grow for a car bigger than the Atto 2, the aisles and kerb spaces stay as they are.`; $('lvCar').hidden = v === ATTO2;
+  $('lvCar').textContent = v === ATTO2 ? '' : `Built for the ${v.short}: the bays grow for a car bigger than the ${ATTO2.short}, the aisles and kerb spaces stay as they are.`; $('lvCar').hidden = v === ATTO2;
   $('crsCar').textContent = `Worked out for the ${v.short}: its own routes, marks and numbers, and its own progress. A lesson it cannot do here is greyed out.`; $('crsCar').hidden = v === ATTO2;
 };
 const newSeed = () => 1 + Math.floor(Math.random() * 99999);
@@ -247,6 +256,7 @@ const newSeed = () => 1 + Math.floor(Math.random() * 99999);
 const mapFor = (id: string, seed: number): MapSpec | null => MAPS[id] ?? (districtLevel(id) !== null ? generateDistrict(seed, districtLevel(id)!) : null);
 /** A district for the chosen car (its free spaces are worked out for it): its last layout, or a new one. */
 function playCity(fresh: boolean, id = 'harbour', seed = fresh ? newSeed() : citySeed(id)): void {
+  if (!isPro() && districtIsPro(districtLevel(id) ?? 0)) { openPro('The tight districts are part of Pro.'); return; }
   stopReplay(); hideGuide(); closeSheets();
   const map = mapFor(id, seed) ?? MAPS.harbour;
   showBanner('', 'Building the district…', `${map.name}, layout ${seed}`, null);
@@ -606,8 +616,16 @@ function finishTry(r: ParkedResult | null): void {
   }, 700);
 }
 
+applyStoreNames();   // the store edition's generic names, before anything shows a name
 renderCarPicker();   // the car buttons, before the Setup rows are bound
 bindControls(sim, {
+  allow: (key, value) => {
+    if (isPro()) return true;
+    if (key === 'car' && carIsPro(value)) { openPro(`The ${CAR_SPECS.find(s => s.id === value)?.short ?? 'car'} is part of Pro.`); return false; }
+    if (key === 'traffic' && trafficIsPro(value)) { openPro('Busy traffic is part of Pro.'); return false; }
+    if (key === 'district' && districtIsPro(+value)) { openPro('The tight districts are part of Pro.'); return false; }
+    return true;
+  },
   reset: resetCar,
   levels: refreshLevels,
   mode: switchMode,
@@ -706,7 +724,7 @@ function parked(r: ParkedResult): void {
     if (!sim.parked || replay) return;   // drove off again, or started a replay
     showResult(r, st, L ? {
       title: `Parked in ${L.level === 10 ? 'the hardest level' : 'level ' + L.level}`, sub: `${TEMPLATE_NAMES[L.template].long} · layout ${L.seed} · par ${L.par}`, par: L.par, limit: L.timeLimit, better,
-      retry: resetCar, newLayout: () => playLevel(L.template, L.level, newSeed()),
+      retry: resetCar, newLayout: () => playLevel(L.template, L.level, isPro() ? newSeed() : nextFreeLayout(L.seed)),
       next: () => (L.level === 10 ? playLevel(L.template, 10, newSeed()) : playLevel(L.template, L.level + 1, seedFor(L.template, L.level + 1))), nextLabel: L.level === 10 ? 'Another' : 'Next level',
     } : {
       title: parkedCard(r).title, sub: `${garageName()} · par ${par}`, par, limit, better,
@@ -886,8 +904,20 @@ function tick(now: number): void {
 type Saved = { x?: number; z?: number; th?: number; wheelAngle?: number; hits?: number; elapsed?: number; moves?: number; layout?: number; scene?: string; play?: string; car?: string; mode?: Mode };
 type Hot = { snapshot?: (f: () => Saved) => void; ready?: (f: (saved: Saved) => void) => void; data?: Saved };
 const hot = (window as unknown as { claude?: { hot?: Hot } }).claude?.hot;
+/** The store edition without Pro: no Pro car, busy traffic, tight district or Pro level comes back from last time. */
+function freeFallback(play: string): string {
+  if (isPro()) return play;
+  if (carIsPro(settings.car)) settings.car = ATTO2.id;
+  if (trafficIsPro(settings.traffic)) settings.traffic = 'light';
+  if (districtIsPro(+settings.district)) settings.district = '5';
+  saveSettings();
+  const key = parseKey(play), d = daily(), today = !!key && key.template === d.template && key.level === d.level && key.seed === d.seed;
+  if (key && levelIsPro(key.template, key.level, key.seed, today)) return 'garage';
+  const c = /^city:([a-z0-9-]+):\d+$/.exec(play);
+  return c && districtIsPro(districtLevel(c[1]) ?? 0) ? 'garage' : play;
+}
 function start(saved: Saved = {}): void {
-  const play = saved.play ?? progress.play;
+  const play = freeFallback(saved.play ?? progress.play); syncSettings();
   useCar(chosenCar());
   const cityPlay = /^city:([a-z0-9-]+):(\d+)$/.exec(play);
   const cityMap = cityPlay ? mapFor(cityPlay[1], +cityPlay[2]) : null;
@@ -912,11 +942,17 @@ function start(saved: Saved = {}): void {
   requestAnimationFrame(t => { last = t; frame(t); });
 }
 try { hot?.snapshot?.(() => ({ x: sim.x, z: sim.z, th: sim.th, wheelAngle: sim.wheelAngle, hits: sim.hits, elapsed: sim.elapsed, moves: sim.moves, layout: sim.scene.layoutVersion, scene: sim.scene.id, play: lesson ? `lesson:${lesson.L.def.id}` : level ? level.key : city ? cityKey(city.map) : 'garage', car: sim.vehicle.id, mode: sim.mode })); } catch { /* not in the viewer */ }
-if (hot?.ready) hot.ready(start); else start(hot?.data ?? {});
+// the store edition checks the licence key kept in this browser first, so a Pro player comes back to where they were
+const boot = (saved: Saved = {}) => (isStore() ? void checkStoredKey().then(() => start(saved)) : start(saved));
+if (hot?.ready) hot.ready(boot); else boot(hot?.data ?? {});
+bindPro(() => { markLocked(); refreshLevels(); showBanner('good', 'Pro unlocked', 'The special cars, the hard levels and the busy street are open.', null, 4000); });
+$('btnPro').addEventListener('click', () => openPro(''));
 
 // browser checks only (`vite build --mode harness`); other builds drop this
 if (import.meta.env.MODE === 'harness') Object.assign(window, { __game: {
-  sim, level: () => level, route: () => parRoute, lesson: () => lesson, city: () => city, pedals, enterLesson, playCity, switchMode, parkStart, diveFor,
+  sim, level: () => level, route: () => parRoute, lesson: () => lesson, city: () => city, pedals, enterLesson, playCity, switchMode, parkStart, diveFor, playLevel,
+  /** Become the store edition with this public licence key (null: Pro not on sale) and shop page, as after a fresh start. */
+  storeEdition: (jwk: JsonWebKey | null, url = '') => { storeForTest(jwk, url); relabelCarPicker(); freeFallback('garage'); syncSettings(); useCar(chosenCar()); refreshLevels(); playGarage(); },
   /** Time the planner's check of a free space (ms), as the game runs it when you slow down beside one. */
   timeCheck: (i: number) => { const c = city!, s = c.map.slots[i], t0 = performance.now(); s.parkable = undefined; checkSlot(c.map, sim.vehicle, s); return performance.now() - t0; },
   /** Time making a district's road network (ms), as entering it does (the district itself built first). */

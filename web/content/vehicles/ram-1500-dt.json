@@ -4,6 +4,7 @@
   "name": "Ram 1500",
   "short": "Ram 1500",
   "basedOn": "Ram 1500 DT Crew Cab, 5'7\" box, 4x4 (2019-)",
+  "store": { "name": "Full-size pickup", "short": "Pickup" },
   "sources": [
     "FCA's 2019 Ram 1500 technical specifications (metric): length 5.916, width 2.084, height 1.971, wheelbase 3.672 m; track 1.741 m front, 1.729 m rear; turning diameter 14.08 m curb to curb; 3.1 steering-wheel turns; 275/55 R20 tyres; 5.7 l HEMI V8 291 kW (395 hp) and 556 Nm, 8-speed automatic; mass in running order 2404 kg, 1398 kg front and 1006 kg rear (Crew Cab, 5'7\" box); top speed 170 km/h. https://www.automobilrevue.cz/priloha/5bdaff866ac65/allnew2019-ram-1500-tech-spec--oct-18-5bf437059f475.pdf"
   ],

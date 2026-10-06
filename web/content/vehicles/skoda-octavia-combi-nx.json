@@ -4,6 +4,7 @@
   "name": "Škoda Octavia Combi",
   "short": "Octavia",
   "basedOn": "Škoda Octavia Combi (NX, 2020-), 1.5 TSI 110 kW, 6-speed manual",
+  "store": { "name": "Estate car", "short": "Estate" },
   "sources": [
     "Škoda's technical data sheet, Octavia Combi petrol engines (3 July 2020): length 4689, width 1829, height 1468, wheelbase 2686 mm; track 1543 mm front, 1535 mm rear; the drawing gives 2003 mm across the mirrors and overhangs of 910 mm front and 1094 mm rear; turning circle diameter 10.4 m; 1.5 TSI: 110 kW, front-wheel drive, 0-100 km/h 8.3 s, top speed 224 km/h, drag coefficient 0.249, kerb weight 1350-1552 kg with a 75 kg driver; it may tow 670 kg without brakes or 1500 kg with brakes (12%), with 80 kg on the ball. https://cdn.skoda-storyboard.com/2020/07/TD-OCTAVIA-COMBI-petrol-en.pdf"
   ],

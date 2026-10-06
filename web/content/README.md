@@ -6,7 +6,7 @@ Everything here is data the game loads: plain JSON, so a later Swift version can
 
 One car per file; `src/core/content.ts` lists them. The file's frame has the rear axle at the origin, x forward and z to the right.
 
-- `name`, `short` (the picker's label) and `basedOn` (the real model the numbers come from): keep what players see separate from the model.
+- `name`, `short` (the picker's label) and `basedOn` (the real model the numbers come from): keep what players see separate from the model. `store`: `{ name, short }`, the generic names the store edition uses instead (it also leaves out `basedOn`, the sources and the estimates' wording).
 - `sources`: where each figure comes from, a link at the end of each. `estimates`: every figure no source gave, in words; the app lists them under the car's facts.
 - `dims`: length, width, `widthMirrors` (optional), height, wheelbase, track (the front one: it sets the kerb circle), front and rear overhangs, wheel radius and width, mass.
 - `turning`: `by` says who published it; the steering lock is worked out from the published turning circle, either `kerbRadius` (the Atto 2's file) or `circles`, a list of `{ kerbDiameter, wallDiameter, rearSteer }`. A kerb-to-kerb figure without rear steering sets the lock exactly: the rear-axle radius at full lock is `sqrt(R² − wheelbase²) − track / 2`. Otherwise the lock is the angle that best fits every figure given; wall to wall is measured round the outline. `turnsLockToLock` when published.

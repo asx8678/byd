@@ -3,3 +3,4 @@ dist/
 dist-artifact/
 prototype/generator/dist/
 dist-harness/
+dist-store/

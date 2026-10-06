@@ -15,6 +15,10 @@ export function renderCarPicker(): void {
   const opts = [...new Set(CAR_SPECS.flatMap(s => s.rearSteer?.options ?? []))].sort((a, b) => b - a);
   $('segRas').replaceChildren(...opts.map(d => button(String(d), d ? `${d}°` : 'Off')));
 }
+/** The car buttons' names again (the store edition's generic names, once they are set). */
+export function relabelCarPicker(): void {
+  $('segCar').querySelectorAll<HTMLElement>('button').forEach(b => { const s = CAR_SPECS.find(c => c.id === b.dataset.v); if (s) b.textContent = s.short ?? s.name; });
+}
 /** The rear-axle steering row only for a car that has it, with its own settings. */
 export function syncCarPicker(v: Vehicle): void {
   const rs = v.spec.rearSteer;

@@ -4,6 +4,7 @@
   "name": "Peugeot 208",
   "short": "208",
   "basedOn": "Peugeot 208 II (P21), 1.2 PureTech 100 Allure EAT8 (12/19-08/20)",
+  "store": { "name": "Supermini", "short": "Supermini" },
   "sources": [
     "ADAC car catalogue, 208 1.2 PureTech 100 Allure EAT8 (12/19-08/20): length 4055, width 1745 (1960 with mirrors), height 1430, wheelbase 2540 mm; turning circle 10.4 m; 74 kW (100 PS), 205 Nm, front-wheel drive, 8-speed automatic; 0-100 km/h 10.8 s, top speed 188 km/h; kerb weight (EU) 1165 kg; it may tow 1200 kg with brakes or 580 kg without, 55 kg on the ball; 195/55 R16 tyres; rear parking aid standard. https://www.adac.de/rund-ums-fahrzeug/autokatalog/marken-modelle/peugeot/208/2generation/301239/"
   ],

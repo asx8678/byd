@@ -17,6 +17,8 @@ import { nearby } from './world';
 export interface TrailerSpec {
   format: 1; id: string; name: string; short?: string; basedOn?: string; sources?: string[]; notes?: string;
   estimates?: string[];                                            // figures no source gave: the app says they are estimates
+  /** What the store edition calls it (see ui/pro.ts). */
+  store?: { name: string; short: string };
   /** Overall length (coupling to the back) and width; the drawbar from the coupling to the box; the axle behind the
    *  coupling; gross weight (kg). */
   dims: { length: number; width: number; height: number; drawbar: number; axle: number; track: number; wheelRadius: number; wheelWidth: number; mass: number; payload?: number; inside?: number[] };

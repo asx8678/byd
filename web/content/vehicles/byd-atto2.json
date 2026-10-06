@@ -4,6 +4,7 @@
   "name": "BYD Atto 2",
   "short": "Atto 2",
   "basedOn": "BYD Atto 2 DM-i Boost (2025-)",
+  "store": { "name": "Compact SUV", "short": "Compact SUV" },
   "sources": [
     "BYD spec sheet: length, width, height, wheelbase, overhangs, 5.3 m kerb-to-kerb turning radius",
     "Outline traced from the body's widest sections so the corners are rounded like the bumpers",

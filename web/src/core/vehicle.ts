@@ -16,6 +16,8 @@ export interface Circle { kerbDiameter?: number; wallDiameter?: number; rearStee
 export interface VehicleSpec {
   format: 1; id: string; name: string; short?: string; basedOn?: string; sources?: string[]; notes?: string;
   estimates?: string[];                                            // figures no source gave: the app says they are estimates
+  /** What the store edition calls it instead of the maker's name (see ui/pro.ts). */
+  store?: { name: string; short: string };
   dims: { length: number; width: number; widthMirrors?: number; height: number; wheelbase: number; track: number; overhangFront: number; overhangRear: number; wheelRadius: number; wheelWidth: number; mass: number };
   /** The steering lock is worked out from the turning circle: the Atto 2's kerb radius, or the published circles. */
   turning: { by?: string; kerbRadius?: number; circles?: Circle[]; turnsLockToLock?: number };   // by: who published them
