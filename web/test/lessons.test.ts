@@ -73,9 +73,9 @@ describe('lesson routes', () => {
       expect(checkPass(r!, def.pass ?? {}, L.par).pass, JSON.stringify(checkPass(r!, def.pass ?? {}, L.par).lines)).toBe(true);
     }, 120000);
   }
-  it('the lessons a car cannot do: your garage in the Ram and the S-Class, the tight parallel space in the Ram', () => {
+  it('the lessons a car cannot do: your garage in the Octavia, the Ram and the S-Class, the tight parallel space in the Ram', () => {
     const not = CARS.flatMap(v => LESSONS.filter(def => routeFor(v, def) === null).map(def => `${def.id}:${v.id}`)).sort();
-    expect(not).toEqual(['garage:mercedes-s-class-w223@0', 'garage:mercedes-s-class-w223@10', 'garage:mercedes-s-class-w223@4.5', 'garage:ram-1500-dt', 'parallel-tight:ram-1500-dt']);
+    expect(not).toEqual(['garage:mercedes-s-class-w223@0', 'garage:mercedes-s-class-w223@10', 'garage:mercedes-s-class-w223@4.5', 'garage:ram-1500-dt', 'garage:skoda-octavia-combi-nx', 'parallel-tight:ram-1500-dt']);
   });
 });
 

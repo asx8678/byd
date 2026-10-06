@@ -2,6 +2,7 @@
 // starting pose and settings plus the inputs that changed, step by step. Replaying them on the same
 // device gives the same drive exactly; shared ghosts should also store poses, because tiny floating-
 // point differences between devices can add up.
+import { TRAILERS } from './content';
 import { Sim, type Mode, type SimEvent, type SimOptions, type WorldSnap } from './sim';
 import type { Scene } from './scene';
 import type { Vehicle } from './vehicle';
@@ -21,9 +22,13 @@ export interface StartState {
   mode?: Mode; vy?: number; r?: number; ax?: number;
   // on the street: your signals, and the traffic and the rules as they were (recordings made before them have none)
   ind?: -1 | 0 | 1; hazard?: boolean; indArmed?: boolean; world?: WorldSnap;
+  // with a trailer on: its heading
+  tth?: number;
 }
 export interface Recording {
   format: 1; scene: string; vehicle: string; dt: number;
+  /** The trailer on the tow ball, by id (none: no trailer). */
+  trailer?: string;
   start: StartState; options: SimOptions; steps: number; events: RecEvent[];
   /** The whole state every MARK steps, so a rewind need not replay from the start (on the street that is the traffic too). */
   marks?: { step: number; state: StartState }[];
@@ -34,7 +39,7 @@ export const stateOf = (s: Sim): StartState => ({
   x: s.x, z: s.z, th: s.th, v: s.v, wheelAngle: s.wheelAngle, wheelTarget: s.wheelTarget, holdT: s.holdT, time: s.time, lastDriveT: s.lastDriveT,
   hits: s.hits, elapsed: s.elapsed, started: s.started, parked: s.parked, inContact: s.inContact, lastMoveDir: s.lastMoveDir, moves: s.moves, moveSign: s.moveSign, input: { ...s.input },
   mode: s.mode, vy: s.vy, r: s.r, ax: s.ax,
-  ind: s.ind, hazard: s.hazard, indArmed: s.indArmed, ...(s.traffic ? { world: s.world()! } : {}),
+  ind: s.ind, hazard: s.hazard, indArmed: s.indArmed, ...(s.traffic ? { world: s.world()! } : {}), ...(s.trailer ? { tth: s.tth } : {}),
 });
 
 type Snap = Record<Key, number | boolean | null>;
@@ -46,7 +51,7 @@ export class Recorder {
   private last: Snap | null = null;
   /** Start a new recording from the car's current state. */
   begin(sim: Sim, dt = STEP): void {
-    this.rec = { format: 1, scene: sim.scene.id, vehicle: sim.vehicle.id, dt, start: stateOf(sim), options: { ...sim.options }, steps: 0, events: [] };
+    this.rec = { format: 1, scene: sim.scene.id, vehicle: sim.vehicle.id, ...(sim.trailer ? { trailer: sim.trailer.id } : {}), dt, start: stateOf(sim), options: { ...sim.options }, steps: 0, events: [] };
     this.last = snap(sim);
   }
   /** Call just before sim.step: anything that differs from how the last step left it was the player. */
@@ -89,13 +94,20 @@ export function restoreState(sim: Sim, st: StartState): void {
   if (world) sim.restoreWorld(world);
 }
 
+/** A fresh simulation for a recording: its scene and car, with its trailer hitched. */
+function simFor(rec: Recording, scene: Scene, vehicle: Vehicle): Sim {
+  const sim = new Sim(scene, vehicle);
+  if (rec.trailer) sim.setTrailer(TRAILERS[rec.trailer]);
+  return sim;
+}
+
 /**
  * Play a recording's first n steps on a fresh simulation, calling before(sim) once each step's inputs are applied
  * and after(sim) once it has stepped: what a coach or a path tracker needs to be rebuilt along with the car. With
  * neither, it starts from the last checkpoint at or before step n.
  */
 export function replayTo(rec: Recording, scene: Scene, vehicle: Vehicle, n: number, before?: (sim: Sim) => void, after?: (sim: Sim) => void): Sim {
-  const sim = new Sim(scene, vehicle), mark = before || after ? undefined : (rec.marks ?? []).filter(m => m.step <= n).pop();
+  const sim = simFor(rec, scene, vehicle), mark = before || after ? undefined : (rec.marks ?? []).filter(m => m.step <= n).pop();
   Object.assign(sim.options, rec.options); restoreState(sim, mark ? mark.state : rec.start);
   const i0 = mark ? mark.step : 0;
   for (let i = i0, e = rec.events.filter(ev => ev[0] < i0).length; i < Math.min(n, rec.steps); i++) {
@@ -107,7 +119,7 @@ export function replayTo(rec: Recording, scene: Scene, vehicle: Vehicle, n: numb
 
 /** A fresh simulation set up at the recording's start, and a function that plays it one step at a time. */
 export function playback(rec: Recording, scene: Scene, vehicle: Vehicle): { sim: Sim; step: () => SimEvent[] | null } {
-  const sim = new Sim(scene, vehicle);
+  const sim = simFor(rec, scene, vehicle);
   Object.assign(sim.options, rec.options); restoreState(sim, rec.start);
   let i = 0, e = 0;
   const step = (): SimEvent[] | null => {

@@ -26,7 +26,9 @@ To install it on a phone, serve `dist/` over HTTPS (for example GitHub Pages), o
 
 ```
 content/       data the game loads; JSON, so a Swift port reads the same files (see content/README.md)
-  vehicles/      one file per car: dimensions, outline, mirrors, turning circle, rear-axle steering, driveline, sensors
+  vehicles/      one file per car: dimensions, outline, mirrors, turning circle, rear-axle steering, driveline, sensors,
+                 a tow bar
+  trailers/      one file per trailer: its size, the drawbar, where the axle is, its weight
   scenes/        one file per place: obstacles, painted lines, bays, starts (garage-561.json is your garage)
   lessons/       course.json: the lessons, their stored routes, the handbooks' words with sources, pass rules
   maps/          street districts for the map kit: roads, sides, zones, car parks, who is parked (harbour.json)
@@ -35,7 +37,10 @@ src/core/      the game itself, no browser code: easy to test, and the part to p
   vehicle.ts     a car from its file; the steering lock is worked out from the published turning circles, and with
                  rear-axle steering the car's origin moves to the point it turns about
   scene.ts       a scene from its file: obstacles, kerbs, lines, bays, starts
-  content.ts     the cars and scenes that ship (ATTO2, VEHICLES, vehicleFor, GARAGE_561)
+  content.ts     the cars, trailers and scenes that ship (ATTO2, VEHICLES, vehicleFor, TRAILERS, GARAGE_561)
+  trailer.ts     a trailer on a car's tow ball: it follows the ball as a tractrix (its axle only moves along it),
+                 the angle it settles at on a steady turn, what it touches (its tyres meet kerbs), and the jackknife
+                 where it folds into the car
   car.ts         geometry for any car: placing outlines, rectangles, Ackermann angles
   garage.ts      old names kept for code that used them
   geometry.ts    polygon overlap (separating axes), circle vs polygon, segment distances
@@ -44,7 +49,8 @@ src/core/      the game itself, no browser code: easy to test, and the part to p
   predict.ts     the path at the current steering, rolled forward in 6 cm steps until it would touch
   sim.ts         Sim(scene, car): state, input, step(dt) → events (touch, parked, fault); Park mode (hold to move,
                  the exact low-speed model) or Drive mode (accelerator and brake through dynamics.ts); your
-                 indicators and hazards; on the street the traffic and the rules step with it
+                 indicators and hazards; on the street the traffic and the rules step with it; a trailer on the
+                 tow ball (the rear sensors switch off, and a towed space is judged on the trailer)
   traffic.ts     the road network from a district (lanes, paths through the junctions, lights, give-way lines, the
                  zones paths share and who goes first) and the other cars: six sizes and a van, calm, cautious,
                  fast, impatient drivers, couriers and spot thieves, the Intelligent Driver Model, giving way by

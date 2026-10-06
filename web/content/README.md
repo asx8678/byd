@@ -17,8 +17,19 @@ One car per file; `src/core/content.ts` lists them. The file's frame has the rea
 - `drive`: the hold-to-move driveline (creep and top speeds, ramp, hold time, acceleration, braking).
 - `dynamics`: Drive mode on the street (`src/core/dynamics.ts`). `power` (kW), `driven` (`front`, `rear` or `all`), `frontShare` (the weight on the front axle), `cgHeight` (m), `cdA` (drag coefficient times frontal area, m²), `grip` (the front tyres' friction coefficient on dry asphalt; the rears get 5% more), `launch` (the most the drive train pulls from rest, m/s²), `coast` (slowing with no pedal pressed, m/s²), `topSpeed` (km/h), and the published `zeroTo100` or `zeroTo60mph` (s). `powerShare` is the share of the peak power the model applies on average through a run: it is tuned so the car takes the published 0–100 time (`test/dynamics.test.ts` checks it). Most cars publish power, mass, top speed and 0–100; the rest are estimates, and `estimates` says which.
 - `parkingSensors`: `layout` (`4-front-4-rear-2-each-side`, `4-front-4-rear` or `4-rear`), ranges, cone angle, zone edges, and where the corner and side sensors sit across the car (`cornerZ`, `sideZ`). Use `null` for a car without sensors.
+- `towing` (optional): a tow bar. `ball` is the tow ball's centre, x in the same frame (negative: behind the rear axle); `unbraked`, `braked` and `noseWeight` are the maker's limits in kg. Only a car with one can pull a trailer, and while it does its rear parking sensors are off, as a real car's are.
 
 A car goes in when its turning circle in the simulation matches the sheet (`test/cars.test.ts`). Figures nobody published are estimates until measured, and the file says which. The W124 waits for its steering lock.
+
+## trailers/*.json
+
+One trailer per file; `src/core/content.ts` lists them. The frame has the coupling (the tow ball's centre) at the origin, x forward towards the car and z to the right; the trailer turns about its axle, `dims.axle` behind the coupling, and its tyres roll without slipping, so it follows the ball as a tractrix.
+
+- `name`, `short`, `basedOn`, `sources` and `estimates` as for a car.
+- `dims`: overall `length` (coupling to the back) and `width`, `height`, `drawbar` (coupling to the box), `axle` (coupling to the axle), `track`, `wheelRadius`, `wheelWidth`, `mass` (gross, kg), `payload`, and the box's `inside` size.
+- `frame`: the A-frame's `width` where it meets the box and `head`, where it starts behind the ball (the end of the coupling head). The A-frame and the box, which is as wide as the trailer's overall width so nothing that sticks out is missed, are what touch things and what folds into the car in a jackknife; the tyres meet kerbs.
+
+A bay with `towed: true` (see scenes) is judged on the trailer's box, not on the car pulling it.
 
 ## scenes/*.json
 
@@ -38,6 +49,7 @@ One place per file. The world frame has x to the right and z down the plan. A he
   - `kind` (optional): `kerb` for a space along a kerb; the result then gives the tyres' gap to the kerb. `exit` for a stretch of lane to drive out into after leaving a space: parked there means inside it and straight.
   - `box` (optional): `[x0, x1, z0, z1]`, where all four corners must be. By default the lines widened by the tolerances, back to `headZ`.
   - `goals` (optional): rear-axle poses that count as well parked, for the route planner.
+  - `towed` (optional): a space for a trailer. The trailer's box must be inside it and straight; the car pulling it may stay outside.
 - `starts`: rear-axle poses with a label. `defaultStart` and `defaultBay` pick the defaults.
 - `landmarks` (optional): named points a coach can line the car up with (a stop line, a cone), besides the bay lines and parked cars it finds itself.
 - Obstacles may carry a `fill` colour; the plan draws them in it (the blue tanks, the blue cone).

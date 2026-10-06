@@ -27,6 +27,8 @@ export interface VehicleSpec {
   glass?: number[];                                                // where the windows run on the plan, front and back (x)
   seats?: number;                                                  // 2 for a two-seater: no back seat for the coach to name
   drive: { creepForward: number; maxForward: number; rampForward: number; creepReverse: number; maxReverse: number; rampReverse: number; holdTime: number; accel: number; brake: number };
+  /** A tow bar: where the ball is (x, behind the rear axle) and what the maker lets the car tow (kg). */
+  towing?: { ball: number; unbraked: number; braked: number; noseWeight: number };
   /** Drive mode on the street: power, weight split, grip (see dynamics.ts). */
   dynamics?: DynamicsSpec;
   parkingSensors: { layout: string; ranges: { front: number; rear: number; side: number }; coneDeg: number; bands: Record<Side, number[]>; cornerZ?: number; sideZ?: number } | null;
@@ -63,6 +65,8 @@ export interface Vehicle {
   readonly drive: Drive;
   /** Drive mode's figures (null for a car without them: it stays in Park mode). */
   readonly dyn: Dyn | null;
+  /** The tow ball, for a car with a tow bar: x from the origin (negative: behind it), and the towing limits (kg). */
+  readonly tow?: { readonly x: number; readonly unbraked: number; readonly braked: number; readonly noseWeight: number };
   readonly sensors: readonly SensorMount[];
   readonly pdc: { front: number; rear: number; side: number; half: number; bands: Record<Side, readonly number[]> };
   /** The data file, for the facts and sources shown in the app. */
@@ -150,7 +154,8 @@ export function makeVehicle(s: VehicleSpec, rearDeg = s.rearSteer?.default ?? 0)
       : { front: 0, rear: 0, side: 0, half: 0, bands: { front: [], rear: [], left: [], right: [] } },
     spec: s,
   };
-  return { ...v, dyn: s.dynamics ? makeDyn(s, WB, RA, v.RS) : null, sensors: s.parkingSensors ? standardSensors(v, s.parkingSensors) : [] };
+  const tow = s.towing ? { tow: { x: s.towing.ball - x0, unbraked: s.towing.unbraked, braked: s.towing.braked, noseWeight: s.towing.noseWeight } } : {};
+  return { ...v, dyn: s.dynamics ? makeDyn(s, WB, RA, v.RS) : null, sensors: s.parkingSensors ? standardSensors(v, s.parkingSensors) : [], ...tow };
 }
 
 /** Each layout's groups: four sensors in a bumper (two centre, two corner angled 35° out), two per side, each a cone. */

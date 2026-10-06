@@ -45,6 +45,8 @@ export interface Bay {
    *  own frame, in which it opens towards +z like every other bay. The frame's origin is at (x, z) on the map and its
    *  x axis points along heading rot, so a heading th in the bay is th + rot on the map. */
   frame?: { x: number; z: number; rot: number };
+  /** A space for a trailer: the trailer's box is judged (all four corners in, straight), not the car pulling it. */
+  towed?: boolean;
 }
 
 /** A map pose [x, z, th] in a bay's own frame (the same numbers for a bay without one). */

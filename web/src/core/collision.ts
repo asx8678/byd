@@ -7,7 +7,9 @@ import type { Vehicle } from './vehicle';
 import { nearby } from './world';
 
 export type WheelPart = 'front left wheel' | 'front right wheel' | 'rear left wheel' | 'rear right wheel';
-export type CarPart = '' | 'left mirror' | 'right mirror' | WheelPart;
+/** What touched: the car's body (''), a mirror or a wheel; with a trailer on, the trailer's box, its A-frame or a tyre,
+ *  or the trailer folding into the car (a jackknife). */
+export type CarPart = '' | 'left mirror' | 'right mirror' | WheelPart | 'trailer' | 'drawbar' | 'trailer wheel' | 'jackknife';
 export interface Hit { obstacle: Obstacle; part: CarPart }
 
 /** The four tyres seen from above (straight ahead), in the car's local frame. Steered rear wheels are drawn turned,

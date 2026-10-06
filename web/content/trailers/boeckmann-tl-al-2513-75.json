@@ -1,0 +1,19 @@
+{
+  "format": 1,
+  "id": "boeckmann-tl-al-2513-75",
+  "name": "Box trailer",
+  "short": "Box trailer",
+  "basedOn": "Böckmann TL-AL 2513/75: a single-axle aluminium box trailer, 750 kg",
+  "sources": [
+    "Böckmann's product page, TL-AL 2513/75: overall length 3630 mm, width 1760 mm, height 845 mm; inside the box 2515 × 1300 × 350 mm; a free-standing drawbar of about 1000 mm ('freitragende Deichsellänge ca. 1000 mm'); gross weight 750 kg, payload 577 kg; one axle with rubber suspension and 13-inch wheels; loading height 500 mm. https://www.boeckmann.com/de/anhaenger/pkw-anhaenger/p/tieflader/tieflader-alu-einachsig-200/tl-al-2513-75-21--90577"
+  ],
+  "notes": "Trailer frame: x forward from the coupling (the tow ball's centre), z to the right, metres; the trailer points along its heading from its axle to the ball. The box runs from the drawbar's end to the overall length and is as wide as the trailer's overall width, mudguards included, so nothing that sticks out is missed.",
+  "estimates": [
+    "where the axle is: 2.26 m behind the coupling, the drawbar plus half the box (Böckmann does not give it)",
+    "the track and the tyres (155/80 R13 assumed on the 13-inch wheels)",
+    "the A-frame's shape, and the coupling head reaching 15 cm behind the ball",
+    "whether it has brakes: a 750 kg trailer usually has none, and Böckmann does not say"
+  ],
+  "dims": { "length": 3.63, "width": 1.76, "height": 0.845, "drawbar": 1.0, "axle": 2.26, "track": 1.55, "wheelRadius": 0.29, "wheelWidth": 0.155, "mass": 750, "payload": 577, "inside": [2.515, 1.30, 0.35] },
+  "frame": { "width": 1.0, "head": 0.15 }
+}

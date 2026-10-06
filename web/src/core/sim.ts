@@ -1,19 +1,22 @@
 // The simulation: one car in one scene, driven by a steering wheel and either hold-to-move pedals (Park mode, the
 // exact low-speed model) or an accelerator and a brake (Drive mode on the street, see dynamics.ts). On the street the
-// other cars and the lights (traffic.ts) step with it, and the rules of the road (rules.ts) watch your drive.
+// other cars and the lights (traffic.ts) step with it, and the rules of the road (rules.ts) watch your drive. A car with
+// a tow bar can pull a trailer (trailer.ts): it follows the ball, touches things, and can fold into the car.
 // Pure logic with no screen code, so it can be tested and ported as it is. The car and the scene
 // come from data files or the level generator; with no arguments it is the Atto 2 in the garage around bay 561.
 import { collides, type CarPart } from './collision';
 import { ATTO2, GARAGE_561 } from './content';
 import { blendOf, rates } from './dynamics';
 import { DEG, clamp } from './math';
-import { facesRight, parkedIn, placement } from './parking';
+import { facesRight, parkedIn, placement, type InBay } from './parking';
+import { footprint } from './car';
 import { predictPath, type Prediction } from './predict';
 import { COUNTRIES } from './country';
 import { Rules, type Fault, type RulesSnap } from './rules';
 import { toBay, type Bay, type Obstacle, type Scene } from './scene';
-import { edgeGaps, scanPdc, type SideValues } from './sensors';
+import { edgeGaps, rectGaps, scanPdc, type SideValues } from './sensors';
 import { Traffic, type PlayerView, type TrafficSnap } from './traffic';
+import { ballAt, boxCorners, folded, towStep, trailerHits, trailerIn, type Trailer } from './trailer';
 import type { Vehicle } from './vehicle';
 
 export interface SimInput {
@@ -76,6 +79,10 @@ export class Sim {
   ind: -1 | 0 | 1 = 0; hazard = false; indArmed = false;
   /** On the street: the other cars and the lights, and the rules your drive is held to (null elsewhere). */
   traffic: Traffic | null = null; rules: Rules | null = null;
+  /** A trailer on the tow ball (null without one), pointing along tth from its axle to the ball. Its parking sensors'
+   *  rear group is off while it is on, as a real car's is (and the gaps behind are the trailer's: trailerGaps). */
+  trailer: Trailer | null = null; tth = 0;
+  readonly trailerGaps: SideValues = { front: 9, rear: 9, left: 9, right: 9 };
   private poseSig = '';
 
   constructor(scene: Scene = GARAGE_561, public vehicle: Vehicle = ATTO2) {
@@ -88,6 +95,13 @@ export class Sim {
   setVehicle(v: Vehicle): void {
     if (v === this.vehicle) return;
     this.vehicle = v; this.sensorReadings = v.sensors.map(() => Infinity); this.poseSig = '';
+    if (!v.tow) this.trailer = null;   // no tow bar, no trailer
+  }
+
+  /** Hitch a trailer to the tow ball, straight behind the car, or take it off (null). The car needs a tow bar. */
+  setTrailer(t: Trailer | null): void {
+    if (t && !this.vehicle.tow) throw new Error(`the ${this.vehicle.id} has no tow bar`);
+    this.trailer = t; this.tth = this.th; this.poseSig = '';
   }
 
   /** Single-track angle in degrees, right positive. */
@@ -106,9 +120,9 @@ export class Sim {
     const s = this.scene.starts[start] ?? this.scene.starts[this.scene.defaultStart];
     this.resetAt(s.x, s.z, s.th);
   }
-  /** Back to the start of an attempt at a given pose. */
-  resetAt(x: number, z: number, th: number): void {
-    this.x = x; this.z = z; this.th = th;
+  /** Back to the start of an attempt at a given pose (with a trailer on, the trailer at heading tth: straight behind). */
+  resetAt(x: number, z: number, th: number, tth = th): void {
+    this.x = x; this.z = z; this.th = th; this.tth = tth;
     this.v = 0; this.wheelAngle = 0; this.wheelTarget = null; this.hits = 0; this.elapsed = 0;
     this.started = false; this.inContact = false; this.parked = false; this.lastMoveDir = 1; this.moves = 0; this.moveSign = 0;
     this.input.fwd = this.input.rev = false; this.input.acc = this.input.brk = 0; this.vy = this.r = this.ax = 0;
@@ -123,10 +137,17 @@ export class Sim {
     if (m === 'drive') { this.v = Math.max(0, this.v); this.r = this.v * Math.tan(-this.steerDeg * DEG) / this.vehicle.WB; } else this.r = 0;
   }
 
-  /** Put the car somewhere directly (tests, restoring a saved session). */
-  place(x: number, z: number, th: number): void { this.x = x; this.z = z; this.th = th; }
+  /** Put the car somewhere directly (tests, restoring a saved session); a trailer at heading tth (straight behind). */
+  place(x: number, z: number, th: number, tth = th): void { this.x = x; this.z = z; this.th = th; this.tth = tth; }
 
   touching(x = this.x, z = this.z, th = this.th) { return collides(this.vehicle, this.obstacles, x, z, th); }
+  /** What the trailer would touch with the car at (x, z, th) and the trailer at tth: the car itself (a jackknife) first. */
+  trailerTouch(x: number, z: number, th: number, tth: number): { name: string; part: CarPart } | null {
+    const t = this.trailer; if (!t) return null;
+    if (folded(this.vehicle, t, x, z, th, tth)) return { name: 'your car', part: 'jackknife' };
+    const [bx, bz] = ballAt(this.vehicle, x, z, th), hit = trailerHits(t, this.obstacles, bx, bz, tth);
+    return hit ? { name: hit.obstacle.name, part: hit.part } : null;
+  }
   /** The path at the current steering, to where it would touch: on the street, a car parked at the kerb counts too. */
   predict(dir: 1 | -1): Prediction { return predictPath(this.vehicle, this.obstacles, this.x, this.z, this.th, this.steerDeg, dir, this.traffic?.near(this.x, this.z, this.vehicle.REACH + 12, true)); }
 
@@ -176,13 +197,16 @@ export class Sim {
       } else {
         nth = this.th + this.v / this.vehicle.WB * Math.tan(delta) * h; nx = this.x + this.v * Math.cos(this.th) * h; nz = this.z - this.v * Math.sin(this.th) * h;
       }
+      // the trailer follows the ball (it only moves along itself), then touches what it meets
+      const ntth = this.trailer ? towStep(this.trailer.L1, ballAt(this.vehicle, this.x, this.z, this.th), ballAt(this.vehicle, nx, nz, nth), this.tth) : this.tth;
       const hit = this.touching(nx, nz, nth), car = !hit && this.traffic ? this.traffic.touch(this.vehicle, nx, nz, nth) : null;
-      if (hit || car) {
-        const name = hit ? hit.obstacle.name : car!.name, part = hit ? hit.part : car!.part;
+      const tow = !hit && !car && this.trailer ? this.trailerTouch(nx, nz, nth, ntth) : null;
+      if (hit || car || tow) {
+        const name = hit ? hit.obstacle.name : car ? car.name : tow!.name, part = hit ? hit.part : car ? car.part : tow!.part;
         if (!this.inContact) { this.inContact = true; this.hits++; events.push({ type: 'touch', name, part, hits: this.hits }); touched = { name, traffic: !!car && !car.parked }; }
         this.v = 0; this.vy = 0; this.r = 0; break;
       }
-      this.x = nx; this.z = nz; this.th = nth; this.inContact = false;
+      this.x = nx; this.z = nz; this.th = nth; this.tth = ntth; this.inContact = false;
     }
     // below 7 km/h Drive mode is the low-speed model: no side slip, the yaw rate the steering sets
     if (drive && lam === 0) { this.vy = 0; this.r = this.v * Math.tan(delta) / this.vehicle.WB; }
@@ -198,7 +222,11 @@ export class Sim {
     if (!drive || Math.abs(this.v) < PDC_MAX) {
       const near = this.traffic ? this.traffic.near(this.x, this.z, this.vehicle.REACH + 10) : undefined;
       const ps = this.x.toFixed(4) + ',' + this.z.toFixed(4) + ',' + this.th.toFixed(5) + (near ? near.map(o => `|${o.cx.toFixed(3)},${o.cz.toFixed(3)}`).join('') : '');
-      if (ps !== this.poseSig) { this.poseSig = ps; edgeGaps(this.vehicle, this.obstacles, this.x, this.z, this.th, this.gaps, near); scanPdc(this.vehicle, this.obstacles, this.x, this.z, this.th, this.sensorReadings, this.pdc, near); }
+      const sig = this.trailer ? ps + '|' + this.tth.toFixed(5) : ps;
+      if (sig !== this.poseSig) {
+        this.poseSig = sig; edgeGaps(this.vehicle, this.obstacles, this.x, this.z, this.th, this.gaps, near); scanPdc(this.vehicle, this.obstacles, this.x, this.z, this.th, this.sensorReadings, this.pdc, near);
+        if (this.trailer) this.towGaps();
+      }
     } else if (this.poseSig !== 'off') {
       this.poseSig = 'off'; this.sensorReadings.fill(Infinity);
       for (const k of ['front', 'rear', 'left', 'right'] as const) { this.gaps[k] = 9; this.pdc[k] = Infinity; }
@@ -206,6 +234,15 @@ export class Sim {
     const parked = this.checkParked(); if (parked) events.push({ type: 'parked', result: parked });
     if (inp.fwd || inp.rev || (drive && inp.acc > 0) || Math.abs(this.v) > 0.05) this.lastDriveT = this.time;
     return events;
+  }
+
+  /** With a trailer on: the rear parking sensors are off (the trailer would set them off), and the gaps round the
+   *  trailer's box are measured instead. */
+  private towGaps(): void {
+    const t = this.trailer!, [bx, bz] = ballAt(this.vehicle, this.x, this.z, this.th);
+    this.vehicle.sensors.forEach((s, i) => { if (s.g === 'rear') this.sensorReadings[i] = Infinity; });
+    this.pdc.rear = Infinity;
+    rectGaps(footprint(bx, bz, this.tth, boxCorners(t)), this.obstacles, bx, bz, t.reach + 10, this.trailerGaps);
   }
 
   /** Your car as the traffic sees it. */
@@ -232,7 +269,7 @@ export class Sim {
   /** All four corners inside the target bay, stopped, within 6° of straight, the way round the bay asks for. */
   private checkParked(): ParkedResult | null {
     if (Math.abs(this.v) > 0.02) return null;
-    const b = this.targetBay(), at = b && parkedIn(this.vehicle, b, this.x, this.z, this.th);
+    const b = this.targetBay(), at = b && this.inBay(b);
     if (!at) { this.parked = false; return null; }
     if (!facesRight(b, at) || this.parked) return null;
     this.parked = true;
@@ -242,13 +279,22 @@ export class Sim {
   /** How the car sits in the target bay right now, or null when it is not in it the right way round. The parked
    *  event reports the first stop; this is for reading the result later, once the car has settled. */
   parkedResult(): ParkedResult | null {
-    const b = this.targetBay(), at = b && parkedIn(this.vehicle, b, this.x, this.z, this.th);
+    const b = this.targetBay(), at = b && this.inBay(b);
     return at && facesRight(b, at) ? this.resultAt(b, at) : null;
+  }
+
+  /** Whether the car is in a bay, or for a bay a trailer goes into (a towed bay) the trailer is. */
+  private inBay(b: Bay): InBay | null {
+    if (!b.towed) return parkedIn(this.vehicle, b, this.x, this.z, this.th);
+    if (!this.trailer) return null;
+    const [bx, bz] = ballAt(this.vehicle, this.x, this.z, this.th);
+    return trailerIn(this.trailer, b, bx, bz, this.tth);
   }
 
   /** The space the car should park in (none on a street before Park mode picks one). */
   private targetBay(): Bay | undefined { return this.scene.bays[this.options.bay] ?? this.scene.bays[this.scene.defaultBay]; }
-  private resultAt(b: Bay, at: NonNullable<ReturnType<typeof parkedIn>>): ParkedResult {
+  private resultAt(b: Bay, at: InBay): ParkedResult {
+    if (b.towed) return this.towedResult(b, at);
     const v = this.vehicle, { noseIn } = at, p = placement(v, b, this.scene.kerbs, this.x, this.z, this.th, at);
     const [bx, , bth] = toBay(b, this.x, this.z, this.th), cx = bx + (v.WB / 2) * Math.cos(bth), gl = cx - v.W / 2 - b.x0, gr = b.x1 - cx - v.W / 2;
     return {
@@ -257,6 +303,19 @@ export class Sim {
       gapWall: noseIn ? this.gaps.front : this.gaps.rear,
       gapLeft: Math.max(0, noseIn ? gl : gr), gapRight: Math.max(0, noseIn ? gr : gl),
       kerbGap: p.kerbGap, gapFront: this.gaps.front, gapRear: this.gaps.rear,
+      hits: this.hits, elapsed: this.elapsed, moves: this.moves,
+    };
+  }
+  /** The same for the trailer's box in a towed bay: centred across it, straight, and its gaps. */
+  private towedResult(b: Bay, at: InBay): ParkedResult {
+    const t = this.trailer!, [bx, bz] = ballAt(this.vehicle, this.x, this.z, this.th), [x, , th] = toBay(b, bx, bz, this.tth);
+    const mid = -(t.drawbar + t.length) / 2, cx = x + mid * Math.cos(th), { noseIn } = at, g = this.trailerGaps;
+    const gl = cx - t.width / 2 - b.x0, gr = b.x1 - cx - t.width / 2;
+    return {
+      bay: this.options.bay, noseIn, kind: 'bay',
+      offCentre: (noseIn ? 1 : -1) * (cx - (b.x0 + b.x1) / 2), angle: (noseIn ? at.errIn : at.errOut) / DEG,
+      gapWall: noseIn ? g.front : g.rear, gapLeft: Math.max(0, noseIn ? gl : gr), gapRight: Math.max(0, noseIn ? gr : gl),
+      kerbGap: Infinity, gapFront: g.front, gapRear: g.rear,
       hits: this.hits, elapsed: this.elapsed, moves: this.moves,
     };
   }

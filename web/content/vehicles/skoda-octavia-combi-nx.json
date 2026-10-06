@@ -1,0 +1,35 @@
+{
+  "format": 1,
+  "id": "skoda-octavia-combi-nx",
+  "name": "Škoda Octavia Combi",
+  "short": "Octavia",
+  "basedOn": "Škoda Octavia Combi (NX, 2020-), 1.5 TSI 110 kW, 6-speed manual",
+  "sources": [
+    "Škoda's technical data sheet, Octavia Combi petrol engines (3 July 2020): length 4689, width 1829, height 1468, wheelbase 2686 mm; track 1543 mm front, 1535 mm rear; the drawing gives 2003 mm across the mirrors and overhangs of 910 mm front and 1094 mm rear; turning circle diameter 10.4 m; 1.5 TSI: 110 kW, front-wheel drive, 0-100 km/h 8.3 s, top speed 224 km/h, drag coefficient 0.249, kerb weight 1350-1552 kg with a 75 kg driver; it may tow 670 kg without brakes or 1500 kg with brakes (12%), with 80 kg on the ball. https://cdn.skoda-storyboard.com/2020/07/TD-OCTAVIA-COMBI-petrol-en.pdf"
+  ],
+  "notes": "Rear-axle frame: x forward from the rear axle, z to the right, metres. Škoda's drawing gives overhangs of 910 and 1094 mm, which with the 2686 mm wheelbase add up to 4690 mm against the 4689 mm length: the front overhang is taken as 909 mm. The tow ball is in the same frame (x, behind the rear axle).",
+  "estimates": [
+    "the turning circle is taken as kerb to kerb: Škoda's sheet says only 'turning circle diameter'",
+    "the outline between the published length and width",
+    "the mirrors' size, place and height (only the width across them is published)",
+    "the tyres (205/55 R16 assumed)",
+    "the parking sensors: front and rear assumed",
+    "where the tow ball is: 10 cm behind the bumper",
+    "Drive mode: the weight split, the height of the centre of gravity, the drag area (Škoda gives the drag coefficient, not the frontal area), the tyres' grip, the pull from rest and the slowing with no pedal; the share of the power the model gets is tuned so 0-100 km/h takes the published 8.3 s"
+  ],
+  "dims": { "length": 4.689, "width": 1.829, "widthMirrors": 2.003, "height": 1.468, "wheelbase": 2.686, "track": 1.543, "overhangFront": 0.909, "overhangRear": 1.094, "wheelRadius": 0.316, "wheelWidth": 0.205, "mass": 1350 },
+  "turning": { "by": "Škoda", "circles": [{ "kerbDiameter": 10.4 }] },
+  "outline": { "half": [[3.595, 0.53], [3.50, 0.76], [3.25, 0.88], [2.90, 0.9125], [0, 0.9145], [-0.80, 0.88], [-1.00, 0.79], [-1.094, 0.63]] },
+  "mirrors": { "height": 1.0, "box": [1.82, 0.88, 2.04, 1.0015] },
+  "planCorners": [[3.50, -0.76], [3.50, 0.76], [-1.00, -0.79], [-1.00, 0.79]],
+  "glass": [2.33, -0.85],
+  "towing": { "ball": -1.194, "unbraked": 670, "braked": 1500, "noseWeight": 80 },
+  "drive": { "creepForward": 1.2, "maxForward": 5.5, "rampForward": 1.1, "creepReverse": 0.9, "maxReverse": 2.8, "rampReverse": 0.6, "holdTime": 1.0, "accel": 2.0, "brake": 3.5 },
+  "dynamics": { "power": 110, "driven": "front", "frontShare": 0.60, "cgHeight": 0.55, "cdA": 0.55, "grip": 1.0, "launch": 4.0, "coast": 0.7, "powerShare": 0.83, "topSpeed": 224, "zeroTo100": 8.3 },
+  "parkingSensors": {
+    "layout": "4-front-4-rear",
+    "ranges": { "front": 1.2, "rear": 1.5, "side": 0 },
+    "coneDeg": 60,
+    "bands": { "front": [0.3, 0.6, 0.9, 1.2], "rear": [0.3, 0.7, 1.1, 1.5], "left": [], "right": [] }
+  }
+}

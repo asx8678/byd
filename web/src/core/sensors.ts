@@ -35,6 +35,22 @@ export function edgeGaps(v: Vehicle, obstacles: readonly Obstacle[], x: number, 
 }
 const EDGE_ORDER: readonly Side[] = ['rear', 'front', 'left', 'right'];
 
+/** The same for any rectangle C (rear-left, front-left, front-right, rear-right: a trailer's box) whose middle is near
+ *  (x, z), looking `reach` metres round it. */
+export function rectGaps(C: readonly Pt[], obstacles: readonly Obstacle[], x: number, z: number, reach: number, out: SideValues): void {
+  const edges: Record<Side, [Pt, Pt]> = { rear: [C[0], C[3]], front: [C[1], C[2]], left: [C[0], C[1]], right: [C[3], C[2]] };
+  for (const k of SIDES) out[k] = 9;
+  for (const o of nearby(obstacles, x, z, reach)) {
+    if (o.cls === 'kerb') continue;
+    if (o.kind === 'poly') {
+      for (let i = 0; i < o.pts.length; i++) {
+        const p = o.pts[i], q = o.pts[(i + 1) % o.pts.length];
+        for (const k of EDGE_ORDER) { const d = segSeg(edges[k][0], edges[k][1], p, q); if (d < out[k]) out[k] = d; }
+      }
+    } else for (const k of EDGE_ORDER) { const d = Math.max(0, ptSeg(o.x, o.z, edges[k][0][0], edges[k][0][1], edges[k][1][0], edges[k][1][1]) - o.r); if (d < out[k]) out[k] = d; }
+  }
+}
+
 // Parking sensors: the car's mounts (vehicle.sensors), each sweeping a cone; ranges and the zone edges come with the car.
 /** How far a sensor group hears. */
 export const rangeOf = (v: Vehicle, g: Side): number => (g === 'left' || g === 'right' ? v.pdc.side : v.pdc[g]);
