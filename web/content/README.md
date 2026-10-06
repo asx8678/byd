@@ -71,7 +71,7 @@ A street district for the map kit (`src/core/city.ts`), which compiles it into a
 
 ## lessons/course.json
 
-The course: ten lessons in order, with the sources they quote. A lesson marked `soon` is listed but not playable yet. A playable one has:
+The course: lessons in order, with the sources they quote: ten parking lessons, then three towing lessons. A lesson marked `soon` is listed but not playable yet. `chapter` (optional) puts a heading in the course list before a lesson. A playable parking lesson has:
 
 - `scene`: a generated level (`template`, `level`, `seed`, and for a kerb space `kerbGap`, the body's gap to the kerb the route was planned to), your garage (`garage`: the bay, `start`), or a scene built for the lesson (`build`: `first-metres`, `turning`, `leaving` with `level` and `seed`, or `angled` with `seed`; see `src/core/generator/lessonScenes.ts`).
 - `route`: the Atto 2's route, the one the coach teaches in it, stored so that every device coaches the same one. `start` is the rear-axle pose `[x, z, heading]`; `pieces` are `[direction, steering, metres]`, with direction 1 forward or -1 reverse and steering -1 (full lock left), 0 (straight) or 1 (full lock right). The routes come from the planner with the steering kept to full lock or straight, which is how driving schools teach these manoeuvres and what a coach can name exactly; `test/lessons.test.ts` checks that the planner still finds exactly these routes. A route marked `authored` was written for the lesson instead (the cone course, the U-turn, the one-turn angled entry); the test checks that it clears everything and passes.
@@ -79,6 +79,8 @@ The course: ten lessons in order, with the sources they quote. A lesson marked `
 - `explain`: paragraphs for the lesson card, each with the `sources` it quotes. Every claim comes from `docs/research/parking-tips.md`; where sources disagree, the text says so. `{car}` is filled in with the car's name, `{circle}` with its turning circle and whose figure that is, `{bay}` with the width of the lesson's bay.
 - `tips`: keyed by the Atto 2's step numbers, shown on the coach card at that step. `cue` (optional) picks the part of the car and the landmark the step's mark is said with, so it matches the handbook's own rule ("your mirror" and "the near line of the green bay"). In another car a tip goes to the step where the same two moves meet, and is left out where that car does that part differently.
 - `pass`: what passing takes besides touching nothing: `angle` (degrees off straight), `centre` (metres off centre), `kerb` (tyres to the kerb, metres), `moves` (`"par+1"`), `face` (`in` or `out`).
+
+A towing lesson has `tow` (`{ trailer }`: always in the car with a tow bar, the Octavia, pulling that trailer, whatever car is chosen) and `scene.tow`, one of the trailer yards in `src/core/generator/towScenes.ts` (`tow-straight`, `tow-corner`, `tow-bay`), each with the path the trailer's axle follows. It has no `route`, `routes` or `tips`: its coach steers by that path (`src/core/towing.ts`), showing where to hold the wheel, and par is one move. `explain` and `pass` work as for a parking lesson; `pass` is judged on the trailer, which finishes reversed in (`face: "out"`).
 
 `sources` maps each id to a name and a link.
 

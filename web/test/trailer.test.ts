@@ -119,6 +119,17 @@ describe('reversing and pulling forward', () => {
   });
 });
 
+describe('getting out of a jackknife', () => {
+  it.each([0, 486, -486])('folded up, the rig pulls forward and straightens with the wheel at %s°', wheel => {
+    const s = rig();
+    expect(drive(s, -1, 40, 243)).toEqual(['your car|jackknife']);
+    const phi0 = Math.abs(phiOf(s)), x0 = s.x, z0 = s.z;
+    expect(drive(s, 1, 3, wheel)).toEqual([]);
+    expect(Math.hypot(s.x - x0, s.z - z0)).toBeGreaterThan(2.9);
+    expect(Math.abs(phiOf(s))).toBeLessThan(phi0 - 10);
+  });
+});
+
 describe('what the trailer touches', () => {
   it('reversing towards a wall, the trailer touches it first', () => {
     const s = rig(sceneWith([{ kind: 'poly', pts: [[-8, -5], [-7.6, -5], [-7.6, 5], [-8, 5]], name: 'wall', h: 2.5, cls: 'wall' }]));
