@@ -48,6 +48,15 @@ describe('the street coach', () => {
     const first = said.find(e => e.type === 'say')!;
     expect(first.type === 'say' && first.text).toContain('At the lights, turn left into Market Street.');
   }, 60000);
+  it('goes back with the car after a rewind, ready to say again what is ahead', () => {
+    const v = VEHICLES['byd-atto2'], L = load('byd-atto2', 'street-traffic', 'right')!, c = new StreetCoach(L, 0, 'right');
+    const res = streetDrive(v, L, { kmh: 30 }, 'ma', sim => { if (sim.mode === 'drive') c.observe(v, sim.x, sim.z, sim.th, sim.ind); });
+    expect(res.r).not.toBeNull();
+    expect(c.k).toBe(L.nav.length);
+    const st = L.map.start;
+    c.resync(v, st.x, st.z, st.th);
+    expect(c.s).toBeLessThan(v.L); expect(c.k).toBe(0);   // the front bumper, at the start expect([...c.told]).toEqual([]);
+  }, 60000);
   it('finds a new way to the same space when you leave it', () => {
     const v = VEHICLES['byd-atto2'], L = load('byd-atto2', 'street-traffic', 'right')!, c = new StreetCoach(L, 0, 'right');
     const lane = L.net.els.find(e => e.kind === 'lane' && e.street === 'quay')!, [x, z] = [lane.pieces[0].x + 10 * Math.cos(lane.pieces[0].h), lane.pieces[0].z - 10 * Math.sin(lane.pieces[0].h)];

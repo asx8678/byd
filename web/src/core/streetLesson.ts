@@ -168,6 +168,16 @@ export class StreetCoach {
   pts: WayPt[]; nav: NavStep[];
   constructor(readonly L: StreetLesson, readonly help: Help, readonly kerb: 'left' | 'right') { this.pts = L.pts; this.nav = L.nav; }
 
+  /** After a rewind: back to where the car is along the way, ready to say again what is still ahead. */
+  resync(v: Vehicle, x: number, z: number, th: number): void {
+    const fx = x + (v.L - v.OVR) * Math.cos(th), fz = z - (v.L - v.OVR) * Math.sin(th);
+    let best = this.pts[0], bd = Infinity;
+    for (const p of this.pts) { const d = Math.hypot(p.x - fx, p.z - fz); if (d < bd) { bd = d; best = p; } }
+    this.s = best.s; this.k = 0;
+    while (this.k < this.nav.length && this.s > this.nav[this.k].end) this.k++;
+    const keep = new Set(this.nav.slice(0, this.k).map((n, i) => `j${i}:${n.at.toFixed(0)}`));
+    for (const key of [...this.told]) if (!keep.has(key.split(':sig')[0])) this.told.delete(key);
+  }
   /** The way still ahead of you, for the plan. */
   ahead(): WayPt[] { return this.pts.filter(p => p.s >= this.s - 1); }
 

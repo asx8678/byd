@@ -162,6 +162,10 @@ function follow(sim: Sim, dt: number): void {
       ts = sim.trailer ? Math.min(PV.w / Math.max(PARK_ACROSS, 2.6 * rm.L), PV.band / Math.max(PARK_DOWN, 2.0 * rm.L))
         : Math.min(PV.w / Math.max(PARK_ACROSS, 3.8 * v.L), PV.band / Math.max(PARK_DOWN, 3.2 * v.L));
       if (street?.lockRot != null) rot = street.lockRot;
+      // a spot thief waiting for your space (behind you, under the wheel and pedals at this zoom): the view takes it in
+      // too, centred between it and your car
+      const tid = street?.target?.id, thief = tid ? sim.traffic?.cars.find(c => c.aim === tid && c.state === 'drive' && Math.hypot(c.x - rm.x, c.z - rm.z) < 30) : null;
+      if (thief) { const d = Math.hypot(thief.x - rm.x, thief.z - rm.z); tx = (rm.x + thief.x) / 2; tz = (rm.z + thief.z) / 2; ts = Math.min(ts, PV.band / (d + v.L + 3)); }
     }
   }
   PV.init = true;

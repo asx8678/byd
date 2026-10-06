@@ -872,6 +872,7 @@ function rewind(): void {
   const p = ls ? replayTo(rec, sim.scene, VEHICLES[rec.vehicle] ?? sim.vehicle, n, s => run?.sync(s), s => { ls.tracker.add(s); run?.observe(s); trun?.observe(s, STEP); }) : replayTo(rec, sim.scene, VEHICLES[rec.vehicle] ?? sim.vehicle, n);
   restoreState(sim, simState(p)); clearPedals(); setPedalMode(sim.mode === 'drive'); recorder.truncate(n, sim); forgetPrediction();
   if (ls) { ls.run = run; ls.tow = trun; ls.rewound = true; }
+  if (streetLs?.coach) { streetLs.coach.resync(sim.vehicle, sim.x, sim.z, sim.th); streetLs.wayAt = -1; syncStreet(); }   // the coach goes back with the car
   tryRewound = true; settledT = 0;
   showBanner('', 'Back 5 seconds', ls ? 'Try that bit again. A try with a rewind is practice: it counts neither way.' : 'Try that bit again. Stars after a rewind are shown but not saved.', null, 3500);
 }
