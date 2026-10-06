@@ -136,8 +136,9 @@ export class TowPilot {
 
 // ---- the coach for a towing lesson ----
 
-/** Reversing: let go above this speed (m/s), as the coach keeps a trailer to a crawl. */
-export const TOW_CRAWL = 0.55;
+/** Reversing: let go above this speed (m/s), as the coach keeps a trailer to a crawl; and while the wheel is more than
+ *  this many degrees from where the coach wants it. */
+export const TOW_CRAWL = 0.55, HAND_LAG = 90;
 /** Past this far off the path (m), or this much beyond the pilot's own limit on the hitch angle, the coach stops you
  *  and has you pull forward to straighten the trailer before trying again. */
 const LOST = { off: 0.9, phi: 8 * DEG };
@@ -181,8 +182,12 @@ export class TowCoach {
       return { fwd: raw.fwd && Math.abs(this.wheelNow) < 60 && Math.abs(sim.v) < 1.2, rev: false };
     }
     if (raw.fwd) this.hint = 'This step is in reverse';
+    // the wheel well away from where it should be: the trailer waits for your hand, as the parking coach waits for the
+    // wheel to be set
+    const behind = Math.abs(this.wheelNow - this.pilot.needle) > HAND_LAG;
+    if (raw.rev && behind) this.hint = `Turn the wheel first: your hand at the bottom ${this.pilot.needle > this.wheelNow ? 'to the left' : 'to the right'}`;
     const stop = this.left <= sim.v * sim.v / (2 * this.v.drive.BRAKE) + 0.01;
-    return { fwd: false, rev: raw.rev && !stop && Math.abs(sim.v) < TOW_CRAWL };
+    return { fwd: false, rev: raw.rev && !stop && !behind && Math.abs(sim.v) < TOW_CRAWL };
   }
   /** The wheel as observe() last saw it (degrees). */
   private wheelNow = 0;

@@ -657,8 +657,14 @@ function showMe(now: number): void {
   if (replay) return;
   if (lesson?.st.help === 3) { showBanner('', 'No help in the test', 'Two misses bring the help back. Tap Reset to start the try again.', null, 3500); return; }
   if (city && !city.slot) { showBanner('', 'Show me parks you', sim.mode === 'drive' ? `Stop beside a free space on your ${kerbSide()}: Park mode takes over, and Show me has the route in.` : 'There is no space here to show the way into: tap Drive and find one.', null, 4000); return; }
-  if (lesson?.L.tow) { if (lesson.over) return; towGhost(now, false, lesson.L.scene, lesson.L.bay, lesson.L.tow); return; }
-  if (level?.tow) { towGhost(now, false, level.scene, level.scene.defaultBay, level.tow); return; }
+  // with a trailer: the coach's driver works out the way in from here (a moment on a phone), then the ghost shows it
+  const tow = lesson?.L.tow ? { scene: lesson.L.scene, bay: lesson.L.bay, T: lesson.L.tow } : level?.tow ? { scene: level.scene, bay: level.scene.defaultBay, T: level.tow } : null;
+  if (tow) {
+    if (lesson?.over) return;
+    showBanner('', 'Working out the way in…', 'From where your car and trailer are now.', null);
+    afterPaint(() => towGhost(clock(), false, tow.scene, tow.bay, tow.T));
+    return;
+  }
   const from: Pose = { x: sim.x, z: sim.z, th: sim.th }, s0 = parRoute[0]?.from;
   if (s0 && Math.hypot(from.x - s0.x, from.z - s0.z) < 0.05 && Math.abs(wrapPi(from.th - s0.th)) < DEG) { if (lesson) startWatch(); else startGuide(parRoute, now); return; }
   showBanner('', 'Working out a route…', 'From where your car is now.', null);

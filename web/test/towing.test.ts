@@ -89,6 +89,11 @@ describe('the coach', () => {
     expect(coach.gate({ fwd: true, rev: false }, sim)).toEqual({ fwd: false, rev: false });
     expect(coach.gate({ fwd: false, rev: true }, sim)).toEqual({ fwd: false, rev: true });
     sim.v = -0.6; expect(coach.gate({ fwd: false, rev: true }, sim).rev).toBe(false);
+    // and waits for your hand when the wheel is well away from where it wants it
+    sim.v = 0; coach.pilot.needle = 200;
+    expect(coach.gate({ fwd: false, rev: true }, sim).rev).toBe(false); expect(coach.hint).toMatch(/Turn the wheel first: your hand at the bottom to the left/);
+    sim.wheelAngle = 150; coach.observe(sim, STEP); coach.pilot.needle = 200;
+    expect(coach.gate({ fwd: false, rev: true }, sim).rev).toBe(true);
   });
 });
 
