@@ -4,8 +4,10 @@
 import type { Pose } from '../planner';
 import type { SceneObstacleSpec, SceneSpec } from '../scene';
 import type { Vehicle } from '../vehicle';
+import type { TowKnobs } from './towLevels';
 
-export type TemplateId = 'bays-in' | 'bays-back' | 'kerb';
+/** The car templates; 'tow' is a trailer level (generator/towLevels.ts), always in the Octavia with the box trailer. */
+export type TemplateId = 'bays-in' | 'bays-back' | 'kerb' | 'tow';
 export const TEMPLATES: readonly TemplateId[] = ['bays-in', 'bays-back', 'kerb'];
 
 /** Where a route into the level may start: a box for the rear axle and the heading to start at. */
@@ -13,7 +15,8 @@ export interface Region { x0: number; x1: number; z0: number; z1: number; th: nu
 /** What a level number turned into, for measuring and for the level card. */
 export type Knobs =
   | { kind: 'bays'; bay: number; aisle: number; neighbours: 'none' | 'neat' | 'off-centre'; opposite: boolean; pillar: '' | 'near side' | 'far side' }
-  | { kind: 'kerb'; space: number; spare: number; lane: number; opposite: boolean; rearOut: number; post: number | null };
+  | { kind: 'kerb'; space: number; spare: number; lane: number; opposite: boolean; rearOut: number; post: number | null }
+  | TowKnobs;
 export interface Draft { spec: SceneSpec; goals: Pose[]; entry: Region; knobs: Knobs }
 
 export function mulberry32(a: number): () => number { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
@@ -144,5 +147,6 @@ export function bays(v: Vehicle, level: number, seed: number, back: boolean): Dr
 }
 
 export function draft(v: Vehicle, id: TemplateId, level: number, seed: number): Draft {
+  if (id === 'tow') throw new Error('a trailer level is made by generateTow');
   return id === 'kerb' ? kerb(v, level, seed) : bays(v, level, seed, id === 'bays-back');
 }

@@ -32,13 +32,13 @@ function trailerBay(spec: SceneSpec, t: Trailer, cx: number, z0: number, wall = 
 }
 
 /** Where the car starts for the trailer's axle at (ax, az) with the trailer at heading tth and the car at th. */
-function rigAt(v: Vehicle, t: Trailer, ax: number, az: number, th: number, tth: number): RigPose {
+export function rigAt(v: Vehicle, t: Trailer, ax: number, az: number, th: number, tth: number): RigPose {
   const bx = ax + t.L1 * Math.cos(tth), bz = az - t.L1 * Math.sin(tth), d = v.tow!.x;   // the ball, then the car's origin ahead of it
   return { x: bx - d * Math.cos(th), z: bz + d * Math.sin(th), th, tth };
 }
 
 /** The axle's start for a path of pieces that ends at `goal` heading `th` (the trailer's heading there), worked back. */
-function startFor(goal: { x: number; z: number }, th: number, segs: readonly PathSeg[]): { x: number; z: number; th: number } {
+export function startFor(goal: { x: number; z: number }, th: number, segs: readonly PathSeg[]): { x: number; z: number; th: number } {
   let x = goal.x, z = goal.z, h = th;
   for (let i = segs.length - 1; i >= 0; i--) {
     const sg = segs[i], g = h + Math.PI;   // the way the axle was travelling at the end of this piece

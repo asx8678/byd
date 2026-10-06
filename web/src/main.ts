@@ -14,9 +14,11 @@ import { facesRight, parkedIn } from './core/parking';
 import { ATTO2, GARAGE_561, MAPS, TOW_CAR, VEHICLES, vehicleFor } from './core/content';
 import { V_KIN } from './core/dynamics';
 import { generate, parseKey, timeLimit, type Level } from './core/generator/level';
+import { generateTow } from './core/generator/towLevels';
+import type { Scene } from './core/scene';
 import type { TemplateId } from './core/generator/templates';
 import type { Vehicle } from './core/vehicle';
-import { COURSE, HELP, afterTry, checkPass, endHint, lessonById, lessonFor, loadLesson, type Lesson, type LessonState, type Para } from './core/lesson';
+import { COURSE, HELP, afterTry, checkPass, endHint, lessonById, lessonFor, loadLesson, type Lesson, type LessonState, type Para, type TowLesson } from './core/lesson';
 import { lessonSteps, routeNote, tipsFor } from './core/lessonRoutes';
 import { DEG, clamp, wrapPi, type Pt } from './core/math';
 import { clearStart, fitsBay, moves, planBack, planToBay, sample, type Piece, type Plan, type Pose, type RoutePoint } from './core/planner';
@@ -187,7 +189,8 @@ function resetCar(): void {
   if (lesson) { startTry(); return; }
   if (city) { resetCity(); return; }
   stopReplay(); hideGuide(); hideResult(); applySettings();
-  if (level) sim.reset('start'); else { const s = garageStart(); sim.resetAt(s.x, s.z, s.th); }
+  if (level?.tow) { const s = level.tow.start; sim.resetAt(s.x, s.z, s.th, s.tth); }
+  else if (level) sim.reset('start'); else { const s = garageStart(); sim.resetAt(s.x, s.z, s.th); }
   forgetPrediction(); beginRecording(); clearPedals();
   settledT = 0; tryOver = false; tryRewound = false;
   const parText = par ? ` Par: ${par} ${par === 1 ? 'move' : 'moves'}.` : '';
@@ -205,14 +208,18 @@ function resetCar(): void {
 
 function leaveLesson(): void { lesson = null; setCoachDraw(null); setTowDraw(null); setWheelTarget(null); renderCard(null); sim.setTrailer(null); useCar(chosenCar()); layout(); }
 function enterLevel(L: Level): void {
-  leaveLesson(); leaveCity(); level = L; sim.load(L.scene); setRoute(L.route); setPlaying(L.key, L.template, L.level, L.seed);
+  leaveLesson(); leaveCity(); level = L;
+  if (L.tow) { useCar(L.tow.car); sim.setTrailer(L.tow.trailer); renderCarFacts(L.tow.car, L.tow.trailer); }   // a trailer level brings its rig
+  sim.load(L.scene);
+  if (L.tow) { parRoute = []; par = L.par; limit = L.timeLimit; setPar(par); } else setRoute(L.route);
+  setPlaying(L.key, L.template, L.level, L.seed);
   snapView(); resetCar(); refreshLevels();
 }
 function playLevel(t: TemplateId, n: number, seed: number): void {
   stopReplay(); hideGuide(); closeSheets();
   showBanner('', 'Building the level…', `${TEMPLATE_NAMES[t].long}, level ${n}`, null);
   afterPaint(() => {
-    const L = generate(chosenCar(), t, n, seed);
+    const L = t === 'tow' ? generateTow(n, seed) : generate(chosenCar(), t, n, seed);
     if (L) enterLevel(L); else showBanner('bad', 'No level from this layout', 'Try another: Play, then New layout.', null, 4000);
   });
 }
@@ -495,7 +502,7 @@ function startTry(): void {
 /** Watch: the ghost drives the route from the start, pausing on each mark while the card says what happens there. */
 function startWatch(): void {
   const ls = lesson!; startTry(); ls.watching = true;
-  if (ls.L.tow) { towGhost(clock(), true); return; }
+  if (ls.L.tow) { towGhost(clock(), true, ls.L.scene, ls.L.bay, ls.L.tow); return; }
   const pts = sample(sim.vehicle, ls.L.route, 0.05), times: number[] = [];
   let t = 0.8;
   pts.forEach((p, i) => { if (i) { t += Math.hypot(p.x - pts[i - 1].x, p.z - pts[i - 1].z) / 1.4; if (p.i !== pts[i - 1].i) t += 1.8; } times.push(t); });
@@ -505,17 +512,17 @@ function startWatch(): void {
 }
 /** Show me in a towing lesson (and its Watch): the coach's guided driver backs the trailer in from where the rig is now,
  *  and a ghost rig plays that drive at three times the speed. */
-function towGhost(now: number, watch: boolean): void {
-  const ls = lesson!, T = ls.L.tow!, pts: Guide['pts'] = [], times: number[] = [];
+function towGhost(now: number, watch: boolean, scene: Scene, bay: string, T: TowLesson): void {
+  const pts: Guide['pts'] = [], times: number[] = [];
   const from = { x: sim.x, z: sim.z, th: sim.th, tth: sim.tth };
   let t = 0.8;
-  const res = towDrive(sim.vehicle, T.trailer, ls.L.scene, ls.L.bay, from, T.path, {}, s => {
+  const res = towDrive(sim.vehicle, T.trailer, scene, bay, from, T.path, {}, s => {
     const l = pts[pts.length - 1];
     if (l && Math.hypot(s.x - l.x, s.z - l.z) < 0.05) return;
     if (l) t += Math.hypot(s.x - l.x, s.z - l.z) / 1.5;
     pts.push({ x: s.x, z: s.z, th: s.th, tth: s.tth, dir: s.v < 0 ? -1 : 1, i: 0 }); times.push(t);
   });
-  if (!res.r || pts.length < 2) { showBanner('bad', 'No way in from here', 'Pull forward to straighten the trailer, or tap Reset to start again.', null, 4000); if (watch) ls.watching = false; return; }
+  if (!res.r || pts.length < 2) { showBanner('bad', 'No way in from here', 'Pull forward to straighten the trailer, or tap Reset to start again.', null, 4000); if (watch && lesson) lesson.watching = false; return; }
   guide = { pts, at: 0, times, t0: now, watch, follow: true }; setGuide(guide);
   btnShow.textContent = watch ? 'Stop' : 'Hide'; btnShow.classList.add('on');
   showBanner('', watch ? 'Watch' : 'Show me', `The ghost backs the trailer into the space${res.lost ? ', pulling forward to straighten it first' : ''}, three times as fast as you will. Watch how little the wheel moves once the trailer is on its line.`, null, 5000);
@@ -650,7 +657,8 @@ function showMe(now: number): void {
   if (replay) return;
   if (lesson?.st.help === 3) { showBanner('', 'No help in the test', 'Two misses bring the help back. Tap Reset to start the try again.', null, 3500); return; }
   if (city && !city.slot) { showBanner('', 'Show me parks you', sim.mode === 'drive' ? `Stop beside a free space on your ${kerbSide()}: Park mode takes over, and Show me has the route in.` : 'There is no space here to show the way into: tap Drive and find one.', null, 4000); return; }
-  if (lesson?.L.tow) { if (lesson.over) return; towGhost(now, false); return; }
+  if (lesson?.L.tow) { if (lesson.over) return; towGhost(now, false, lesson.L.scene, lesson.L.bay, lesson.L.tow); return; }
+  if (level?.tow) { towGhost(now, false, level.scene, level.scene.defaultBay, level.tow); return; }
   const from: Pose = { x: sim.x, z: sim.z, th: sim.th }, s0 = parRoute[0]?.from;
   if (s0 && Math.hypot(from.x - s0.x, from.z - s0.z) < 0.05 && Math.abs(wrapPi(from.th - s0.th)) < DEG) { if (lesson) startWatch(); else startGuide(parRoute, now); return; }
   showBanner('', 'Working out a route…', 'From where your car is now.', null);
@@ -780,9 +788,15 @@ window.addEventListener('resize', resize); window.addEventListener('orientationc
 
 /** The lesson on the screen: the card, and the route, marks and your path on the plan. Outside lessons, the ideal
  *  path layer: the route that set par and where each of its moves ends. */
-let ghostOf: Piece[] | null = null;
+let ghostOf: Piece[] | null = null, towLine: Level | null = null;
 function drawLesson(): string {
   const ls = lesson;
+  if (!ls && level?.tow) {   // a trailer level: the ideal path layer is the trailer's line
+    const on = settings.layerGhost === 'on';
+    if (on !== (towLine === level)) { towLine = on ? level : null; setTowDraw(on ? { path: level.tow.path.pts.map((p): Pt => [p.x, p.z]), goal: null } : null); }
+    return on ? 'towline' : '';
+  }
+  if (towLine) { towLine = null; setTowDraw(null); }
   if (!ls) {
     const want = settings.layerGhost === 'on' && parRoute.length ? parRoute : null;
     if (want !== ghostOf) { ghostOf = want; setCoachDraw(want ? { route: sample(sim.vehicle, want, 0.1), marks: want.map(p => p.to), from: 0, cur: null, track: null, drift: null } : null); }
@@ -879,7 +893,8 @@ function start(saved: Saved = {}): void {
     }
   } else if (play.startsWith('lesson:') && lessonById(play.slice(7)) && lessonFor(chosenCar(), lessonById(play.slice(7))!)) enterLesson(play.slice(7), 'drive');   // a lesson starts its try over
   else {
-    const key = parseKey(play), L = key ? generate(sim.vehicle, key.template, key.level, key.seed) : null;
+    const key = parseKey(play), L = key ? (key.template === 'tow' ? generateTow(key.level, key.seed) : generate(sim.vehicle, key.template, key.level, key.seed)) : null;
+    if (L?.tow) { enterLevel(L); resize(); setTimeout(layout, 300); requestAnimationFrame(t => { last = t; frame(t); }); return; }
     if (L) { level = L; sim.load(L.scene); setRoute(L.route); } else garagePar();
     resetCar(); refreshLevels();
     if (typeof saved.x === 'number' && typeof saved.z === 'number' && typeof saved.th === 'number' && saved.scene === sim.scene.id && saved.layout === sim.scene.layoutVersion && (saved.car ?? ATTO2.id) === sim.vehicle.id && !sim.touching(saved.x, saved.z, saved.th)) {

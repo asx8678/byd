@@ -6,6 +6,7 @@ export const TEMPLATE_NAMES: Record<TemplateId, { long: string; short: string }>
   'bays-in': { long: 'Bays, nose first', short: 'Bay, nose first' },
   'bays-back': { long: 'Bays, reversing in', short: 'Bay, reversing in' },
   kerb: { long: 'Parallel parking', short: 'Parallel' },
+  tow: { long: 'Trailer, reversing in', short: 'Trailer' },
 };
 
 interface Progress { best: Record<string, number>; seeds: Record<string, number>; play: string }
@@ -18,10 +19,12 @@ const save = () => { try { localStorage.setItem(KEY, JSON.stringify(progress)); 
  *  with the car's id in front. */
 let carSlot = '';
 export function setStarsCar(id: string): void { carSlot = id === 'byd-atto2' ? '' : id + '|'; }
+/** A trailer level brings its own car, so its stars are kept the same whatever car is chosen. */
+const keyOf = (slot: string): string => (slot.startsWith('tow:') ? slot : carSlot + slot);
 /** Best stars so far for the car being driven; slot is "bays-in:4" for a level or "garage:561:left" for the garage. */
-export const bestStars = (slot: string): number => progress.best[carSlot + slot] ?? -1;
+export const bestStars = (slot: string): number => progress.best[keyOf(slot)] ?? -1;
 export function recordStars(slot: string, n: number): boolean {
-  const key = carSlot + slot, better = n > (progress.best[key] ?? -1);
+  const key = keyOf(slot), better = n > (progress.best[key] ?? -1);
   if (better) { progress.best[key] = n; save(); }
   return better;
 }

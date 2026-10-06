@@ -6,6 +6,7 @@ import { clamp, wrapPi } from '../math';
 import { bayBox } from '../parking';
 import { exactCheck, moves, sample, search, type Piece, type Pose, type SearchOpts } from '../planner';
 import { makeScene, type Rect, type Scene } from '../scene';
+import type { TowLesson } from '../lesson';
 import type { Vehicle } from '../vehicle';
 import { draft, growWidth, type Draft, type Knobs, type TemplateId } from './templates';
 
@@ -16,11 +17,13 @@ export interface Level {
   measure: Measure; knobs: Knobs;
   knobLevel: number;   // the difficulty the settings were eased or tightened to
   nodes: number;       // search effort, all tries together
+  /** A trailer level: the car and trailer, where the rig starts and the trailer's path (route is empty). */
+  tow?: TowLesson;
 }
 
 export const levelKey = (t: TemplateId, level: number, seed: number): string => `${t}:${level}:${seed}`;
 export function parseKey(key: string): { template: TemplateId; level: number; seed: number } | null {
-  const m = /^(bays-in|bays-back|kerb):(\d+):(\d+)$/.exec(key);
+  const m = /^(bays-in|bays-back|kerb|tow):(\d+):(\d+)$/.exec(key);
   return m ? { template: m[1] as TemplateId, level: +m[2], seed: +m[3] } : null;
 }
 
@@ -55,12 +58,13 @@ export function measure(v: Vehicle, scene: Scene, field: Field, route: Piece[], 
   const length = route.reduce((s, p) => s + p.len, 0), m = moves(route);
   let tpl: number, base: number;
   if (knobs.kind === 'kerb') { tpl = 5 * clamp((2.4 - knobs.spare) / 1.6, 0, 1); base = 2; }
+  else if (knobs.kind === 'tow') throw new Error('a trailer level measures itself (generateTow)');
   else { tpl = 2.6 * clamp((7 - knobs.aisle) / 2, 0, 1) + 2.6 * clamp((2.7 - (knobs.bay - growWidth(v))) / 0.4, 0, 1); base = back ? 2 : 1; }
   const score = clamp(1 + 1.7 * Math.max(0, m - base) + 2.0 * clamp((0.6 - minClear) / 0.5, 0, 1) + tpl, 1, 10);
   return { moves: m, length, minClear, score };
 }
 
-const INTRO: Record<TemplateId, string> = {
+const INTRO: Record<Exclude<TemplateId, 'tow'>, string> = {
   'bays-in': 'Drive along the aisle and park nose first in the green bay, in the middle.',
   'bays-back': 'Drive past and reverse into the green bay, in the middle.',
   kerb: 'Parallel park in the green space, close to the kerb on your right.',
@@ -96,7 +100,7 @@ export function generate(v: Vehicle, template: TemplateId, level: number, seed: 
     nodes += s.nodes;
     if (s.status !== 'found' || exactCheck(v, scene, s.field, s.route)) return null;
     const m = measure(v, scene, s.field, s.route, d.knobs, back), st = s.route[0].from;
-    d.spec.starts = { start: { x: st.x, z: st.z, th: st.th, label: INTRO[template] } };
+    d.spec.starts = { start: { x: st.x, z: st.z, th: st.th, label: INTRO[template as Exclude<TemplateId, 'tow'>] } };
     d.spec.areaView = areaOf(v, scene, s.route);
     scene = makeScene(d.spec);
     return { key: levelKey(template, level, seed), template, level, seed, scene, route: s.route, par: m.moves, timeLimit: timeLimit(s.route), measure: m, knobs: d.knobs, knobLevel: knob, nodes };

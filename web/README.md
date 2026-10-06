@@ -87,7 +87,9 @@ src/core/      the game itself, no browser code: easy to test, and the part to p
                  outward from the parked poses, checks it with the exact collision test and measures it;
                  lessonScenes.ts builds the lessons' own scenes (cone course, swept-path U-turn, leaving a
                  tight space with an exit lane, 60° angled bays); towScenes.ts the trailer yards (a straight lane,
-                 a corner, a space between cars), each with the path the trailer's axle follows
+                 a corner, a space between cars), each with the path the trailer's axle follows; towLevels.ts the
+                 trailer levels (a narrower space, a tighter corner, cars and cones closing in, the passenger side),
+                 each solved by the towing coach's drivers before you see it
   coach.ts       a route as steps said with what you see ("until your mirror is 55 cm short of the near
                  line"); CoachRun, which follows a try (guided: the wheel first, walking pace, brakes on the
                  mark; marks that follow the car so earlier errors are taken out); and the feedback after a

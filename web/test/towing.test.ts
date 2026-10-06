@@ -4,7 +4,10 @@
 // space, touching nothing, and passes.
 import { describe, expect, it } from 'vitest';
 import { BOX_TRAILER, TOW_CAR, VEHICLES, vehicleFor } from '../src/core/content';
+import { parseKey } from '../src/core/generator/level';
+import { generateTow, towKnobs } from '../src/core/generator/towLevels';
 import { towScene, type TowSceneId } from '../src/core/generator/towScenes';
+import { starsFor } from '../src/core/score';
 import { COURSE, checkPass, lessonFor, loadLesson, routeFor } from '../src/core/lesson';
 import { DEG } from '../src/core/math';
 import { Recorder, STEP, playback, stateOf } from '../src/core/replay';
@@ -131,4 +134,24 @@ describe.each(TOWS.map(d => [d.n, d.title, d] as const))('lesson %s, %s', (_n, _
     const p = playback(rec.rec!, L.scene, V); while (p.step());
     expect(stateOf(p.sim)).toEqual(stateOf(sim));
   }, 120000);
+});
+
+describe('trailer levels', () => {
+  it.each([1, 3, 6, 10])('level %s builds as asked, the same every time, and the coach backs the trailer in for three stars', level => {
+    for (const seed of [1, 7]) {
+      const L = generateTow(level, seed)!;
+      expect(L.knobLevel).toBe(level); expect(L.template).toBe('tow'); expect(L.key).toBe(`tow:${level}:${seed}`); expect(parseKey(L.key)).toEqual({ template: 'tow', level, seed });
+      expect(JSON.stringify(generateTow(level, seed)!.scene)).toBe(JSON.stringify(L.scene));
+      const { r, touches, secs } = towDrive(V, T, L.scene, L.scene.defaultBay, L.tow!.start, L.tow!.path);
+      expect(touches).toBe(0); expect(r).not.toBeNull();
+      expect(starsFor(r!, L.par, L.timeLimit).count, `${secs.toFixed(0)} s`).toBe(3);
+    }
+  }, 120000);
+  it('gets harder: a narrower space, a tighter corner, cars beside it, cones, the passenger side', () => {
+    const k1 = towKnobs(1, 3), k10 = towKnobs(10, 3);
+    expect(k1.space).toBeGreaterThan(3.3); expect(k10.space).toBeLessThan(2.5);
+    expect(k1.approach).toBe('straight'); expect(k10.approach).toBe('corner'); expect(k10.radius).toBeLessThan(7.5);
+    expect(k1.neighbours).toBeNull(); expect(k10.neighbours).not.toBeNull(); expect(k10.cones).toBe(true);
+    expect(new Set([1, 2, 3, 4, 5, 6, 7, 8].map(s => towKnobs(8, s).side))).toEqual(new Set(['left', 'right']));
+  });
 });

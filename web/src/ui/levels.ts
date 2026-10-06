@@ -33,9 +33,11 @@ export function renderLevels(playing: string, garageName: string, garageSlot: st
   $('lvGenName').textContent = district.name; $('lvGenSub').textContent = district.sub; $('lvGenStars').textContent = starText(district.stars);
   $('lvGen').classList.toggle('cur', playing === 'district');
   const cur = /^([a-z-]+):(\d+):/.exec(playing);
-  $('lvGroups').replaceChildren(...TEMPLATES.map(t => {
+  $('lvGroups').replaceChildren(...[...TEMPLATES, 'tow' as const].map(t => {
     const g = el('div', 'lvGroup'), grid = el('div', 'lvGrid');
-    g.append(el('h4', '', TEMPLATE_NAMES[t].long), grid);
+    g.append(el('h4', '', TEMPLATE_NAMES[t].long));
+    if (t === 'tow') g.append(el('p', 'lvNote', 'In the Škoda Octavia estate with a box trailer, whichever car you have chosen. Each level is driven by the coach before you see it.'));
+    g.append(grid);
     for (let n = 1; n <= 10; n++) {
       const b = el('button'), best = bestStars(`${t}:${n}`);
       b.type = 'button'; b.dataset.t = t; b.dataset.l = String(n);
